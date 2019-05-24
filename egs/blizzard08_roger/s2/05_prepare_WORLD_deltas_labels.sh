@@ -1,0 +1,1 @@
+../s1/prepare_WORLD_deltas_labels.sh

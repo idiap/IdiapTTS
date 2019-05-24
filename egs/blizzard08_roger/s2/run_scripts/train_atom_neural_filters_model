@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+set -o errexit # Exit when a command fails, same as "set -e".
+               # Use "|| true" for those who are allowed to fail.
+               # Disable (set +e) this mode if you want to know a nonzero return value.
+set -o pipefail # Catch mysqldump fails.
+set -o nounset # Exit when using undeclared variables, same as "set -u".
+set -o noclobber # Prevents the bash shell from overwriting files, but you can force it with ">|".
+export SHELLOPTS # Used to pass above shell options to any called subscripts.
+
+# echo "$@"
+# Run example: ./train_atom_neural_filters_model $queue_gpu "experiments/demo/" "neural-filters"
+
+queue=$1
+out_dir=$2
+model_name=$3
+
+# Magic variables
+sub_dir="AtomNeuralFilters"
+log_dir="${out_dir}/${sub_dir}/log"
+nn_subdir="${sub_dir}/nn"
+
+mkdir -p "${log_dir}"
+mkdir -p "${out_dir}/${nn_subdir}"
+
+log_file="${log_dir}/${model_name%.*}.log"
+if [ "${queue}" != "cpu" ]; then
+    rm -f "${log_file}"
+fi
+
+grid_args="-l ${queue} -S $(which python3) -v PYTHONPATH -cwd -e ${log_file} -o ${log_file} -N ${model_name}"
+
+if [ "${queue}" == "cpu" ]; then  # [ == ] literal matching
+    $(which python3) MyAtomNeuralFiltersTrainer.py
+else
+    qsub ${grid_args} MyAtomNeuralFiltersTrainer.py
+fi

@@ -1,0 +1,1 @@
+../s1/prepare_atom_labels.sh

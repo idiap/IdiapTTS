@@ -1,0 +1,12 @@
+wheel
+pydub
+scipy
+pyworld
+matplotlib
+torch==0.4.1
+tensorflow
+numpy
+soundfile
+bandmat
+pysptk
+nnmnkwii

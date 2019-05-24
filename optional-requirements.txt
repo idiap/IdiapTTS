@@ -1,0 +1,1 @@
+git+https://gitlab.idiap.ch/software/neural_filters.git
