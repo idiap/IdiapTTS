@@ -22,8 +22,7 @@ import numpy as np
 import os
 
 # Local source tree imports.
-sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.getcwd()))))  # Adds the IdiapTTS folder to the path.
-from src.model_trainers.wcad.PhraseAtomNeuralFilterModelTrainer import PhraseAtomNeuralFilterModelTrainer
+from idiaptts.src.model_trainers.wcad.PhraseAtomNeuralFilterModelTrainer import PhraseAtomNeuralFilterModelTrainer
 
 
 class MyPhraseAtomNeuralFiltersTrainer(PhraseAtomNeuralFilterModelTrainer):

@@ -20,9 +20,8 @@ import random
 import torch
 
 # Local source tree imports.
-sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.getcwd()))))  # Adds the IdiapTTS folder to the path.
-from src.model_trainers.AcousticDeltasModelTrainer import AcousticDeltasModelTrainer
-from src.neural_networks.pytorch.loss.WMSELoss import WMSELoss
+from idiaptts.src.model_trainers.AcousticDeltasModelTrainer import AcousticDeltasModelTrainer
+from idiaptts.src.neural_networks.pytorch.loss.WMSELoss import WMSELoss
 
 
 class MyAcousticDeltasModelTrainer(AcousticDeltasModelTrainer):

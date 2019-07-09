@@ -41,9 +41,9 @@ readonly ARGS="$@"
 function join_by { local IFS="$1"; shift; echo "$*"; }
 
 # Fixed paths.
-dir_data_prep=$(realpath "../../../src/data_preparation/")
+dir_data_prep=$(realpath "../../../idiaptts/src/data_preparation/")
 dir_tools=$(realpath "../../../tools/")
-dir_misc=$(realpath "../../../misc/")
+dir_misc=$(realpath "../../../idiaptts/misc/")
 dir_data=$(realpath "database/")
 
 # Read parameters.

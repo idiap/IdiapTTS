@@ -41,7 +41,7 @@ readonly PROGDIR=$(readlink -m $(dirname $0))
 readonly ARGS="$@"
 
 # Fixed paths.
-dir_src=$(realpath "../../../src/")
+dir_src=$(realpath "../../../idiaptts/src/")
 
 # Parameter extraction.
 silence_removal=true # Default parameter.

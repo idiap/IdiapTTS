@@ -41,9 +41,9 @@ readonly PROGDIR=$(readlink -m $(dirname $0))
 readonly ARGS="$@"
 
 # Fixed paths.
-dir_src=$(realpath "../../../src/")
+dir_src=$(realpath "../../../idiaptts/src/")
 dir_tools=$(realpath "../../../tools/")
-dir_misc=$(realpath "../../../misc//")
+dir_misc=$(realpath "../../../idiaptts/misc//")
 dir_data=$(realpath "database/")
 
 log()

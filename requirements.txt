@@ -1,9 +1,10 @@
 wheel
+asn1crypto
+setuptools
 pydub
 scipy
 pyworld
 matplotlib
-torch==0.4.1
 tensorflow
 numpy
 soundfile

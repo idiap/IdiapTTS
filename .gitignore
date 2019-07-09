@@ -1,26 +1,18 @@
-egs/**/database/
-egs/**/experiments/
 __pycache__/
 *.pyc
 *~
-.idea/
 /**/core
 docs/build/
-*.lab
-.nfs*
-
 *.prof
+.nfs*
+/*.egg-info
+/dist/
 
+.idea/
 \.mailmap
 
+egs/**/database/
+egs/**/experiments/
+*.lab
 headers\.py
-
-tools/bin/
-
-tools/festival/
-
-tools/festvox/
-
-tools/speech_tools/
-
-tools/wcad/
+tools/

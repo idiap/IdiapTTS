@@ -1,8 +1,8 @@
 **Requirements:**
 - Did you install the main requirements by follow the installation process in the *INSTALL.md* file in the root directory?  
 - Did you install WCAD by following the installation process in *../s1/INSTALL_WCAD.md*?  
-- The *neural_filters* package is required:  
-  ``pip install -r IdiapTTS/optional-requirements.txt``  
+- The *neural_filters* package is required install it from this directory with:  
+  ``pip install -r requirements.txt``  
 - Run ``source cmd.sh``  
 
 
@@ -32,7 +32,7 @@ Run `./04_prepare_WORLD_labels.sh full <num_workers>` to extract acoustic featur
 Run `./05_prepare_WORLD_deltas_labels.sh full <num_workers>` to extract acoustic features as in **4.** but also compute deltas and double deltas for MGC, LF0, and BAP and save them all together in a *.cmp* file. These features are later used to train the baseline model.
 
 ### 6. Extract WCAD atoms
-Run `./06_prepare_atom_labels.sh full <num_workers> database/file_id_list_full.txt` to use the WCAD **link!** atom extractor to extract phrase and regular atoms for the **full** id list. The atoms are stored in *.atoms* files while the phrases are in the *.phrase* files. The current implementation of the WCAD atom extractor can only extract a single phrase atom, therefore it fails for very long utterances. However, the extractor creates a *wcad_file_id_list_\<voice>.txt* in the database folder which only contains the ids for which the extraction seemed to have worked. Feature files for all the samples will still be created. To remove the excluded features one can delete the feature folder and run the script with the *wcad_file_id_list_\<voice>.txt* again. A summary of warnings is saved in the feature director at *log/file_id_list_\<voice>_WARNINGS.txt*, where one can check the ids of the failed samples. For training only the *wcad_file_id_list_<voice>.txt* will be used.
+Run `./06_prepare_atom_labels.sh full <num_workers> database/file_id_list_full.txt` to use the [WCAD](https://github.com/b-schnell/wcad) atom extractor to extract phrase and regular atoms for the **full** id list. The atoms are stored in *.atoms* files while the phrases are in the *.phrase* files. The current implementation of the WCAD atom extractor can only extract a single phrase atom, therefore it fails for very long utterances. However, the extractor creates a *wcad_file_id_list_\<voice>.txt* in the database folder which only contains the ids for which the extraction seemed to have worked. Feature files for all the samples will still be created. To remove the excluded features one can delete the feature folder and run the script with the *wcad_file_id_list_\<voice>.txt* again. A summary of warnings is saved in the feature director at *log/file_id_list_\<voice>_WARNINGS.txt*, where one can check the ids of the failed samples. For training only the *wcad_file_id_list_<voice>.txt* should be used.
 
 
 # Training

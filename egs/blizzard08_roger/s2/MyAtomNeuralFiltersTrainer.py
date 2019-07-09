@@ -22,8 +22,7 @@ import numpy as np
 # Third-party imports.
 
 # Local source tree imports.
-sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.getcwd()))))  # Adds the IdiapTTS folder to the path.
-from src.model_trainers.wcad.AtomNeuralFilterModelTrainer import AtomNeuralFilterModelTrainer
+from idiaptts.src.model_trainers.wcad.AtomNeuralFilterModelTrainer import AtomNeuralFilterModelTrainer
 
 
 class MyAtomNeuralFiltersTrainer(AtomNeuralFilterModelTrainer):

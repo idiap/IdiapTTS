@@ -13,6 +13,9 @@ IdiapTTS is tested with: **Python 3.6**
 ## Installation
 Follow the instructions given in *INSTALL.md*.
 
+## Experiments  
+Instructions to run specific experiments are in the *README* files of the respective *egs* folders.
+
 ## Publications
 #### Icassp'19: An End-to-End Network to Synthesize Intonation using a Generalized Command Response Model
 Instructions to reproduce the results of the paper can be found in *egs/blizzard08_roger/s2/*.
