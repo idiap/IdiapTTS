@@ -27,6 +27,7 @@ from torch.nn import DataParallel
 from idiaptts.misc.utils import get_gpu_memory_map
 from idiaptts.src.neural_networks.ModelHandler import ModelHandler
 from idiaptts.src.neural_networks.pytorch.models.RNNDyn import *
+from idiaptts.misc.utils import makedirs_safe
 # from idiaptts.src.neural_networks.pytorch.ExponentialMovingAverage import ExponentialMovingAverage
 
 
@@ -52,6 +53,7 @@ class ModelHandlerPyTorch(ModelHandler):
 
         super().__init__()
 
+        self.model_name = hparams.model_name if hasattr(hparams, "model_name") else None
         self.current_epoch = None
         self.start_epoch = None
 
@@ -333,11 +335,13 @@ class ModelHandlerPyTorch(ModelHandler):
         self.start_epoch = self.current_epoch
         self.model = checkpoint['model']
         self.model_name = checkpoint['model_name']
-        self.model.set_gpu_flag(use_gpu)
+        if hasattr(self.model, "set_gpu_flag") and callable(self.model.set_gpu_flag):
+            self.model.set_gpu_flag(use_gpu)
         self.optimiser = checkpoint['optimiser']
         if self.optimiser is not None:
             for group in self.optimiser.param_groups:
-                group.setdefault('initial_lr', initial_lr)
+                if hasattr(group, 'initial_lr'):
+                    group.setdefault('initial_lr', initial_lr)
         if use_gpu:
             self.model.cuda()
 
@@ -367,10 +371,12 @@ class ModelHandlerPyTorch(ModelHandler):
     def save_model(self, file_path):
         """Save epoch number, the whole model, and whole optimiser."""
         self.logger.info("Save model to " + file_path)
+        makedirs_safe(os.path.dirname(file_path))  # Create directory if necessary.
         torch.save({'epoch': self.current_epoch,
                     'model': self.model,
                     'model_name': self.model_name,
-                    'optimiser': self.optimiser},
+                    'optimiser': self.optimiser
+                    },
                    file_path)
         # TODO: Also save the random generator states:
         #       torch.random.get_rng_state()
@@ -561,8 +567,9 @@ class ModelHandlerPyTorch(ModelHandler):
                 sample_loss_features = (loss_full.sum(dim=(0, 1)) / sum(seq_lengths_target).float())
                 loss = sample_loss_features.mean()
 
-            # if torch.isnan(loss):
-            #     break
+            if torch.isnan(loss):
+                self.logger.error("Loss is nan: {}".format(sample_loss_features))
+                break
             # nan_or_inf = torch.isnan(loss)
             # for params in self.model.parameters():
             #     nan_or_inf |= torch.isnan(params.data).any()
@@ -732,9 +739,12 @@ class ModelHandlerPyTorch(ModelHandler):
             self.current_epoch += 1
 
             # Train one epoch.
-            all_loss_train.append(self.process_dataloader(self.dataloader_train, hparams)[0])
+            train_loss = self.process_dataloader(self.dataloader_train, hparams)[0]
+            all_loss_train.append(train_loss)
+            if np.isnan(train_loss):
+                return
 
-            if epoch % hparams.epochs_per_test == 0:
+            if self.current_epoch % hparams.epochs_per_test == 0:
                 # Compute error on validation set.
                 loss, loss_features = self.process_dataloader(self.dataloader_val, hparams, training=False)
 
@@ -749,7 +759,7 @@ class ModelHandlerPyTorch(ModelHandler):
                 if hparams.out_dir is not None:
                     path_checkpoint = os.path.join(hparams.out_dir, hparams.networks_dir, hparams.checkpoints_dir)
                     # Check when to save a checkpoint.
-                    if hparams.epochs_per_checkpoint > 0 and epoch % hparams.epochs_per_checkpoint == 0:
+                    if hparams.epochs_per_checkpoint > 0 and self.current_epoch % hparams.epochs_per_checkpoint == 0:
                         self.save_model(os.path.join(path_checkpoint, hparams.model_name + "-e" + str(self.current_epoch) + '-' + str(self.loss_function)))
                     # Always save best checkpoint with special name.
                     if loss < best_loss or np.isnan(best_loss):

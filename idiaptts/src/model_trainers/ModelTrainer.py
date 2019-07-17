@@ -21,6 +21,7 @@ import numpy as np
 import soundfile
 from datetime import datetime
 import random
+import platform
 from shutil import copy2
 
 # Third-party imports.
@@ -54,16 +55,16 @@ class ModelTrainer(object):
     #########################
     # Default constructor.
     #
-    def __init__(self, id_list, hparams=None):
+    def __init__(self, id_list, hparams):
         """Default constructor.
 
         :param id_list:              List or tuple of ids as strings. This list is separated into evaluation, test, and training set.
         :param hparams:              An object holding all hyper parameters.
         """
 
-        if hparams is None:
-            hparams = ModelTrainer.create_hparams()
-        # self.hparams = hparams  # Save parameters.
+        self.logger.info("Running on host {}.".format(platform.node()))
+
+        assert(hparams is not None)
 
         if hparams.use_gpu:
             if hparams.num_gpus > 1:
@@ -104,7 +105,8 @@ class ModelTrainer(object):
             else:
                 num_testset = 0
                 self.id_list_test = None
-            self.id_list_train = id_list_shuffled[num_valset:-num_testset]
+            self.id_list_train = id_list_shuffled[num_valset:-num_testset] if num_testset > 0\
+                                                                           else id_list_shuffled[num_valset:]
         assert(len(self.id_list_train) > 0)
 
         # Data attributes.
@@ -265,41 +267,42 @@ class ModelTrainer(object):
 
         return hparams
 
-    def plot_outputs(self, max_epochs, id_name, outputs, target):
-        plotter = DataPlotter()
-        net_name = os.path.basename(self.model_handler.model_name)
-        filename = str(os.path.join(self.out_dir, id_name + '.' + net_name))
-        plotter.set_title(id_name + " - " + net_name)
-
-        # Create a plot for every dimension of outputs with its target.
-        graphs_o = [None] * target.shape[1]
-        graphs_t = [None] * target.shape[1]
-        for out_idx in range(0, target.shape[1]):
-            graphs_o[out_idx] = list()
-            # Add all outputs to the plot.
-            for idx, o in enumerate(outputs):
-                # Handle special case where NN output has only one dimension.
-                if len(o.shape) == 1:
-                    o = o.reshape(-1, 1)
-                graphs_o[out_idx].append((o[:, out_idx], 'e' + str(min(max_epochs, (idx + 1) * self.epochs_per_plot))))
-            # Give data to plotter and leave two grid position for each output dimension (used for output and target).
-            plotter.set_data_list(grid_idx=out_idx * 2, data_list=graphs_o[out_idx])
-
-            # Add target belonging to the output dimension.
-            graphs_t[out_idx] = list()
-            graphs_t[out_idx].append((target[:, out_idx], 'target[' + str(out_idx) + ']'))
-            plotter.set_data_list(grid_idx=out_idx * 2 + 1, data_list=graphs_t[out_idx])
-
-        # Set label for all.
-        plotter.set_label(xlabel='frames', ylabel='amp')
-
-        # Generate and save the plot.
-        plotter.gen_plot()
-        plotter.save_to_file(filename + ".OUTPUTS.png")
-
-        plotter.plt.show()
+    # def plot_outputs(self, max_epochs, id_name, outputs, target):
+    #     plotter = DataPlotter()
+    #     net_name = os.path.basename(self.model_handler.model_name)
+    #     filename = str(os.path.join(self.out_dir, id_name + '.' + net_name))
+    #     plotter.set_title(id_name + " - " + net_name)
+    #
+    #     # Create a plot for every dimension of outputs with its target.
+    #     graphs_o = [None] * target.shape[1]
+    #     graphs_t = [None] * target.shape[1]
+    #     for out_idx in range(0, target.shape[1]):
+    #         graphs_o[out_idx] = list()
+    #         # Add all outputs to the plot.
+    #         for idx, o in enumerate(outputs):
+    #             # Handle special case where NN output has only one dimension.
+    #             if len(o.shape) == 1:
+    #                 o = o.reshape(-1, 1)
+    #             graphs_o[out_idx].append((o[:, out_idx], 'e' + str(min(max_epochs, (idx + 1) * self.epochs_per_plot))))
+    #         # Give data to plotter and leave two grid position for each output dimension (used for output and target).
+    #         plotter.set_data_list(grid_idx=out_idx * 2, data_list=graphs_o[out_idx])
+    #
+    #         # Add target belonging to the output dimension.
+    #         graphs_t[out_idx] = list()
+    #         graphs_t[out_idx].append((target[:, out_idx], 'target[' + str(out_idx) + ']'))
+    #         plotter.set_data_list(grid_idx=out_idx * 2 + 1, data_list=graphs_t[out_idx])
+    #
+    #     # Set label for all.
+    #     plotter.set_label(xlabel='frames', ylabel='amp')
+    #
+    #     # Generate and save the plot.
+    #     plotter.gen_plot()
+    #     plotter.save_to_file(filename + ".OUTPUTS.png")
+    #
+    #     plotter.plt.show()
 
     def init(self, hparams):
+
         # Create and initialize model.
         self.logger.info("Create ModelHandler.")
         self.model_handler = ModelHandlerPyTorch(hparams)
@@ -322,8 +325,8 @@ class ModelTrainer(object):
             try:
                 self.model_handler.load_model(model_path,
                                               hparams.use_gpu,
-                                              hparams.optimiser_args["lr"] if hparams.optimiser_args["lr"] is not None
-                                                                           else hparams.learning_rate)
+                                              hparams.optimiser_args["lr"] if hasattr(hparams, "optimiser_args") and "lr" in hparams.optimiser_args
+                                                                           else 0.0)
             except FileNotFoundError:
                 if hparams.model_type is None:
                     self.logger.error("Model does not exist at {} and you didn't give model_type to create a new one.".format(model_path))
@@ -338,7 +341,10 @@ class ModelTrainer(object):
             return self.model_handler
 
         if hparams.model_type is None:
-            self.model_handler.load_model(model_path, hparams.use_gpu, hparams.optimiser_args["lr"] if hparams.optimiser_args["lr"] is not None else hparams.learning_rate)
+            self.model_handler.load_model(model_path,
+                                          hparams.use_gpu,
+                                          hparams.optimiser_args["lr"] if hasattr(hparams, "optimiser_args") and "lr" in hparams.optimiser_args
+                                                                       else 0.0)
         else:
             dim_in, dim_out = self.dataset_train.get_dims()
             self.model_handler.create_model(hparams, dim_in, dim_out)
@@ -350,22 +356,16 @@ class ModelTrainer(object):
         Train the model. Use generators for data preparation and model_handler for access.
         Generators have to be set in constructor of subclasses.
 
-        :param epochs:           Number of epochs to train the model.
-        :param use_gpu:          CUDA support requested. If not CUDA device is available switches to CPU mode.
-        :param model_type:       Must be one of the implemented network types to create a new network. Can be None.
-        :param model_name:       Name of the model to load or save. Model is loaded if model_type is None.
-        :param batch_size:       Batch size used for non-recurrent networks. RNNs will always process the whole data.
-        :param learning_rate:    Starting learning rate. By default decreases the lr on plateaus.
-        :param dropout_value:    Value used for dropout, default 0.0, no dropout.
-        :param shuffle:          Shuffle samples to create batches during training.
-        :param batch_size_test:  Batch size used for testing. If None, batch_size is used.
-        :return:                 The model_handler object.
+        :param hparams:          Hyper-parameter container.
+        :return:                 A tuple of (all test loss, all training loss, the model_handler object).
         """
+
+        self.logger.info('Final parsed hparams: %s', hparams.values())
 
         # Skip training if epochs is not greater 0.
         if hparams.epochs <= 0:
             self.logger.info("Number of training epochs is {}. Skipping training.".format(hparams.epochs))
-            return
+            return list(), list(), self.model_handler
 
         # Log evaluation ids.
         if len(self.id_list_val) > 0:
@@ -424,7 +424,7 @@ class ModelTrainer(object):
             if hparams.save_final_model:
                 self.model_handler.save_model(os.path.join(hparams.model_dir, hparams.model_name))
 
-        return self.model_handler
+        return all_loss, all_loss_train, self.model_handler
 
     @staticmethod
     def _input_to_str_list(input):
@@ -447,6 +447,7 @@ class ModelTrainer(object):
             except IOError:
                 # String is single input id, convert to list.
                 return (input)
+        raise ValueError("Unkown input {} of type {}.".format(input, type(input)))
 
     @staticmethod
     def split_batch(output, hidden, seq_length_output=None, permutation=None, batch_first=False):
@@ -462,7 +463,7 @@ class ModelTrainer(object):
         """
 
         # Split the output of the batch.
-        return ModelTrainer._split_return_values(output, seq_length_output, permutation, batch_first), \
+        return ModelTrainer._split_return_values(output, seq_length_output, permutation, batch_first),\
                ModelTrainer._split_return_values(hidden, seq_length_output, permutation, batch_first)
 
     @staticmethod
@@ -684,17 +685,18 @@ class ModelTrainer(object):
             waveform = waveform.astype(np.float32, copy=False)  # Does inplace conversion, if possible.
 
             # Always save as wav file first and convert afterwards if necessary.
-            wav_file_path = os.path.join(save_dir, "{}{}{}.wav".format(os.path.basename(id_name),
-                                                                       "_" + hparams.model_name if hparams.model_name is not None else "",
-                                                                       hparams.synth_file_suffix, "_WORLD", ".wav"))
+            file_path = os.path.join(save_dir, "{}{}{}{}".format(os.path.basename(id_name),
+                                                                     "_" + hparams.model_name if hparams.model_name is not None else "",
+                                                                     hparams.synth_file_suffix, "_WORLD"))
             makedirs_safe(hparams.synth_dir)
-            soundfile.write(wav_file_path, waveform, hparams.synth_fs)
+            soundfile.write(file_path + ".wav", waveform, hparams.synth_fs)
 
             # Use PyDub for special audio formats.
             if hparams.synth_ext.lower() != 'wav':
-                as_wave = pydub.AudioSegment.from_wav(wav_file_path)
-                as_wave.export(os.path.join(hparams.synth_dir, id_name + "." + hparams.synth_ext), format=hparams.synth_ext)
-                os.remove(wav_file_path)
+                as_wave = pydub.AudioSegment.from_wav(file_path + ".wav")
+                file = as_wave.export(file_path + "." + hparams.synth_ext, format=hparams.synth_ext)
+                file.close()
+                os.remove(file_path + ".wav")
 
     # def run_r9y9wavenet_quantized_16k_world_feats_synth(self, synth_output, hparams):
     #     synth_output = copy.copy(synth_output)
