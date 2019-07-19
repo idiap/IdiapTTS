@@ -31,11 +31,11 @@ from idiaptts.src.data_preparation.world.WorldFeatLabelGen import interpolate_li
 from idiaptts.src.data_preparation.PyTorchLabelGensDataset import PyTorchLabelGensDataset as LabelGensDataset
 
 
-class AcousticDeltasModelTrainer(ModelTrainer):
+class AcousticDeltasModelTrainer(ModelTrainer):  # TODO: Rename to AcousticModelTrainer
     """
     Implementation of a ModelTrainer for the generation of acoustic data.
 
-    Use question labels as input and WORLD features with deltas/double deltas as output.
+    Use question labels as input and WORLD features w/o deltas/double deltas (specified in hparams.add_deltas) as output.
     Synthesize audio from model output with MLPG smoothing.
     """
     logger = logging.getLogger(__name__)
@@ -69,7 +69,7 @@ class AcousticDeltasModelTrainer(ModelTrainer):
         self.InputGen = QuestionLabelGen(dir_question_labels, num_questions)
         self.InputGen.get_normalisation_params(dir_question_labels)
 
-        self.OutputGen = WorldFeatLabelGen(dir_world_features, add_deltas=True, num_coded_sps=hparams.num_coded_sps)
+        self.OutputGen = WorldFeatLabelGen(dir_world_features, add_deltas=hparams.add_deltas, num_coded_sps=hparams.num_coded_sps)
         self.OutputGen.get_normalisation_params(dir_world_features)
 
         self.dataset_train = LabelGensDataset(self.id_list_train, self.InputGen, self.OutputGen, hparams)
@@ -84,8 +84,10 @@ class AcousticDeltasModelTrainer(ModelTrainer):
 
     @staticmethod
     def create_hparams(hparams_string=None, verbose=False):
-        """Create model hyperparameters. Parse nondefault from given string."""
+        """Create model hyper parameter container. Parse non default from given string."""
         hparams = ModelTrainer.create_hparams(hparams_string, verbose=False)
+        hparams.num_coded_sps = 60
+        hparams.add_deltas = True
 
         hparams.synth_load_org_sp = False
         hparams.synth_load_org_lf0 = False
@@ -160,11 +162,11 @@ class AcousticDeltasModelTrainer(ModelTrainer):
 
         grid_idx += 1
         plotter.set_label(grid_idx=grid_idx, xlabel='frames [' + str(hparams.frame_size_ms) + ' ms]', ylabel='Original spectrogram')
-        plotter.set_specshow(grid_idx=grid_idx, spec=WorldFeatLabelGen.mgc_to_sp(original_mgc, hparams.synth_fs))
+        plotter.set_specshow(grid_idx=grid_idx, spec=np.absolute(WorldFeatLabelGen.mgc_to_sp(original_mgc, hparams.synth_fs)))
 
         grid_idx += 1
         plotter.set_label(grid_idx=grid_idx, xlabel='frames [' + str(hparams.frame_size_ms) + ' ms]', ylabel='NN spectrogram')
-        plotter.set_specshow(grid_idx=grid_idx, spec=WorldFeatLabelGen.mgc_to_sp(coded_sp, hparams.synth_fs))
+        plotter.set_specshow(grid_idx=grid_idx, spec=np.absolute(WorldFeatLabelGen.mgc_to_sp(coded_sp, hparams.synth_fs)))
 
         if hasattr(hparams, "phoneme_indices") and hparams.phoneme_indices is not None \
            and hasattr(hparams, "question_file") and hparams.question_file is not None:
@@ -216,7 +218,7 @@ class AcousticDeltasModelTrainer(ModelTrainer):
 
             # Compute MCD.
             org_coded_sp = org_coded_sp[:len(output_coded_sp)]
-            current_mcd = metrics.melcd(output_coded_sp, org_coded_sp)  # TODO: Use aligned mcd.
+            current_mcd = metrics.melcd(output_coded_sp[:, 1:], org_coded_sp[:, 1:])  # TODO: Use aligned mcd.
             if current_mcd > mcd_max:
                 mcd_max_id = id_name
                 mcd_max = current_mcd
@@ -270,12 +272,17 @@ class AcousticDeltasModelTrainer(ModelTrainer):
         return mcd, f0_rmse, vuv_error_rate, bap_error
 
     def synthesize(self, id_list, synth_output, hparams):
-        """Depending on hparams override the network output with the extracted features, then continue with normal synthesis pipeline."""
+        """
+        Depending on hparams override the network output with the extracted features,
+        then continue with normal synthesis pipeline.
+        """
 
         if hparams.synth_load_org_sp or hparams.synth_load_org_lf0 or hparams.synth_load_org_vuv or hparams.synth_load_org_bap:
             for id_name in id_list:
 
-                labels = WorldFeatLabelGen.load_sample(id_name, os.path.join(self.OutputGen.dir_labels, self.dir_extracted_acoustic_features), num_coded_sps=hparams.num_coded_sps)
+                world_dir = hparams.world_dir if hasattr(hparams, "world_dir") and hparams.world_dir is not None\
+                                              else os.path.join(self.OutputGen.dir_labels, self.dir_extracted_acoustic_features)
+                labels = WorldFeatLabelGen.load_sample(id_name, world_dir, num_coded_sps=hparams.num_coded_sps)
                 len_diff = len(labels) - len(synth_output[id_name])
                 if len_diff > 0:
                     labels = WorldFeatLabelGen.trim_end_sample(labels, int(len_diff / 2), reverse=True)

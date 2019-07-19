@@ -150,7 +150,7 @@ class AtomLoss(_Loss):
     max_frames = 4000
 
     def __init__(self, use_gpu, thetas, sum_loss=True, size_average=True):
-        super(AtomLoss, self).__init__(size_average=size_average, reduce=sum_loss)
+        super(AtomLoss, self).__init__(reduction="none")
 
         self.register_buffer('thetas', torch.tensor(thetas))
         self.register_buffer('sum_loss', torch.from_numpy(np.array(1.0)) if sum_loss else None)
@@ -160,7 +160,7 @@ class AtomLoss(_Loss):
 
         from wcad import GammaAtom
         for idx, theta in enumerate(thetas):
-            atom = GammaAtom(k=6, theta=theta, fs=1000 / 5, amp=1, position=0)  # TODO: k as parameter, default=6.
+            atom = GammaAtom(k=6, theta=theta, fs=int(1000 / 5), amp=1, position=0)  # TODO: k as parameter, default=6; frame_size as parameter, default=5.
             padded_curve = np.roll(atom.get_padded_curve(self.max_frames).astype(np.float32), -1)
             # padded_curve /= padded_curve.max()  # Normalise to size one.
             # padded_curve /= padded_curve.sum()  # Normalise to integral 1 (default).

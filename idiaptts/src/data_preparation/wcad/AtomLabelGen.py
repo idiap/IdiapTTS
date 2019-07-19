@@ -159,17 +159,20 @@ class AtomLabelGen(LabelGen):
 
         return np.float32((sample - mean) / std_dev)[:, :, 0]  # Only take the amplitudes, theta is implicit.
 
-    def postprocess_sample(self, sample, norm_params=None):
+    def postprocess_sample(self, sample, norm_params=None, identify_peaks=True, peak_range=100):
         """
         Denormalise one sample. This function is used after inference of a network.
 
         :param sample:            The sample to post-process.
         :param norm_params:       Use this normalisation parameters instead of self.norm_params.
+        :param identify_peaks:    It true only peaks of sample are returned.
+        :param peak_range:        Average width of spike distributions.
         :return:                  Post-processed sample.
         """
 
-        # # Convert to single atoms by taking peaks.
-        # sample = AtomLabelGen.identify_peaks(sample)
+        # Convert to single atoms by taking peaks.
+        if identify_peaks:
+            sample = AtomLabelGen.identify_peaks(sample, peak_range)
 
         if norm_params is not None:
             # When norm_params are given use the mean.
@@ -323,13 +326,13 @@ class AtomLabelGen(LabelGen):
                 for amp, theta in np_amp_theta:
                     if abs(amp) >= amp_threshold:
                         theta = max(0.005, theta)
-                        atoms.append(GammaAtom(k, theta, 1000 / frame_size, amp, idx))
+                        atoms.append(GammaAtom(k, theta, int(1000 / frame_size), amp, idx))
         else:
             # Otherwise process only the one theta value.
             for idx, (amp, theta) in enumerate(np_labels):
                 if abs(amp) >= amp_threshold:
                     theta = max(0.005, theta)
-                    atoms.append(GammaAtom(k, theta, 1000 / frame_size, amp, idx))
+                    atoms.append(GammaAtom(k, theta, int(1000 / frame_size), amp, idx))
 
         return atoms
 

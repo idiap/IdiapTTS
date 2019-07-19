@@ -10,7 +10,7 @@ import torch.nn.functional as F
 from torch.nn.modules.loss import MSELoss
 
 
-def weighted_vuv_mse_loss(input, target, value_indices, weighting_decision_index=-1, weight=0.5, decision_index_weight=1.0, size_average=True, reduce=True):
+def weighted_mse_loss(input, target, value_indices, weighting_decision_index=-1, weight=0.5, decision_index_weight=1.0, size_average=True, reduce=True):
     """
     The column at target[..., weighting_decision_index] is used to weight the MSE loss of all other dimensions.
     The weight is created through (target[..., weighting_decision_index] * (1 - weight)) + weight.
@@ -39,7 +39,7 @@ def weighted_vuv_mse_loss(input, target, value_indices, weighting_decision_index
     # Weight by frame.
     loss_full_weighted = loss_full * weights
     # Compute loss of area output, which is only weighted by the decision_index_weight.
-    loss_areas = F.mse_loss(input_areas, target_areas, reduction='none')
+    loss_areas = F.mse_loss(input_areas, target_areas, reduction='none')  # TODO: This is already computed in loss_full.
     loss_areas = loss_areas * decision_index_weight
     # Apply the loss to the full loss.
     loss_full_weighted[..., weighting_decision_index.long()] = loss_areas
@@ -92,6 +92,6 @@ class WMSELoss(MSELoss):
 
     def forward(self, input, target):
         assert self.dim_out == target.shape[-1]
-        return weighted_vuv_mse_loss(input, target, self.value_indices, self.weighting_decision_index, self.weight, self.decision_index_weight,
-                                     self.size_average, self.reduce)
+        return weighted_mse_loss(input, target, self.value_indices, self.weighting_decision_index, self.weight, self.decision_index_weight,
+                                 self.size_average, self.reduce)
 

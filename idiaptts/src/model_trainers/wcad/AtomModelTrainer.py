@@ -29,7 +29,7 @@ from idiaptts.src.neural_networks.pytorch.loss.WeightedNonzeroMSELoss import Wei
 from idiaptts.src.data_preparation.PyTorchLabelGensDataset import PyTorchLabelGensDataset
 from idiaptts.src.DataPlotter import DataPlotter
 from idiaptts.misc.utils import interpolate_lin
-from idiaptts.src.model_trainers.AcousticModelTrainer import AcousticModelTrainer
+from idiaptts.src.model_trainers.AcousticDeltasModelTrainer import AcousticDeltasModelTrainer
 
 
 class AtomModelTrainer(ModelTrainer):
@@ -75,7 +75,7 @@ class AtomModelTrainer(ModelTrainer):
             hparams.weight_non_zero = 1 / non_zero_occurrence
             hparams.weight_zero = 1 / zero_occurrence
 
-        super(AtomModelTrainer, self).__init__(id_list, hparams)
+        super().__init__(id_list, hparams)
 
         self.InputGen = QuestionLabelGen(dir_question_labels, num_questions)
         self.InputGen.get_normalisation_params(dir_question_labels)
@@ -95,17 +95,30 @@ class AtomModelTrainer(ModelTrainer):
             hparams.plateau_factor = 0.5
             hparams.plateau_verbos = True
 
+    @staticmethod
+    def create_hparams(hparams_string=None, verbose=False):
+        hparams = ModelTrainer.create_hparams(hparams_string, verbose=False)
+
+        hparams.min_atom_amp = 0.3
+
+        if verbose:
+            logging.info('Final parsed hparams: %s', hparams.values())
+
+        return hparams
+
     def gen_figure_from_output(self, id_name, labels, hidden, hparams):
 
         if labels.ndim < 2:
             labels = np.expand_dims(labels, axis=1)
-        labels_post = self.OutputGen.postprocess_sample(labels)
+        labels_post = self.OutputGen.postprocess_sample(labels, identify_peaks=True, peak_range=100)
         lf0 = self.OutputGen.labels_to_lf0(labels_post, hparams.k)
         lf0, vuv = interpolate_lin(lf0)
         vuv = vuv.astype(np.bool)
 
         # Load original lf0 and vuv.
-        org_labels = WorldFeatLabelGen.load_sample(id_name, os.path.join(hparams.out_dir, self.dir_extracted_acoustic_features), num_coded_sps=hparams.num_coded_sps)
+        world_dir = hparams.world_dir if hasattr(hparams, "world_dir") and hparams.world_dir is not None\
+                                      else os.path.join(self.OutputGen.dir_labels, self.dir_extracted_acoustic_features)
+        org_labels = WorldFeatLabelGen.load_sample(id_name, world_dir, num_coded_sps=hparams.num_coded_sps)
         _, original_lf0, original_vuv, _ = WorldFeatLabelGen.convert_to_world_features(org_labels, num_coded_sps=hparams.num_coded_sps)
         original_lf0, _ = interpolate_lin(original_lf0)
         original_vuv = original_vuv.astype(np.bool)
@@ -182,8 +195,8 @@ class AtomModelTrainer(ModelTrainer):
             if len(label.shape) == 2:
                 label = np.expand_dims(label, axis=1)
 
-            atoms = self.OutputGen.__class__.labels_to_atoms(label, k=hparams.k, frame_size=hparams.frame_size_ms, amp_threshold=hparams.min_atom_amp)
-            reconstruction = self.OutputGen.__class__.atoms_to_lf0(atoms, num_frames=len(label))
+            atoms = self.OutputGen.labels_to_atoms(label, k=hparams.k, frame_size=hparams.frame_size_ms, amp_threshold=hparams.min_atom_amp)
+            reconstruction = self.OutputGen.atoms_to_lf0(atoms, num_frames=len(label))
 
             # Add extracted phrase.
             phrase_curve = np.fromfile(os.path.join(self.OutputGen.dir_labels, id_name + self.OutputGen.ext_phrase),
@@ -211,7 +224,7 @@ class AtomModelTrainer(ModelTrainer):
             output_lf0 = AtomLabelGen.labels_to_lf0(labels,
                                                     k=hparams.k,
                                                     frame_size=hparams.frame_size_ms,
-                                                    amp_threshold=hparams.max_atom_amp)
+                                                    amp_threshold=hparams.min_atom_amp)
 
             # Get data for comparision.
             org_lf0 = dict_original_post[id_name][:, hparams.num_coded_sps]
@@ -242,12 +255,13 @@ class AtomModelTrainer(ModelTrainer):
 
         org_output = dict()
         for id_name in synth_output.keys():
-            path = os.path.realpath(os.path.join(hparams.out_dir, self.dir_extracted_acoustic_features))
-            org_output[id_name] = WorldFeatLabelGen.load_sample(id_name, path, add_deltas=False, num_coded_sps=hparams.num_coded_sps)  # Load extracted data.
+            world_dir = hparams.world_dir if hasattr(hparams, "world_dir") and hparams.world_dir is not None\
+                                          else os.path.realpath(os.path.join(self.OutputGen.dir_labels, self.dir_extracted_acoustic_features))
+            org_output[id_name] = WorldFeatLabelGen.load_sample(id_name, world_dir, add_deltas=False, num_coded_sps=hparams.num_coded_sps)  # Load extracted data.
 
         return org_output
 
-    def generate_audio_features(self, id_list, hparams):  # TODO: Test
+    def generate_audio_features(self, id_list, hparams):  # TODO: This function is untested.
         """
         Generate mgc, vuv and bap data with an acoustic model.
         The name of the acoustic model is saved in hparams.synth_acoustic_model_path and given in the constructor.
@@ -268,10 +282,10 @@ class AtomModelTrainer(ModelTrainer):
         """
         self.logger.info("Generate mgc, vuv and bap with " + hparams.synth_acoustic_model_path)
 
-        acoustic_model_hparams = AcousticModelTrainer.create_hparams()
-        acoustic_model_hparams.model_dir = os.path.dirname(hparams.synth_acoustic_model_path)
+        acoustic_model_hparams = AcousticDeltasModelTrainer.create_hparams()
         acoustic_model_hparams.model_name = os.path.basename(hparams.synth_acoustic_model_path)
-        acoustic_model_handler = AcousticModelTrainer(acoustic_model_hparams)
+        acoustic_model_hparams.model_path = hparams.synth_acoustic_model_path
+        acoustic_model_handler = AcousticDeltasModelTrainer(acoustic_model_hparams)
 
         org_model_handler = self.model_handler
         self.model_handler = acoustic_model_handler
@@ -355,6 +369,7 @@ class AtomModelTrainer(ModelTrainer):
         if hparams.synth_acoustic_model_path is None:
             full_output = self.load_extracted_audio_features(synth_output, hparams)
         else:
+            self.logger.warning("This method is untested.")
             full_output = self.generate_audio_features(file_id_list, hparams)
 
         # Reconstruct lf0 from generated atoms and write it to synth output.

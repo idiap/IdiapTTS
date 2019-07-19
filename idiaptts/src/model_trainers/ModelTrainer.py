@@ -50,7 +50,7 @@ class ModelTrainer(object):
     the synthesize method.
     """
     logger = logging.getLogger(__name__)
-    dir_extracted_acoustic_features = "../WORLD/"  # TODO: Into hparams.
+    dir_extracted_acoustic_features = "../WORLD/"  # Default location is hparams.out_dir + this, but can be overwritten by hparams.world_dir.
 
     #########################
     # Default constructor.
@@ -191,6 +191,8 @@ class ModelTrainer(object):
             ################################
             len_in_out_multiplier=1,
             out_dir=None,
+            world_dir=None,  # Full path to directory with WORLD features, required to synthesise with extracted features.
+                             # If None, hparams.out_dir/../WORLD is used.
 
             ################################
             # Audio Parameters             #
@@ -631,7 +633,8 @@ class ModelTrainer(object):
 
         synth_dict = dict()
         for id_name in file_id_list:
-            world_dir = os.path.join(self.OutputGen.dir_labels, self.dir_extracted_acoustic_features)
+            world_dir = hparams.world_dir if hasattr(hparams, "world_dir") and hparams.world_dir is not None\
+                                          else os.path.join(self.OutputGen.dir_labels, self.dir_extracted_acoustic_features)
             # Load reference audio features.
             try:
                 output = WorldFeatLabelGen.load_sample(id_name, world_dir, num_coded_sps=hparams.num_coded_sps)

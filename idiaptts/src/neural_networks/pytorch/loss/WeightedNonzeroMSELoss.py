@@ -12,6 +12,7 @@ import torch.nn.functional as F
 import numpy as np
 from torch.nn.modules.loss import _Loss
 
+
 def weighted_nonzero_mse_loss(input, target, weight_zero, weight_non_zero, reduce=True, size_average=True):
     """
     Weighting the loss of zero and non zero labels differently, the reference are the target labels.
@@ -50,11 +51,11 @@ def weighted_nonzero_mse_loss(input, target, weight_zero, weight_non_zero, reduc
 
     # Create weight tensor.
     if target.is_cuda:
-        weight_tensor = torch.cuda.FloatTensor(target.data.nelement()).fill_(weight_zero)
+        weight_tensor = torch.empty(target.data.nelement(), requires_grad=False, device=input.device, dtype=torch.float32).fill_(weight_zero)
     else:
-        weight_tensor = torch.FloatTensor(target.data.nelement()).fill_(weight_zero)
+        weight_tensor = torch.empty(target.data.nelement(), requires_grad=False, dtype=torch.float32).fill_(weight_zero)
     # Get indices of non-zero elements in target. Note that indices are selected in a 1-D tensor.
-    non_zero_indices = target.data.contiguous().view(-1).nonzero().squeeze()
+    non_zero_indices = target.data.contiguous().view(-1).nonzero().squeeze(-1)
     # print str(non_zero_indices.shape) + " / " + str(target.data.nelement())
 
     # Add weights for non-zero entries.
@@ -65,8 +66,7 @@ def weighted_nonzero_mse_loss(input, target, weight_zero, weight_non_zero, reduc
     weight_tensor = weight_tensor.view(target.data.shape)
     # print weight_tensor.numpy()[43:48]  # DEBUG
 
-    weight_var = Variable(weight_tensor, requires_grad=False)
-    weighted_real = real * weight_var
+    weighted_real = real * weight_tensor
 
     real_loss = weighted_real
     if reduce:

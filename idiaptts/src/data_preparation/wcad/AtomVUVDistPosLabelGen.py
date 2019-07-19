@@ -139,7 +139,7 @@ class AtomVUVDistPosLabelGen(AtomLabelGen):
         amps[mask] = 0.0
 
         # Normalise amplitudes.
-        amps = super().postprocess_sample(amps, norm_params)
+        amps = super().postprocess_sample(amps, norm_params, identify_peaks=False)
 
         # Combine vuv with amps again.
         vuv = np.repeat(vuv[:, np.newaxis, np.newaxis], 2, 2)
