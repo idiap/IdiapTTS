@@ -18,12 +18,13 @@ readonly PROGNAME=$(basename $0)
 readonly PROGDIR=$(readlink -m $(dirname $0))
 readonly ARGS="$@"
 
-num_sps=30
+num_sps=20
 database_dir="database"
 wav_dir="${database_dir}/wav"
 duration_dir="dur"
 htk_label_dir="labels/label_state_align"
 question_dir="questions"
+atom_dir="wcad-0.030_0.060_0.090_0.120_0.150"
 bap_dir="WORLD/bap"
 lf0_dir="WORLD/lf0"
 mgc_dir="WORLD/mgc${num_sps}"
@@ -37,10 +38,10 @@ IFS=$'\r\n' GLOBIGNORE='*' command eval 'utts=($(cat $file_id_list))'
 echo "Clear or create all fixture folders."
 
 # Empty or create fixture directories.
-for dir in ${database_dir} ${wav_dir} ${duration_dir} ${htk_label_dir} ${question_dir} ${bap_dir} ${lf0_dir} ${mgc_dir} ${vuv_dir} ${cmp_dir}; do
+for dir in ${database_dir} ${wav_dir} ${duration_dir} ${htk_label_dir} ${question_dir} ${atom_dir} ${bap_dir} ${lf0_dir} ${mgc_dir} ${vuv_dir} ${cmp_dir}; do
     if [ -d "${dir}" ]; then
         echo "    Clear ${dir}"
-        rm -R "${dir}/"*
+        rm -fR "${dir}/"*
     else
         echo "    Create ${dir}"
         mkdir -p "${dir}"
@@ -63,14 +64,15 @@ for id in "${utts[@]}"; do
     OLDIFS=$IFS;
     IFS=',';
     for tuple in "","${wav_dir}"\
-                 "experiments/full","${duration_dir}"\
+                 "experiments/fixtures","${duration_dir}"\
                  "experiments/full","${htk_label_dir}"\
-                 "experiments/full","${question_dir}"\
-                 "experiments/full","${bap_dir}"\
-                 "experiments/full","${lf0_dir}"\
-                 "experiments/full","${mgc_dir}"\
-                 "experiments/full","${vuv_dir}"\
-                 "experiments/full","${cmp_dir}"; do
+                 "experiments/fixtures","${question_dir}"\
+                 "experiments/fixtures","${atom_dir}"\
+                 "experiments/fixtures","${bap_dir}"\
+                 "experiments/fixtures","${lf0_dir}"\
+                 "experiments/fixtures","${mgc_dir}"\
+                 "experiments/fixtures","${vuv_dir}"\
+                 "experiments/fixtures","${cmp_dir}"; do
         set -- ${tuple};
         cp "${egs_folder}/${1}/${2}/${id}"* "${2}/"  # $1 is first element of tuple, $2 the second.
     done
@@ -80,12 +82,13 @@ done
 # Copy normalisation parameters (note that not all folder have it).
 OLDIFS=$IFS;
 IFS=',';
-for tuple in "experiments/full","${duration_dir}"\
-             "experiments/full","${question_dir}"\
-             "experiments/full","${bap_dir}"\
-             "experiments/full","${lf0_dir}"\
-             "experiments/full","${mgc_dir}"\
-             "experiments/full","${cmp_dir}"; do
+for tuple in "experiments/fixtures","${duration_dir}"\
+             "experiments/fixtures","${question_dir}"\
+             "experiments/fixtures","${atom_dir}"\
+             "experiments/fixtures","${bap_dir}"\
+             "experiments/fixtures","${lf0_dir}"\
+             "experiments/fixtures","${mgc_dir}"\
+             "experiments/fixtures","${cmp_dir}"; do
     set -- ${tuple};
     cp "${egs_folder}/${1}/${2}/"*.bin "${2}/"
 done
