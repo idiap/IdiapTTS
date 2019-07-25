@@ -23,8 +23,10 @@ class TestModelTrainer(unittest.TestCase):
         seq_length_output = numpy.array([10, 5])
         output = torch.ones(seq_length_output.max(), 2, 4)
 
-        with self.assertRaises(TypeError):
-            ModelTrainer._split_return_values(output, seq_length_output, None, False)
+        with unittest.mock.patch.object(ModelTrainer.logger, "error") as mock_logger:
+            with self.assertRaises(TypeError):
+                ModelTrainer._split_return_values(output, seq_length_output, None, False)
+                mock_logger.assert_called_with("No best model exists yet. Continue with the current one.")
 
     def test_split_return_values(self):
         seq_length_output = numpy.array([10, 6, 8])

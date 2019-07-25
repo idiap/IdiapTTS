@@ -10,6 +10,8 @@ import torch
 import soundfile
 import pydub
 import array
+import logging
+import itertools
 
 from idiaptts.src.model_trainers.ModelTrainer import ModelTrainer
 from idiaptts.src.data_preparation.questions.QuestionLabelGen import QuestionLabelGen
@@ -36,13 +38,13 @@ class TestModelTrainer(unittest.TestCase):
     def _get_hparams(self):
         hparams = ModelTrainer.create_hparams()
         # General parameters
-        hparams.num_questions = 425
+        hparams.num_questions = 409
         hparams.epochs = 0
         hparams.test_set_perc = 0.05
         hparams.val_set_perc = 0.05
         hparams.seed = None  # Remove the default seed.
         hparams.out_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), type(self).__name__)
-        hparams.num_coded_sps = 30
+        hparams.num_coded_sps = 20
 
         # Training parameters.
         hparams.epochs = 0
@@ -87,8 +89,11 @@ class TestModelTrainer(unittest.TestCase):
         hparams.out_dir = os.path.join(hparams.out_dir, "test_init_no_model_type_and_saved_model")  # Add function name to path.
         trainer = self._get_trainer(hparams)
         # Check fail when neither model_type is given nor a model exists with model_name.
-        with self.assertRaises(FileNotFoundError):
-            trainer.init(hparams)
+        with unittest.mock.patch.object(trainer.logger, "error") as mock_logger:
+            with self.assertRaises(FileNotFoundError):
+                trainer.init(hparams)
+            mock_logger.assert_called_with("Model does not exist at {} and you didn't give model_type to create a new one."
+                                           .format(os.path.join(hparams.out_dir, hparams.networks_dir, hparams.model_name)))
         shutil.rmtree(hparams.out_dir)
 
     def test_init_test55_val55_set_split(self):
@@ -160,10 +165,14 @@ class TestModelTrainer(unittest.TestCase):
         hparams = self._get_hparams()
         hparams.epochs = 0
         hparams.out_dir = os.path.join(hparams.out_dir, "test_init_e0_create")  # Add function name to path.
-        hparams.use_gpu = True
         hparams.model_type = "RNNDYN-1_RELU_32-1_FC_97"
         trainer = self._get_trainer(hparams)
-        trainer.init(hparams)
+
+        with unittest.mock.patch.object(trainer.logger, "warning") as mock_logger:
+            trainer.init(hparams)
+            mock_logger.assert_called_with("Model does not exist at {}. Creating a new one instead and saving it."
+                                           .format(os.path.join(hparams.out_dir, hparams.networks_dir, hparams.model_name)))
+
         # Check if model is loaded and saved, but no checkpoint exists.
         self.assertIsNotNone(trainer.model_handler.model)
         self.assertTrue(os.path.isfile(os.path.join(hparams.out_dir, hparams.networks_dir, hparams.model_name)))
@@ -176,13 +185,18 @@ class TestModelTrainer(unittest.TestCase):
     def test_init_e0_load(self):
         # Try epochs=0, loading existing model.
         hparams = self._get_hparams()
+        hparams.use_gpu = True
         hparams.epochs = 0
         hparams.out_dir = os.path.join(hparams.out_dir, "test_init_e0_load")  # Add function name to path.
         hparams.model_type = None
-        trainer = self._get_trainer(hparams)
+
+        with unittest.mock.patch.object(ModelTrainer.logger, "warning") as mock_logger:
+            trainer = self._get_trainer(hparams)
+            mock_logger.assert_called_with("No CUDA device available, use CPU mode instead.")
+
         target_dir = os.path.join(hparams.out_dir, hparams.networks_dir)
         makedirs_safe(target_dir)
-        shutil.copyfile(os.path.join("integration", "fixtures", "test_model_97.nn"), os.path.join(target_dir, hparams.model_name))
+        shutil.copyfile(os.path.join("integration", "fixtures", "test_model_in409_out67.nn"), os.path.join(target_dir, hparams.model_name))
         trainer.init(hparams)
         self.assertIsNotNone(trainer.model_handler.model)
 
@@ -191,11 +205,14 @@ class TestModelTrainer(unittest.TestCase):
     def test_init_e3_create(self):
         # Try epochs=3, creating a new model.
         hparams = self._get_hparams()
-        hparams.epochs = 3
+        # hparams.epochs = 3
         hparams.out_dir = os.path.join(hparams.out_dir, "test_init_e3_create")  # Add function name to path.
         hparams.model_type = "RNNDYN-1_RELU_32-1_FC_97"
         trainer = self._get_trainer(hparams)
-        trainer.init(hparams)
+        with unittest.mock.patch.object(trainer.logger, "warning") as mock_logger:
+            trainer.init(hparams)
+            mock_logger.assert_called_with("Model does not exist at {}. Creating a new one instead and saving it."
+                                           .format(os.path.join(hparams.out_dir, hparams.networks_dir, hparams.model_name)))
         self.assertIsNotNone(trainer.model_handler.model)
 
         shutil.rmtree(hparams.out_dir)
@@ -203,12 +220,12 @@ class TestModelTrainer(unittest.TestCase):
     def test_init_e3_load(self):
         # Try epochs=3, loading existing model.
         hparams = self._get_hparams()
-        hparams.epochs = 3
+        # hparams.epochs = 3
         hparams.out_dir = os.path.join(hparams.out_dir, "test_init_e3_load")  # Add function name to path.
         hparams.model_type = None
         target_dir = os.path.join(hparams.out_dir, hparams.networks_dir)
         makedirs_safe(target_dir)
-        shutil.copyfile(os.path.join("integration", "fixtures", "test_model_97.nn"), os.path.join(target_dir, hparams.model_name))
+        shutil.copyfile(os.path.join("integration", "fixtures", "test_model_in409_out67.nn"), os.path.join(target_dir, hparams.model_name))
         trainer = self._get_trainer(hparams)
         trainer.init(hparams)
         self.assertIsNotNone(trainer.model_handler.model)
@@ -221,7 +238,10 @@ class TestModelTrainer(unittest.TestCase):
         trainer = self._get_trainer(hparams)
 
         hparams.model_type = "RNNDYN-1_RELU_32-1_FC_97"
-        trainer.init(hparams)
+        with unittest.mock.patch.object(trainer.logger, "warning") as mock_logger:
+            trainer.init(hparams)
+            mock_logger.assert_called_with("Model does not exist at {}. Creating a new one instead and saving it."
+                                           .format(os.path.join(hparams.out_dir, hparams.networks_dir, hparams.model_name)))
         all_loss, all_loss_train, _ = trainer.train(hparams)
         # Check if no training happened.
         self.assertEqual(0, len(all_loss))
@@ -230,13 +250,13 @@ class TestModelTrainer(unittest.TestCase):
         shutil.rmtree(hparams.out_dir)
 
     def test_train_e3(self):
-        for seed in [345]: # itertools.count(0):
+        for seed in [13]:  # itertools.count(0):
             hparams = self._get_hparams()
             hparams.out_dir = os.path.join(hparams.out_dir, "test_train_e3")  # Add function name to path.
             hparams.seed = seed
             trainer = self._get_trainer(hparams)
 
-            hparams.model_type = "RNNDYN-1_RELU_32-1_FC_97"
+            hparams.model_type = "RNNDYN-1_RELU_32-1_FC_67"
             hparams.epochs = 4
             hparams.batch_size_train = 2
             hparams.batch_size_val = hparams.batch_size_train
@@ -277,12 +297,17 @@ class TestModelTrainer(unittest.TestCase):
         shutil.rmtree(hparams.out_dir)
 
     def test_train_e3_save_best(self):
+        # logging.basicConfig(level=logging.INFO)
         hparams = self._get_hparams()
         hparams.out_dir = os.path.join(hparams.out_dir, "test_train_e3_save_best")  # Add function name to path.
-        hparams.seed = 1234
+        hparams.seed = 0
+
+        # for seed in itertools.count():
+        #     hparams.seed = seed
+        #     print(seed)
         trainer = self._get_trainer(hparams)
 
-        hparams.model_type = "RNNDYN-1_RELU_32-1_FC_97"
+        hparams.model_type = "RNNDYN-1_RELU_32-1_FC_67"
         hparams.epochs = 4
         hparams.batch_size_train = 2
         hparams.batch_size_val = hparams.batch_size_train
@@ -291,22 +316,35 @@ class TestModelTrainer(unittest.TestCase):
         hparams.optimiser_args["lr"] = 0.001
         hparams.scheduler_type = "Plateau"
         hparams.use_best_as_final_model = True
+
         _, all_loss_train, _ = trainer.train(hparams)
 
         # Final model is best model?
         checkpoint_dir = os.path.join(hparams.out_dir, hparams.networks_dir, hparams.checkpoints_dir)
         saved_model_path = os.path.join(hparams.out_dir, hparams.networks_dir, hparams.model_name)
+        # if not equal_checkpoint(saved_model_path, os.path.join(checkpoint_dir, hparams.model_name + "-best")):
+        #     shutil.rmtree(hparams.out_dir)
+        #     continue
         self.assertTrue(equal_checkpoint(saved_model_path, os.path.join(checkpoint_dir, hparams.model_name + "-best")),
                         msg="Saved model is not the same as best model.")
+        # Final model is not last model?
+        last_checkpoint_path = os.path.join(checkpoint_dir, hparams.model_name +
+                                            "-e{}-{}".format(hparams.epochs, trainer.loss_function))
+        # if filecmp.cmp(saved_model_path, last_checkpoint_path, False):
+        #     shutil.rmtree(hparams.out_dir)
+        #     continue
+        self.assertFalse(filecmp.cmp(saved_model_path, last_checkpoint_path, False),
+                         msg="Saved model is the same as final checkpoint which should not be the best model.")
 
+        # break
         shutil.rmtree(hparams.out_dir)
 
     def test_train_no_best_model(self):
         # Load a model, and use a seed so that test loss goes up. Check if no best model is there.
         hparams = self._get_hparams()
         hparams.out_dir = os.path.join(hparams.out_dir, "test_train_no_best_model")  # Add function name to path
-        hparams.model_name = "test_model_97.nn"
-        hparams.model_dir = os.path.join("integration", "fixtures")
+        hparams.model_name = "test_model_in409_out67.nn"
+        hparams.model_path = os.path.join("integration", "fixtures", hparams.model_name)
         hparams.seed = 1234
         hparams.batch_size_train = 2
         hparams.batch_size_val = hparams.batch_size_train
@@ -317,9 +355,7 @@ class TestModelTrainer(unittest.TestCase):
 
         trainer = self._get_trainer(hparams)
         trainer.init(hparams)
-        with unittest.mock.patch.object(trainer.logger, "warning") as mock_logger:
-            trainer.train(hparams)
-            mock_logger.assert_called_with("No best model exists yet. Continue with the current one.")
+        trainer.train(hparams)
 
         shutil.rmtree(hparams.out_dir)
 
@@ -328,8 +364,8 @@ class TestModelTrainer(unittest.TestCase):
 
         hparams = self._get_hparams()
         hparams.out_dir = os.path.join(hparams.out_dir, "test_synth_wav")  # Add function name to path
-        hparams.model_name = "test_model_97.nn"
-        hparams.model_dir = os.path.join("integration", "fixtures")
+        hparams.model_name = "test_model_in409_out67.nn"
+        hparams.model_path = os.path.join("integration", "fixtures", hparams.model_name)
         hparams.synth_fs = 16000
         hparams.frame_size_ms = 5
         hparams.synth_ext = "wav"
@@ -361,8 +397,8 @@ class TestModelTrainer(unittest.TestCase):
 
         hparams = self._get_hparams()
         hparams.out_dir = os.path.join(hparams.out_dir, "test_synth_mp3")  # Add function name to path
-        hparams.model_name = "test_model_97.nn"
-        hparams.model_dir = os.path.join("integration", "fixtures")
+        hparams.model_name = "test_model_in409_out67.nn"
+        hparams.model_path = os.path.join("integration", "fixtures", hparams.model_name)
         hparams.synth_fs = 16000
         hparams.frame_size_ms = 5
         hparams.synth_ext = "mp3"
@@ -401,8 +437,8 @@ class TestModelTrainer(unittest.TestCase):
     def test_gen_figure(self):
         hparams = self._get_hparams()
         hparams.out_dir = os.path.join(hparams.out_dir, "test_gen_figure")  # Add function name to path
-        hparams.model_name = "test_model_97.nn"
-        hparams.model_dir = os.path.join("integration", "fixtures")
+        hparams.model_name = "test_model_in409_out67.nn"
+        hparams.model_path = os.path.join("integration", "fixtures", hparams.model_name)
 
         trainer = self._get_trainer(hparams)
         trainer.init(hparams)
@@ -417,8 +453,8 @@ class TestModelTrainer(unittest.TestCase):
 
         hparams = self._get_hparams()
         hparams.out_dir = os.path.join(hparams.out_dir, "test_synth_ref")  # Add function name to path
-        hparams.model_name = "test_model_97.nn"
-        hparams.model_dir = os.path.join("integration", "fixtures")
+        hparams.model_name = "test_model_in409_out67.nn"
+        hparams.model_path = os.path.join("integration", "fixtures", hparams.model_name)
         hparams.synth_fs = 16000
         hparams.frame_size_ms = 5
         hparams.synth_ext = "mp3"
