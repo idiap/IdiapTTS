@@ -12,12 +12,10 @@
 
 # System imports.
 import logging
-import sys
 import os
 import random
 
 # Third-party imports.
-import torch
 
 # Local source tree imports.
 from idiaptts.src.model_trainers.AcousticDeltasModelTrainer import AcousticDeltasModelTrainer
@@ -41,8 +39,8 @@ class MyAcousticDeltasModelTrainer(AcousticDeltasModelTrainer):
         dir_question_labels = os.path.join(hparams.work_dir, "questions")
 
         # Read which files to process.
-        with open(os.path.join(hparams.data_dir, "wcad_file_id_list_" + hparams.voice + ".txt")) as f:
         # with open(os.path.join(hparams.data_dir, "file_id_list_test.txt")) as f:
+        with open(os.path.join(hparams.data_dir, "wcad_file_id_list_" + hparams.voice + ".txt")) as f:
             id_list = f.readlines()
         # Trim entries in-place.
         id_list[:] = [s.strip(' \t\n\r') for s in id_list]
@@ -71,13 +69,13 @@ def main():
     hparams.use_gpu = True
     hparams.model_type = "Icassp19baseline"
     # hparams.model_type = "RNNDYN-2_RELU_1024-3_BiLSTM_512-1_FC_187"
-    hparams.batch_size_train = 1
+    hparams.batch_size_train = 4
     hparams.batch_size_val = 48
     hparams.batch_size_benchmark = hparams.batch_size_val
-    hparams.use_saved_learning_rate = True  # Don't override learning rate if loaded from checkpoint.
+    hparams.use_saved_learning_rate = True
     hparams.optimiser_args["lr"] = 0.002
     hparams.grad_clip_norm_type = 2
-    hparams.grad_clip_max_norm = 100
+    hparams.grad_clip_max_norm = 1.0
     hparams.model_name = "Baseline_b{}_lr{}.nn".format(hparams.batch_size_train, str(hparams.optimiser_args["lr"]).split('.')[1])
     hparams.epochs_per_checkpoint = 5
 
@@ -87,13 +85,12 @@ def main():
     trainer.train(hparams)
     trainer.benchmark(hparams)
 
-    synth_file_id_list = ["roger_0170", "roger_5382", "roger_7720"]
+    synth_file_id_list = random.choices(trainer.id_list_test, k=3)
     hparams.synth_gen_figure = True
     hparams.synth_vocoder = "WORLD"
-    # hparams.synth_vocoder = "r9y9wavenet_quantized_16k_world_feats"
-    # hparams.synth_load_org_sp = True
-    # hparams.synth_load_org_bap = True
-    hparams.synth_file_suffix = "_" + hparams.synth_vocoder
+    hparams.synth_load_org_sp = True
+    hparams.synth_load_org_bap = True
+    # hparams.synth_file_suffix = "_" + hparams.synth_vocoder
     trainer.synth(hparams, synth_file_id_list)
 
     # # Use the following to create samples for the subjective listening test.
@@ -107,7 +104,7 @@ def main():
     id_list_eval = synth_file_id_list
 
     hparams.synth_gen_figure = False
-    trainer.synth(hparams, id_list_eval)
+    # trainer.synth(hparams, id_list_eval)
     trainer.synth_ref(hparams, id_list_eval)
 
 

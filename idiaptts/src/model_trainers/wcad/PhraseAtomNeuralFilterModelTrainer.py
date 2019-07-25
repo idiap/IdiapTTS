@@ -43,7 +43,6 @@ class PhraseAtomNeuralFilterModelTrainer(ModelTrainer):
     Use question labels as input and extracted lf0 as output.
     """
     logger = logging.getLogger(__name__)
-    dir_extracted_acoustic_features = "../WORLD/"  # TODO: Move to hparams.
 
     def __init__(self, wcad_root, dir_audio, dir_atom_labels, dir_lf0_labels, dir_question_labels, id_list,
                  thetas, k,
@@ -70,6 +69,15 @@ class PhraseAtomNeuralFilterModelTrainer(ModelTrainer):
         hparams_flat = hparams_phrase.hparams_flat
         if hparams_flat is None:
             hparams_flat = copy.deepcopy(hparams_phrase)
+        # Set default paths to pre-trained models.
+        if hparams_phrase.atom_model_path is None:
+            hparams_phrase.atom_model_path = os.path.join(hparams_phrase.out_dir,
+                                                          hparams_phrase.networks_dir,
+                                                          hparams_phrase.model_name + "_flat_atoms")
+        if hparams_phrase.flat_model_path is None:
+            hparams_phrase.flat_model_path = os.path.join(hparams_phrase.out_dir,
+                                                          hparams_phrase.networks_dir,
+                                                          hparams_phrase.model_name + "_flat")
 
         # Write missing default parameters.
         if hparams_phrase.variable_sequence_length_train is None:
@@ -150,46 +158,54 @@ class PhraseAtomNeuralFilterModelTrainer(ModelTrainer):
 
         return output, intern_amps
 
-    def init_flat(self, hparams_flat):
+    def init_flat(self, hparams):
         """
         Initialize the neural filters model without phrase bias.
         If the model_type_filters is None, the old model will be loaded, which already contains the atom model.
 
-        :param hparams_flat:     Hyper-parameter container of flat LF0 trainer.
+        :param hparams:          Hyper-parameter container.
         :return:                 Nothing
         """
-        if hparams_flat.model_type is None:
-            if hparams_flat.epochs != 0:
-                logging.warning(
-                    "When hparams_flat.model_type=None the old model is loaded."
-                    "This means that training the atom model by hparams_flat.epochs=" + str(hparams_flat.epochs) + " has no effect.")
-                hparams_flat.epochs = 0
+        if hparams.model_type is None and hparams.hparams_flat.epochs != 0:
+                logging.warning("When hparams_flat.model_type=None the old model is loaded. This means that training "
+                                "the atom model by hparams_flat.epochs={} has no effect, so we set it to zero."
+                                .format(hparams.hparams_flat.epochs))
+                hparams.hparams_flat.epochs = 0
 
         self.logger.info("Create flat neural filter model.")
-        self.flat_trainer.init(hparams_flat)
+        self.flat_trainer.init(hparams.hparams_flat)
 
-    def init_atom(self, hparams_atom):
+    def init_atom(self, hparams):
         """
         Initialize the atom model.
         If the model_type_filters is None, the old model will be loaded, which already contains the atom model.
 
-        :param hparams_atom:    Hyper-parameter container of atom trainier.
+        :param hparams:         Hyper-parameter container.
         :return:                Nothing
         """
-        self.flat_trainer.init_atom(hparams_atom)
+        self.flat_trainer.init_atom(hparams.hparams_flat)
 
     def init(self, hparams):
         self.logger.info("Create phrase E2E model.")
+
+        flat_trainer_model_path = os.path.join(hparams.hparams_flat.out_dir,
+                                               hparams.hparams_flat.networks_dir,
+                                               hparams.hparams_flat.model_name)
+
+        if hparams.hparams_flat.epochs > 0 and hparams.flat_model_path != flat_trainer_model_path:
+            logging.warning("Flat model has been trained for {} epochs and saved in {}, "
+                            "but you will use hparams.flat_model_path = {} to create a new model."
+                            .format(hparams.hparams_flat.epochs, flat_trainer_model_path, hparams.flat_model_path))
         super().init(hparams)
 
-    def train_flat(self, hparams_flat):
-        output = self.flat_trainer.train(hparams_flat)
-        if hparams_flat.epochs > 0:
-            self.flat_trainer.benchmark(hparams_flat)
+    def train_flat(self, hparams):
+        output = self.flat_trainer.train(hparams.hparams_flat)
+        if hparams.hparams_flat.epochs > 0:
+            self.flat_trainer.benchmark(hparams.hparams_flat)
         return output
 
-    def train_atom(self, hparams_atom):
-        return self.flat_trainer.train_atom(hparams_atom)
+    def train_atom(self, hparams):
+        return self.flat_trainer.train_atom(hparams.hparams_flat)
 
     def filters_forward(self, in_tensor, hparams, batch_seq_lengths=None, max_seq_length=None):
         """Get output of each filter without their superposition."""
@@ -424,7 +440,7 @@ class PhraseAtomNeuralFilterModelTrainer(ModelTrainer):
 
         plotter.gen_plot()
         # plotter.gen_plot(True)
-        plotter.save_to_file(filename + ".CLUSTERS.png")
+        plotter.save_to_file(filename + ".CLUSTERS" + hparams.gen_figure_ext)
 
         plotter.plt.show()
 
@@ -452,7 +468,8 @@ class PhraseAtomNeuralFilterModelTrainer(ModelTrainer):
             output_vuv = output_vuv.astype(np.bool)
 
             # Load original lf0 and vuv.
-            world_dir = os.path.join(hparams.out_dir, self.dir_extracted_acoustic_features)
+            world_dir = hparams.world_dir if hasattr(hparams, "world_dir") and hparams.world_dir is not None\
+                                          else os.path.join(hparams.out_dir, self.dir_extracted_acoustic_features)
             org_labels = WorldFeatLabelGen.load_sample(id_name,
                                                        world_dir,
                                                        num_coded_sps=hparams.num_coded_sps)[:len(output_lf0)]
@@ -509,8 +526,10 @@ class PhraseAtomNeuralFilterModelTrainer(ModelTrainer):
 
             # Get mgc, vuv and bap data either through a trained acoustic model or from data extracted from the audio.
             if hparams.synth_acoustic_model_path is None:
-                path = os.path.realpath(os.path.join(hparams.out_dir, self.dir_extracted_acoustic_features))
-                full_sample: np.ndarray = WorldFeatLabelGen.load_sample(id_name, path,
+                world_dir = hparams.world_dir if hasattr(hparams, "world_dir") and hparams.world_dir is not None\
+                                              else os.path.realpath(os.path.join(hparams.out_dir, self.dir_extracted_acoustic_features))
+                full_sample: np.ndarray = WorldFeatLabelGen.load_sample(id_name,
+                                                                        world_dir,
                                                                         add_deltas=False,
                                                                         num_coded_sps=hparams.num_coded_sps)  # Load extracted data.
                 len_diff = len(full_sample) - len(lf0)

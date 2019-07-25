@@ -7,7 +7,7 @@
 
 import torch
 
-from idiaptts.src.neural_networks.pytorch.loss.WMSELoss import WMSELoss, weighted_vuv_mse_loss
+from idiaptts.src.neural_networks.pytorch.loss.WMSELoss import WMSELoss, weighted_mse_loss
 
 
 class L1WeightedVUVMSELoss(WMSELoss):

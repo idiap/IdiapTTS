@@ -18,6 +18,7 @@ import copy
 import logging
 import os
 import numpy as np
+import random
 
 # Third-party imports.
 
@@ -103,13 +104,13 @@ def main():
 
     # Training
     trainer = MyAtomNeuralFiltersTrainer(hparams)
-    trainer.init_atom(hparams_atom)
-    trainer.train_atom(hparams_atom)
+    trainer.init_atom(hparams)
+    trainer.train_atom(hparams)
     trainer.init(hparams)
     trainer.train(hparams)
     trainer.benchmark(hparams)
 
-    synth_file_id_list = ["roger_5382", "roger_7720"]
+    synth_file_id_list = random.choices(trainer.id_list_test, k=3)
     # trainer.gen_figure_atoms(synth_file_id_list, hparams_atom)
     trainer.gen_figure(hparams, synth_file_id_list)
     trainer.synth(hparams, synth_file_id_list)

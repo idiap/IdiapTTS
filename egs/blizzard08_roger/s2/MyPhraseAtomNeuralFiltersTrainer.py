@@ -20,6 +20,7 @@ import copy
 import logging
 import numpy as np
 import os
+import random
 
 # Local source tree imports.
 from idiaptts.src.model_trainers.wcad.PhraseAtomNeuralFilterModelTrainer import PhraseAtomNeuralFilterModelTrainer
@@ -128,15 +129,15 @@ def main():
 
     # Training
     trainer = MyPhraseAtomNeuralFiltersTrainer(hparams_phrase)
-    trainer.init_atom(hparams_atom)
-    trainer.train_atom(hparams_atom)
-    trainer.init_flat(hparams_flat)
-    trainer.train_flat(hparams_flat)
+    trainer.init_atom(hparams_flat)
+    trainer.train_atom(hparams_flat)
+    trainer.init_flat(hparams_phrase)
+    trainer.train_flat(hparams_phrase)
     trainer.init(hparams_phrase)
     trainer.train(hparams_phrase)
     trainer.benchmark(hparams_phrase)
 
-    synth_file_id_list = ["roger_0170", "roger_5382", "roger_7720"]
+    synth_file_id_list = random.choices(trainer.id_list_test, k=3)
     trainer.gen_figure_phrase(hparams_flat, synth_file_id_list)
     # trainer.gen_figure_flat(hparams_phrase, synth_file_id_list)
     # trainer.synth(hparams_flat, synth_file_id_list)
@@ -152,7 +153,6 @@ def main():
 
     hparams_phrase.synth_gen_figure = False
     hparams_phrase.synth_vocoder = "WORLD"
-    hparams_phrase.synth_file_suffix = "_" + hparams_phrase.synth_vocoder
     trainer.gen_figure(hparams_phrase, synth_file_id_list)  # Included in synth.
     hparams_phrase.synth_gen_figure = True
     trainer.synth(hparams_phrase, id_list_eval)
@@ -162,7 +162,7 @@ def main():
     hparams_atom.synth_gen_figure = False
     hparams_atom.synth_vocoder = "WORLD"
     # hparams_atom.synth_vocoder = "r9y9wavenet_quantized_16k_world_feats"
-    hparams_atom.synth_file_suffix = "_" + hparams_atom.synth_vocoder
+    # hparams_atom.synth_file_suffix = "_" + hparams_atom.synth_vocoder
     trainer.flat_trainer.atom_trainer.synth_phrase(id_list_eval, hparams_atom)
 
 

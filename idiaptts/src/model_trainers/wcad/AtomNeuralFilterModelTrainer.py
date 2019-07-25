@@ -41,7 +41,6 @@ class AtomNeuralFilterModelTrainer(ModelTrainer):
     Use question labels as input and extracted lf0 as output.
     """
     logger = logging.getLogger(__name__)
-    dir_extracted_acoustic_features = "../WORLD/"  # TODO: Move to hparams.
 
     def __init__(self, wcad_root, dir_audio, dir_atom_labels, dir_lf0_labels, dir_question_labels, id_list,
                  thetas, k,
@@ -71,6 +70,7 @@ class AtomNeuralFilterModelTrainer(ModelTrainer):
             hparams_atom = copy.deepcopy(hparams)
             hparams_atom.synth_gen_figure = False
             hparams_atom.synth_acoustic_model_path = None
+        if hparams.atom_model_path is None:
             hparams.atom_model_path = os.path.join(hparams.out_dir, hparams.networks_dir, hparams.model_name + "_atoms")
 
         # Write missing default parameters.
@@ -154,32 +154,41 @@ class AtomNeuralFilterModelTrainer(ModelTrainer):
 
         return output, intern_amps
 
-    def init_atom(self, hparams_atom):
+    def init_atom(self, hparams):
         """
         Initialize the atom model.
         If the model_type_filters is None, the old model will be loaded, which already contains the atom model.
 
-        :param hparams_atom:    Hyper-parameter container of atom trainier.
+        :param hparams:         Hyper-parameter container.
         :return:                Nothing
         """
-        if hparams_atom.model_type is None:
-            if hparams_atom.epochs != 0:
-                logging.warning(
-                    "When hparams_atom.model_type=None the old model is loaded."
-                    "This means that training the atom model by hparams_atom.epochs=" + str(hparams_atom.epochs) + " has no effect.")
-                hparams_atom.epochs = 0
+        if hparams.model_type is None and hparams.hparams_atom.epochs != 0:
+                logging.warning("When hparams.model_type=None the old model is loaded. This means that training the "
+                                "atom model by hparams.hparams_atom.epochs={} has no effect, so we set it to zero."
+                                .format(hparams.hparams_atom.epochs))
+                hparams.hparams_atom.epochs = 0
 
         self.logger.info("Create atom model.")
-        self.atom_trainer.init(hparams_atom)
+        self.atom_trainer.init(hparams.hparams_atom)
 
     def init(self, hparams):
         self.logger.info("Create E2E model.")
+
+        atom_trainer_model_path = os.path.join(hparams.hparams_atom.out_dir,
+                                               hparams.hparams_atom.networks_dir,
+                                               hparams.hparams_atom.model_name)
+
+        if hparams.hparams_atom.epochs > 0 and hparams.atom_model_path != atom_trainer_model_path:
+            logging.warning("Atom model has been trained for {} epochs and saved in {}, "
+                            "but you will use hparams.atom_model_path = {} to create a new model."
+                            .format(hparams.hparams_atom.epochs, atom_trainer_model_path, hparams.atom_model_path))
+
         super().init(hparams)
 
-    def train_atom(self, hparams_atom):
-        output = self.atom_trainer.train(hparams_atom)
-        if hparams_atom.epochs > 0:
-            self.atom_trainer.benchmark(hparams_atom)
+    def train_atom(self, hparams):
+        output = self.atom_trainer.train(hparams.hparams_atom)
+        if hparams.hparams_atom.epochs > 0:
+            self.atom_trainer.benchmark(hparams.hparams_atom)
         return output
 
     def filters_forward(self, in_tensor, hparams, batch_seq_lengths=None, max_seq_length=None):
@@ -203,73 +212,6 @@ class AtomNeuralFilterModelTrainer(ModelTrainer):
         output = self.model_handler.model.filters_forward(in_tensor, hidden, batch_seq_lengths, max_seq_length)
 
         return output.detach().cpu().numpy()
-
-    # FIXME
-    # def gen_animation(self, id_name, labels=None):
-    #
-    #     if labels is None:
-    #         input_labels = self.InputGen.__getitem__(id_name)[:, None, :]
-    #         labels, _ = self.model_handler.forward(input_labels)
-    #
-    #     # Retrieve data from label.
-    #     labels_post = self.OutputGen.postprocess_sample(labels)
-    #     output_vuv = labels_post[:, 1]
-    #     output_vuv[output_vuv < 0.5] = 0.0
-    #     output_vuv[output_vuv >= 0.5] = 1.0
-    #
-    #     output_lf0 = labels_post[:, 0]
-    #
-    #     # Load original lf0 and vuv.
-    #     org_labels = self.OutputGen.load_sample(id_name, self.OutputGen.dir_labels)
-    #     original_lf0, _ = self.OutputGen.convert_to_world_features(org_labels)
-    #     # original_lf0, _ = interpolate_lin(original_lf0)
-    #
-    #     phrase_curve = self.OutputGen.get_phrase_curve(id_name)
-    #     original_lf0 -= phrase_curve[:len(original_lf0)]
-    #     original_lf0 = original_lf0[:len(output_lf0)]
-    #
-    #     org_labels = self.atom_trainer.OutputGen.load_sample(id_name,
-    #                                                          self.atom_trainer.OutputGen.dir_labels,
-    #                                                          len(self.atom_trainer.OutputGen.theta_interval),
-    #                                                          self.atom_trainer.OutputGen.dir_world_labels)
-    #
-    #     org_labels = org_labels[:, 1:]
-    #     len_diff = len(org_labels) - len(labels_post)
-    #     org_labels = self.atom_trainer.OutputGen.trim_end_sample(org_labels, int(len_diff / 2.0))
-    #     org_labels = self.atom_trainer.OutputGen.trim_end_sample(org_labels, int(len_diff / 2.0) + 1)
-    #     org_atoms = AtomLabelGen.labels_to_atoms(org_labels, k=self.atom_trainer.OutputGen.k, frame_size=self.atom_trainer.OutputGen.frame_size)
-    #     wcad_lf0 = self.atom_trainer.OutputGen.atoms_to_lf0(org_atoms, len(org_labels))
-    #
-    #     phrase_curve = self.OutputGen.get_phrase_curve(id_name)[:len(wcad_lf0)]
-    #     original_lf0 = original_lf0[:len(wcad_lf0)] + phrase_curve.squeeze()
-    #
-    #     for index in range(len(org_atoms)+1):
-    #         plotter = DataPlotter()
-    #         plot_id = 0
-    #         wcad_lf0 = self.atom_trainer.OutputGen.atoms_to_lf0(org_atoms[:index], len(org_labels))
-    #         reconstruction = phrase_curve + wcad_lf0
-    #
-    #         graphs_lf0 = list()
-    #         graphs_lf0.append((original_lf0, "Original"))
-    #         graphs_lf0.append((reconstruction, "Reconstruction"))
-    #         plotter.set_data_list(grid_idx=plot_id, data_list=graphs_lf0)
-    #         plotter.set_label(grid_idx=plot_id, xlabel='frames [' + str(self.atom_trainer.OutputGen.frame_size) + ' ms]',
-    #                           ylabel='lf0')
-    #         plotter.set_lim(grid_idx=plot_id, ymin=4)
-    #         plotter.set_linestyles(grid_idx=plot_id, linestyles=['-.', '-','-'])
-    #         plotter.set_colors(grid_idx=plot_id, colors=['C3', 'C2'], alpha=1)
-    #         plot_id += 1
-    #
-    #         graphs_atoms = list()
-    #         # graphs_atoms.append((phrase_curve[:len(original_lf0)], ))
-    #         plotter.set_data_list(grid_idx=plot_id, data_list=graphs_atoms)
-    #         plotter.set_atom_list(grid_idx=plot_id, atom_list=org_atoms[:index])
-    #         plotter.set_label(grid_idx=plot_id, xlabel='frames [' + str(self.atom_trainer.OutputGen.frame_size) + ' ms]',
-    #                           ylabel='Atoms')
-    #         plotter.set_lim(grid_idx=plot_id, ymin=-0.5, ymax=0.3)
-    #         plotter.set_colors(grid_idx=plot_id, colors=['C1',], alpha=1)
-    #
-    #         plotter.gen_plot(sharex=True)
 
     def gen_figure_from_output(self, id_name, output, intern_amps, hparams, clustering=None, filters_out=None):
 
@@ -352,7 +294,7 @@ class AtomNeuralFilterModelTrainer(ModelTrainer):
 
         plotter.gen_plot()
         # plotter.gen_plot(True)
-        plotter.save_to_file(filename + ".FILTERS.png")
+        plotter.save_to_file(filename + ".FILTERS" + hparams.gen_figure_ext)
 
         plotter.plt.show()
 
@@ -410,7 +352,7 @@ class AtomNeuralFilterModelTrainer(ModelTrainer):
 
         plotter.gen_plot()
         # plotter.gen_plot(True)
-        plotter.save_to_file(filename + ".CLUSTERS.png")
+        plotter.save_to_file(filename + ".CLUSTERS" + hparams.gen_figure_ext)
 
         plotter.plt.show()
 
@@ -436,8 +378,10 @@ class AtomNeuralFilterModelTrainer(ModelTrainer):
 
             # Get mgc, vuv and bap data either through a trained acoustic model or from data extracted from the audio.
             if hparams.synth_acoustic_model_path is None:
-                path = os.path.realpath(os.path.join(hparams.out_dir, self.dir_extracted_acoustic_features))
-                full_sample: np.ndarray = WorldFeatLabelGen.load_sample(id_name, path,
+
+                world_dir = hparams.world_dir if hasattr(hparams, "world_dir") and hparams.world_dir is not None \
+                                              else os.path.join(self.OutputGen.dir_labels, self.dir_extracted_acoustic_features)
+                full_sample: np.ndarray = WorldFeatLabelGen.load_sample(id_name, world_dir,
                                                                         add_deltas=False,
                                                                         num_coded_sps=hparams.num_coded_sps)  # Load extracted data.
                 len_diff = len(full_sample) - len(lf0)
