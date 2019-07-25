@@ -7,10 +7,10 @@
 # Generate features
 
 ### 1. Create the database
-Run `./01_setup.sh <Path to roger db> <num_workers>` where the path to the roger database should point to the folder containing the *utts.data* file and *wav* folder. The script creates links to the audio files in the database and stores them in *wav/*. It then removes all silence but 200 ms in the front and back of each file. This behaviour can be stopped by giving the `--no_silence_removal` flag. The script creates a *file_id_list_all.txt* with all ids, a *file_id_list_full.txt* with the ids from carroll, arctic, and theherald1-3, and a *file_id_list_demo.txt* with the ids from theherald1.
+Run `./01_setup.sh <Path to roger db> <num_workers>` where the path to the roger database should point to the folder containing the *utts.data* file and *wav* folder. The script creates links to the audio files in the database and stores them in *wav/*. It then removes all silence but 200 ms in the front and back of each file. This behaviour can be stopped by giving the `--no_silence_removal` flag. Or the length can be changed by giving `--min_silence_ms <integer>` to the call of `silence_remove.py`. The script creates a *file_id_list_all.txt* with all ids, a *file_id_list_full.txt* with the ids from carroll, arctic, and theherald1-3, and a *file_id_list_demo.txt* with the ids from theherald1.
 
 The following errors can be ignored:
-* `cp: cannot stat '/IdiapTTS****/egs/blizzard08_roger/s1/database/wav_org_silence/*': No such file or directory`
+* `cp: cannot stat '/IdiapTTS/egs/blizzard08_roger/s1/database/wav_org_silence/*': No such file or directory`
 * ``./01_setup.sh: line 184: syntax error near unexpected token `|'``  
   ``./01_setup.sh: line 184: ` | sort) > "${file_id_list_all}"'``
 
@@ -24,7 +24,7 @@ Run `./02_prepare_HTK_labels_en_am.sh full <num_workers>` to create force-aligne
 Run `./03_prepare_question_labels.sh full <num_workers>` to generate questions from the HTK full labels for the **full** id list. The labels are at 5 ms frames and identically for consecutive frames of the same phoneme state.
 
 ### 4. Acoustic features
-Run `./04_prepare_WORLD_labels.sh full <num_workers>` to extract acoustic features (60 MGC, LF0, VUV, 1 BAP) with the [WORLD](https://github.com/mmorise/World) / [PyWorld](https://github.com/JeremyCCHsu/Python-Wrapper-for-World-Vocoder) from the audio files specified in the **full** id list. Each feature is saved in a subdirectory. The number of spectral features can be specified in the script call as well. The LF0 features are later used to train the models.
+Run `./04_prepare_WORLD_labels.sh full <num_workers>` to extract acoustic features (60 MGC, LF0, VUV, 1 BAP) with [WORLD](https://github.com/mmorise/World) / [PyWorld](https://github.com/JeremyCCHsu/Python-Wrapper-for-World-Vocoder) from the audio files specified in the **full** id list. Each feature is saved in a subdirectory. The number of spectral features can be specified in the script call as well. The LF0 features are later used to train the models.
 
 ### 5. Acoustic features with deltas and double deltas
 Run `./05_prepare_WORLD_deltas_labels.sh full <num_workers>` to extract acoustic features as in **4.** but also compute deltas and double deltas for MGC, LF0, and BAP and save them all together in a *.cmp* file. These features are later used to train the baseline model.

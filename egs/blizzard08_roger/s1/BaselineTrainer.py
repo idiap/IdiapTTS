@@ -84,11 +84,10 @@ def main():
     trainer.train(hparams)
     trainer.benchmark(hparams)
 
-    synth_file_id_list = ["roger_0122", "roger_10674", "roger_5601", "roger_7867"]
+    synth_file_id_list = random.choices(trainer.id_list_test, k=3)
     hparams.synth_gen_figure = True
     hparams.synth_load_org_sp = True
     hparams.synth_load_org_bap = True
-    hparams.synth_file_suffix = "_" + hparams.synth_vocoder
     trainer.synth(hparams, synth_file_id_list)
 
     # # with open(os.path.join(hparams.data_dir, "wcad_file_id_list_full_eval.txt" + sys.argv[1])) as f:

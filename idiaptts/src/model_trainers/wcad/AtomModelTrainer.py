@@ -184,7 +184,7 @@ class AtomModelTrainer(ModelTrainer):
 
         # plotter.set_lim(xmin=300, xmax=1100)
         plotter.gen_plot()
-        plotter.save_to_file(filename + ".BASE.png")
+        plotter.save_to_file(filename + ".BASE" + hparams.gen_figure_ext)
 
     def get_recon_from_synth_output(self, synth_output, hparams):
         """Reconstruct LF0 from atoms."""

@@ -50,11 +50,9 @@ class ModelTrainer(object):
     the synthesize method.
     """
     logger = logging.getLogger(__name__)
-    dir_extracted_acoustic_features = "../WORLD/"  # Default location is hparams.out_dir + this, but can be overwritten by hparams.world_dir.
+    dir_extracted_acoustic_features = "../WORLD/"  # Default is hparams.out_dir/self.dir_extracted_acoustic_features,
+                                                   # but can be overwritten by hparams.world_dir.
 
-    #########################
-    # Default constructor.
-    #
     def __init__(self, id_list, hparams):
         """Default constructor.
 
@@ -206,7 +204,7 @@ class ModelTrainer(object):
             ################################
             model_type=None,
             model_name=None,
-            model_dir=None,  # Explicitly set directory where model is stored, otherwise dir_out/networks_dir/.
+            model_path=None,  # Explicitly set path with model name where model is loaded from otherwise dir_out/networks_dir/model_name.
             dropout=0.0,
             hidden_init=0.0,  # Hidden state init value
             train_hidden_init=False,  # Is the hidden state init value trainable  # TODO: Unused?
@@ -316,37 +314,38 @@ class ModelTrainer(object):
 
         # Create the necessary directories.
         makedirs_safe(os.path.join(hparams.out_dir, hparams.networks_dir, hparams.checkpoints_dir))
-        # Create the default model path if not set.
-        if hparams.model_dir is None:
-            hparams.model_dir = os.path.join(hparams.out_dir, hparams.networks_dir)
+        # Create the default model path if not set or retrieve the name from the given path.
+        if hparams.model_path is None:
+            hparams.model_path = os.path.join(hparams.out_dir, hparams.networks_dir, hparams.model_name)
+        elif hparams.model_name is None:
+            hparams.model_name = os.path.basename(hparams.model_path)
 
-        model_path = os.path.join(hparams.model_dir, hparams.model_name)
+        model_path_out = os.path.join(hparams.out_dir, hparams.networks_dir, hparams.model_name)
         if hparams.epochs <= 0:
             # Try to load the model. If it doesn't exist, create a new one and save it.
             # Return the loaded/created model, because no training was requested.
             try:
-                self.model_handler.load_model(model_path,
+                self.model_handler.load_model(hparams.model_path,
                                               hparams.use_gpu,
                                               hparams.optimiser_args["lr"] if hasattr(hparams, "optimiser_args") and "lr" in hparams.optimiser_args
                                                                            else 0.0)
             except FileNotFoundError:
                 if hparams.model_type is None:
-                    self.logger.error("Model does not exist at {} and you didn't give model_type to create a new one.".format(model_path))
+                    self.logger.error("Model does not exist at {} and you didn't give model_type to create a new one.".format(hparams.model_path))
                     raise  # This will rethrow the last exception.
                 else:
-                    self.logger.warning('Model does not exist at {}. Creating a new one instead and saving it.'.format(model_path))
+                    self.logger.warning('Model does not exist at {}. Creating a new one instead and saving it.'.format(hparams.model_path))
                     dim_in, dim_out = self.dataset_train.get_dims()
                     self.model_handler.create_model(hparams, dim_in, dim_out)
-                    self.model_handler.save_model(model_path)
+                    self.model_handler.save_model(model_path_out)
 
             self.logger.info("Model ready.")
             return self.model_handler
 
         if hparams.model_type is None:
-            self.model_handler.load_model(model_path,
+            self.model_handler.load_model(hparams.model_path,
                                           hparams.use_gpu,
-                                          hparams.optimiser_args["lr"] if hasattr(hparams, "optimiser_args") and "lr" in hparams.optimiser_args
-                                                                       else 0.0)
+                                          hparams.optimiser_args["lr"] if hasattr(hparams, "optimiser_args") and "lr" in hparams.optimiser_args else 0.0)
         else:
             dim_in, dim_out = self.dataset_train.get_dims()
             self.model_handler.create_model(hparams, dim_in, dim_out)
@@ -412,7 +411,7 @@ class ModelTrainer(object):
         if hparams.out_dir is not None:
             # Check if best model should be used as final model. Only possible when it was save in out_dir.
             if hparams.use_best_as_final_model:
-                best_model_path = os.path.join(hparams.model_dir, hparams.checkpoints_dir, hparams.model_name + "-best")
+                best_model_path = os.path.join(hparams.out_dir, hparams.networks_dir, hparams.checkpoints_dir, hparams.model_name + "-best")
                 try:
                     self.model_handler.load_model(best_model_path,
                                                   hparams.use_gpu,
@@ -424,7 +423,7 @@ class ModelTrainer(object):
 
             # Save the model if requested.
             if hparams.save_final_model:
-                self.model_handler.save_model(os.path.join(hparams.model_dir, hparams.model_name))
+                self.model_handler.save_model(os.path.join(hparams.out_dir, hparams.networks_dir, hparams.model_name))
 
         return all_loss, all_loss_train, self.model_handler
 
@@ -468,8 +467,8 @@ class ModelTrainer(object):
         return ModelTrainer._split_return_values(output, seq_length_output, permutation, batch_first),\
                ModelTrainer._split_return_values(hidden, seq_length_output, permutation, batch_first)
 
-    @staticmethod
-    def _split_return_values(input_values, seq_length_output, permutation, batch_first):
+    @classmethod
+    def _split_return_values(cls, input_values, seq_length_output, permutation, batch_first):
         if input_values is None:
             return None
 
@@ -477,7 +476,7 @@ class ModelTrainer(object):
         if isinstance(input_values, tuple):
             # Split hidden states in their batch dimension.
             tuple_splitted = tuple(
-                map(lambda x: ModelTrainer._split_return_values(x, seq_length_output, permutation, batch_first),
+                map(lambda x: cls._split_return_values(x, seq_length_output, permutation, batch_first),
                     input_values))
 
             # Now sort into each batch.
@@ -492,7 +491,7 @@ class ModelTrainer(object):
             return tuple(return_values)
 
         if not isinstance(input_values, np.ndarray):
-            logging.error("Expected numpy tensor but input is of type {}.".format(type(input_values)))
+            cls.logger.error("Expected numpy tensor but input is of type {}.".format(type(input_values)))
             raise TypeError()
 
         # Return value is tensor.

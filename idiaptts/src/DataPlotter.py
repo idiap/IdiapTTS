@@ -34,9 +34,6 @@ class DataPlotter(object):
     """
     logger = logging.getLogger(__name__)
 
-    # Constants.
-    FILE_EXTENSION = ".png"
-
     class Grid(object):
         def __init__(self):
             self.data_list = None
@@ -333,5 +330,8 @@ class DataPlotter(object):
             plt.subplots_adjust(hspace=0.35)
         else:
             plt.subplots_adjust(hspace=0.5)
-        plt.show()
+
+        have_display = bool(os.environ.get('DISPLAY', None))
+        if have_display:
+            plt.show()
         self.plt = plt

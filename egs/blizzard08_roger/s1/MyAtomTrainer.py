@@ -108,7 +108,7 @@ def main():
     # id_list_eval[:] = [s.strip(' \t\n\r') for s in id_list_eval]
 
     # Synthesising
-    file_id_list_synth = ["roger_5453", "roger_7701", "roger_10661"]
+    file_id_list_synth = random.choices(trainer.id_list_test, k=3)
     hparams.synth_vocoder = "WORLD"
     trainer.synth_ref(hparams, file_id_list_synth)
     hparams.synth_gen_figure = True

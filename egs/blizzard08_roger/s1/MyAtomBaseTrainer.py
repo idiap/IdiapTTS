@@ -12,9 +12,9 @@
 
 # System imports.
 import logging
-import sys
 import os
 import numpy as np
+import random
 
 # Third-party imports.
 import torch
@@ -86,17 +86,17 @@ def main():
 
     hparams.sampling_frequency = 16000
     hparams.frame_size_ms = 5
-    hparams.seed = 1234
+    hparams.seed = 1
 
     trainer = MyAtomBaseTrainer(hparams)
     trainer.init(hparams)
     trainer.train(hparams)
+    trainer.benchmark(hparams)
 
-    synth_file_id_list = ["roger_5535", "roger_5302"]  # , "roger_5604", "roger_6729"]
+    synth_file_id_list = random.choices(trainer.id_list_test, k=3)
 
     trainer.synth(hparams, synth_file_id_list)
     trainer.gen_figure(hparams, synth_file_id_list)
-    trainer.benchmark(hparams)
 
 
 if __name__ == "__main__":

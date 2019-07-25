@@ -24,6 +24,11 @@ cat <<- EOF
 EOF
 }
 
+die () {
+    echo -e >&2 "ERROR" "$@"
+    exit 1
+}
+
 ###############################
 # Default options and functions
 #
