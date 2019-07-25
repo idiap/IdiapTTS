@@ -118,14 +118,14 @@ class RNNDyn(nn.Module):
             group_out_dim = int(group_attr[2])
 
             # Supported nonlins. Nonlins are normally used in every layer, but only in the last layer in RNNs.
-            # NOTE: FC and LIN are the same and meaning a fully-connected linear layer.
+            # NOTE: FC and LIN are the same and meaning a fully-connected linear layer without non-linearity.
             nonlin_options = {'RELU': F.relu, 'TANH': torch.tanh, 'FC': None, 'LIN': None,
-                              'SOFTMAX': F.softmax, 'LOGSOFTMAX': F.log_softmax}
+                              'SOFTMAX': F.softmax, 'LOGSOFTMAX': F.log_softmax, 'EXP': torch.exp}
 
             # Supported recurrent nonlins.
             if layer_type in ['LSTM', 'BiLSTM', 'LSTMP', 'BiLSTMP',
-                          'GRU', 'BiGRU',
-                          'RNNTANH', 'BiRNNTANH', 'RNNRELU', 'BiRNNRELU']:
+                              'GRU', 'BiGRU',
+                              'RNNTANH', 'BiRNNTANH', 'RNNRELU', 'BiRNNRELU']:
 
                 layer_group.is_rnn = True
                 layer_group.nonlin = layer_type

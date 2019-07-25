@@ -8,8 +8,7 @@ set -o noclobber # Prevents the bash shell from overwriting files, but you can f
 export SHELLOPTS # Used to pass above shell options to any called subscripts.
 
 # echo "$@"
-# Run example: ./train_baseline_model $queue_gpu "experiments/demo/" "Baseline"
-
+# Run example: ./run-train_duration_model $queue_gpu "experiments/demo/" "DurationModel.nn"
 tmp_dir=/idiap/temp/$(whoami)/tmp/
 mkdir -p "${tmp_dir}"
 export TMP="${tmp_dir}"
@@ -19,7 +18,7 @@ out_dir=$2
 model_name=$3
 
 # Magic variables
-sub_dir="BaselineModel"
+sub_dir="DurationModel"
 log_dir="${out_dir}/${sub_dir}/log"
 nn_subdir="${sub_dir}/nn"
 
@@ -38,11 +37,7 @@ name="${model_name}"
 grid_args="-l ${queue} -l hostname=vgne*|jurasix* -S $(which python3) -v PYTHONPATH -cwd"
 
 if [ "${queue}" == "cpu" ]; then  # [ == ] literal matching
-    $(which python3) BaselineTrainer.py
+    $(which python3) MyDurationModelTrainer.py
 else
-    qsub ${grid_args} -e ${log_file} -o ${log_file} -N ${name}$ BaselineTrainer.py
-#    for index in $(echo {00..43}); do
-#        log_file="${log_dir}/${model_name%.*}${index}.log"
-#        qsub ${grid_args} -e ${log_file} -o ${log_file} -N ${name}${index} BaselineTrainer.py ${index}
-#    done
+    qsub ${grid_args} -e ${log_file} -o ${log_file} -N ${name}$ MyDurationModelTrainer.py
 fi

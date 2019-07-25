@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+set -o errexit # Exit when a command fails, same as "set -e".
+               # Use "|| true" for those who are allowed to fail.
+               # Disable (set +e) this mode if you want to know a nonzero return value.
+set -o pipefail # Catch mysqldump fails.
+set -o nounset # Exit when using undeclared variables, same as "set -u".
+set -o noclobber # Prevents the bash shell from overwriting files, but you can force it with ">|".
+export SHELLOPTS # Used to pass above shell options to any called subscripts.
+
+# echo "$@"
+# Run example: ./run-train_acoustic_model $queue_gpu "experiments/demo/" "AcousticModel"
+tmp_dir=/idiap/temp/$(whoami)/tmp/
+mkdir -p "${tmp_dir}"
+export TMP="${tmp_dir}"
+
+queue=$1
+out_dir=$2
+model_name=$3
+
+# Magic variables
+sub_dir="AcousticDeltasModel"
+log_dir="${out_dir}/${sub_dir}/log"
+nn_subdir="${sub_dir}/nn"
+
+mkdir -p "${log_dir}"
+mkdir -p "${out_dir}/${nn_subdir}"
+
+log_file="${log_dir}/${model_name%.*}.log"
+if [ "${queue}" != "cpu" ]; then
+    rm -f "${log_file}_bak"  # Remove old backup file with silent failing.
+    if [ -f "${log_file}" ]; then  # Check if log file has to be backed up.
+        mv "${log_file}" "${log_file}_bak"
+    fi
+fi
+
+name="${model_name}"
+grid_args="-l ${queue} -l hostname=vgne*|jurasix* -S $(which python3) -v PYTHONPATH -cwd"
+
+if [ "${queue}" == "cpu" ]; then  # [ == ] literal matching
+    $(which python3) MyAcousticDeltasModelTrainer.py
+else
+    qsub ${grid_args} -e ${log_file} -o ${log_file} -N ${name}$ MyAcousticDeltasModelTrainer.py
+#    for index in $(echo {00..43}); do
+#        log_file="${log_dir}/${model_name%.*}${index}.log"
+#        qsub ${grid_args} -e ${log_file} -o ${log_file} -N ${name}${index} MyAcousticDeltasModelTrainer.py ${index}
+#    done
+fi

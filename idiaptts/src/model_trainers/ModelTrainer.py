@@ -514,7 +514,41 @@ class ModelTrainer(object):
 
         return return_values
 
+    def forward(self, hparams, ids_input):
+        """
+        Forward all given ids through the network in batches of hparams.batch_size_val.
+
+        :param hparams:        Hyper-parameter container.
+        :param ids_input:      Can be full path to file with ids, list of ids, or one id.or None.
+        :return:               (Dictionary of network outputs, dictionary of post-processed (by self.OutputGen) network outputs)
+        """
+        assert(self.model_handler is not None)  # Check if trainer.init() was called before.
+        id_list = ModelTrainer._input_to_str_list(ids_input)
+
+        self.logger.info("Start forwarding [{0}]".format(", ".join(str(i) for i in id_list)))
+        t_start = timer()
+        model_output, model_output_post = self._forward_batched(hparams,
+                                                                id_list,
+                                                                hparams.batch_size_val,
+                                                                load_target=False,
+                                                                synth=False,
+                                                                benchmark=False,
+                                                                gen_figure=False)
+        t_training = timer() - t_start
+        self.logger.info('Forwarding time for {} sample(s): {}'.format(len(id_list), timedelta(seconds=t_training)))
+
+        return model_output, model_output_post
+
     def synth(self, hparams, ids_input):
+        """
+        Synthesise all given ids with the self.synthesize function.
+
+        :param hparams:        Hyper-parameter container.
+        :param ids_input:      Can be full path to file with ids, list of ids, or one id.
+        :return:               (Dictionary of network outputs, dictionary of post-processed (by self.OutputGen) network outputs)
+        """
+
+        assert(self.model_handler is not None)  # Check if trainer.init() was called before.
         assert(hparams.synth_dir is not None)  # Directory to store the generated audio files has to be set.
         makedirs_safe(hparams.synth_dir)
         id_list = ModelTrainer._input_to_str_list(ids_input)
@@ -524,31 +558,43 @@ class ModelTrainer(object):
         model_output, model_output_post = self._forward_batched(hparams, id_list, hparams.batch_size_synth, load_target=False, synth=True, benchmark=False, gen_figure=hparams.synth_gen_figure)
         t_training = timer() - t_start
         self.logger.info('Synthesis time for {} sample(s): {}'.format(len(id_list), timedelta(seconds=t_training)))
+
         return model_output, model_output_post
 
     def gen_figure(self, hparams, ids_input):
+        """
+        Generate figures for all given ids with the self.gen_figure_from_output function (has to be implemented).
+
+        :param hparams:        Hyper-parameter container.
+        :param ids_input:      Can be full path to file with ids, list of ids, or one id.
+        :return:               (Dictionary of network outputs, dictionary of post-processed (by self.OutputGen) network outputs)
+        """
+
+        assert(self.model_handler is not None)  # Check if trainer.init() was called before.
         id_list = ModelTrainer._input_to_str_list(ids_input)
+
         self.logger.info("Start generating figures for [{0}]".format(", ".join(str(i) for i in id_list)))
         t_start = timer()
         model_output, model_output_post = self._forward_batched(hparams, id_list, hparams.batch_size_gen_figure, synth=False, benchmark=False, gen_figure=True)
         t_training = timer() - t_start
         self.logger.info('Figure generation time for {} sample(s): {}'.format(len(id_list), timedelta(seconds=t_training)))
+
         return model_output, model_output_post
 
     def benchmark(self, hparams, ids_input=None):
         """
-        Benchmark the currently loaded model.
+        Benchmark the currently loaded model using the self.compute_score function (has to be implemented).
 
-        :param hparams:
+        :param hparams:        Hyper-parameter container.
         :param ids_input:      Can be full path to file with ids, list of ids, one id, or None.
                                If ids_inputs=None benchmark on test set if not None, otherwise on validation set.
         :return:               Score(s).
         """
 
-        # Insure backward compatibility.
-        if not callable(getattr(self, 'compute_score', None)):
-            return -1
+        assert(callable(getattr(self, 'compute_score', None)))  # Function has to be implemented for this trainer.
+        assert(self.model_handler is not None)  # Check if trainer.init() was called before.
 
+        # Select test or validation set when ids are not given explicitly.
         if ids_input is None:
             if self.id_list_test is not None and len(self.id_list_test) > 0:
                 id_list = self.id_list_test
@@ -567,9 +613,22 @@ class ModelTrainer(object):
         model_scores = self._forward_batched(hparams, id_list, hparams.batch_size_benchmark, synth=False, benchmark=True, gen_figure=False)
         t_training = timer() - t_start
         self.logger.info('Benchmark time for {} sample(s): {}'.format(len(id_list), timedelta(seconds=t_training)))
+
         return model_scores
 
     def _forward_batched(self, hparams, id_list, batch_size, load_target=True, synth=False, benchmark=False, gen_figure=False):
+        """
+        Forward the features for the given ids in batches through the network.
+
+        :param hparams:               Hyper-parameter container.
+        :param id_list:               A list of ids for which the features are accessible by the self.InputGen object.
+        :param batch_size:            Max size of a chunk of ids forwarded.
+        :param load_target:           Give the target to the model when forwarded (used in teacher forcing).
+        :param synth:                 Use the self.synthesize method to generate audio.
+        :param benchmark:             Benchmark the given ids with the self.compute_score function.
+        :param gen_figure:            Generate figures with the self.gen_figure_from_output function.
+        :return:                      (Dictionary of network outputs, dictionary of post-processed (by self.OutputGen) network outputs)
+        """
 
         self.logger.info("Get model outputs as batches of size {}.".format(min(batch_size, len(id_list))))
         dict_outputs = dict()
