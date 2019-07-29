@@ -23,6 +23,7 @@ database_dir="database"
 wav_dir="${database_dir}/wav"
 duration_dir="dur"
 htk_label_dir="labels/label_state_align"
+mono_label_dir="labels/mono_no_align"
 question_dir="questions"
 atom_dir="wcad-0.030_0.060_0.090_0.120_0.150"
 bap_dir="WORLD/bap"
@@ -35,10 +36,9 @@ egs_folder=${1}
 file_id_list=${2}
 IFS=$'\r\n' GLOBIGNORE='*' command eval 'utts=($(cat $file_id_list))'
 
-echo "Clear or create all fixture folders."
-
 # Empty or create fixture directories.
-for dir in ${database_dir} ${wav_dir} ${duration_dir} ${htk_label_dir} ${question_dir} ${atom_dir} ${bap_dir} ${lf0_dir} ${mgc_dir} ${vuv_dir} ${cmp_dir}; do
+echo "Clear or create all fixture folders."
+for dir in ${database_dir} ${wav_dir} ${duration_dir} ${htk_label_dir} ${mono_label_dir} ${question_dir} ${atom_dir} ${bap_dir} ${lf0_dir} ${mgc_dir} ${vuv_dir} ${cmp_dir}; do
     if [ -d "${dir}" ]; then
         echo "    Clear ${dir}"
         rm -fR "${dir}/"*
@@ -58,6 +58,9 @@ cp ${file_id_list} ${database_dir}/
 pat=$(echo ${utts[@]}|tr " " "|")
 grep -Ew "$pat" ${egs_folder}/database/utts.data >| ${database_dir}/utts.data
 
+# Copy more special files.
+cp "${egs_folder}/experiments/fixtures/labels/mono_phone.list" "labels/"
+
 # Copy features for utterance ids in given file_id_list to their respective fixture directory.
 for id in "${utts[@]}"; do
     # Implementation to loop over tuples.
@@ -66,6 +69,7 @@ for id in "${utts[@]}"; do
     for tuple in "","${wav_dir}"\
                  "experiments/fixtures","${duration_dir}"\
                  "experiments/full","${htk_label_dir}"\
+                 "experiments/full/","${mono_label_dir}"\
                  "experiments/fixtures","${question_dir}"\
                  "experiments/fixtures","${atom_dir}"\
                  "experiments/fixtures","${bap_dir}"\
