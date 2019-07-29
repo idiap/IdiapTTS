@@ -14,13 +14,10 @@
 """
 
 # System imports.
-import argparse
 import logging
 import math
-import sys
 import numpy as np
 import os
-import pdb
 import scipy
 
 # Third-party imports.
@@ -44,11 +41,11 @@ class DurationModelTrainer(ModelTrainer):
     #########################
     # Default constructor
     #
-    def __init__(self, dir_durations, dir_monophone_labels, id_list, file_symbol_dict, hparams=None):
+    def __init__(self, dir_phoneme_labels, dir_durations, id_list, file_symbol_dict, hparams=None):
         """Default constructor.
 
+        :param dir_phoneme_labels:      Path to the directory containing the label files with monophones.
         :param dir_durations:           Path to the directory containing the durations.
-        :param dir_monophone_labels:    Path to the directory containing the monophones.
         :param id_list:                 List containing all ids. Subset is taken as test set.
         :param file_symbol_dict:        List of all used monophones.
         """
@@ -66,12 +63,12 @@ class DurationModelTrainer(ModelTrainer):
 
         super().__init__(id_list, hparams)
 
-        self.InputGen = PhonemeLabelGen(dir_monophone_labels, file_symbol_dict)
+        self.InputGen = PhonemeLabelGen(dir_phoneme_labels, file_symbol_dict, hparams.phoneme_label_type)
         self.OutputGen = PhonemeDurationLabelGen(dir_durations)
         self.OutputGen.get_normalisation_params(dir_durations)
 
-        self.dataset_train = PyTorchLabelGensDataset(self.id_list_train, self.InputGen, self.OutputGen, hparams)
-        self.dataset_val = PyTorchLabelGensDataset(self.id_list_val, self.InputGen, self.OutputGen, hparams)
+        self.dataset_train = PyTorchLabelGensDataset(self.id_list_train, self.InputGen, self.OutputGen, hparams, match_lengths=False)
+        self.dataset_val = PyTorchLabelGensDataset(self.id_list_val, self.InputGen, self.OutputGen, hparams, match_lengths=False)
 
         if self.loss_function is None:
             self.loss_function = torch.nn.MSELoss(reduction='none')
@@ -80,12 +77,17 @@ class DurationModelTrainer(ModelTrainer):
             hparams.scheduler_type = "Plateau"
             hparams.plateau_verbose = True
 
-    # @staticmethod
-    # def create_hparams(hparams_string=None, verbose=False):
-    #     hparams = ModelTrainer.create_hparams(hparams_string, verbose)
-    #     hparams.exclude_begin_and_end_silence = False
-    #
-    #     return hparams
+    @staticmethod
+    def create_hparams(hparams_string=None, verbose=False):
+        hparams = ModelTrainer.create_hparams(hparams_string, verbose=False)
+        # hparams.exclude_begin_and_end_silence = False
+        hparams.phoneme_label_type = "HTK full"  # Specifies the format in which the .lab files are stored.
+                                                 # Refer to PhonemeLabelGen.load_sample for a list of possible types.
+
+        if verbose:
+            logging.info('Final parsed hparams: %s', hparams.values())
+
+        return hparams
 
     def forward(self, hparams, id_list, only_positive=True):
         """
@@ -100,7 +102,7 @@ class DurationModelTrainer(ModelTrainer):
         output_dict, output_dict_post = super().forward(hparams, id_list)  # Call base class forward.
 
         # Convert output into phoneme lengths.
-        output_dict_post.update((key,  np.around(value).astype(np.int) * hparams.min_phoneme_length) for key, value in output_dict_post.items())
+        output_dict_post.update((key, np.around(value).astype(np.int) * hparams.min_phoneme_length) for key, value in output_dict_post.items())
 
         # Ensure positivity of predicted durations if requested.
         if only_positive:

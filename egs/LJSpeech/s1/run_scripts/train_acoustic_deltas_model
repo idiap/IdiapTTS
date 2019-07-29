@@ -42,6 +42,6 @@ else
     qsub ${grid_args} -e ${log_file} -o ${log_file} -N ${name}$ MyAcousticDeltasModelTrainer.py
 #    for index in $(echo {00..43}); do
 #        log_file="${log_dir}/${model_name%.*}${index}.log"
-#        qsub ${grid_args} -e ${log_file} -o ${log_file} -N ${name}${index} MyAcousticDeltasModelTrainer.py ${index}
+#        qsub ${grid_args} -e ${log_file} -o ${log_file} -N ${name}${index} MyAcousticModelTrainer.py ${index}
 #    done
 fi

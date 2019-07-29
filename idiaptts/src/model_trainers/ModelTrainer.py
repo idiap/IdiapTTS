@@ -143,7 +143,7 @@ class ModelTrainer(object):
             epochs_per_test=1,  # Number of training epochs before testing (NOTE that this includes the scheduler_type with epoch scheduling).
 
             networks_dir="nn",
-            checkpoints_dir="checkpoints",
+            checkpoints_dir="checkpoints", # Subdirectory within the networks_dir to save checkpoints.
             epochs_per_checkpoint=1,  # Number of epochs between checkpoints, 0 for no checkpoints at all.
             save_final_model=True,  # Determines if the model is saved after training.
             use_best_as_final_model=True,  # Substitutes the saved final model with the best of the current run.
@@ -157,7 +157,7 @@ class ModelTrainer(object):
             val_set_perc=0.05,   # Percentage of samples taken from the given id_list in __init__ for validation.
                                  # Ignored when self.id_list_train is already set. Note that self.id_list_val should be set then as well.
             seed=1234,  # Used to initialize torch, numpy, and random. If None, the id_list is not shuffled before taking test and validation set from it.
-            fp16_run=False,  # TODO: Not implemented.
+            # fp16_run=False,  # TODO: Not implemented.
             # distributed_run=False,  # TODO: Find out how distributed run works.
             # dist_url="file://distributed.dpt",
             # cudnn_enabled=True,
@@ -171,7 +171,7 @@ class ModelTrainer(object):
             shuffle_val_set=False,  # Shuffle in dataset to get mini batches.
             batch_size_train=1,
             batch_size_test=48,
-            # batch_size_val=1,  # TODO: Add again after finding all My* classes where it is missing.
+            batch_size_val=48,
             batch_size_benchmark=48,
             batch_size_synth=48,
             batch_size_gen_figure=48,
@@ -254,8 +254,8 @@ class ModelTrainer(object):
             # do_post_filtering = False,  # TODO: Merlin does some filtering before calling its vocoder. Possible implementation: https://github.com/r9y9/nnmnkwii/blob/master/nnmnkwii/postfilters/__init__.py
             synth_gen_figure=False,
             gen_figure_ext=".pdf",
-            epochs_per_plot=0,  # No plots per epoch with <= 0. # TODO: plot in run method each ... epochs.
-            plot_per_epoch_id_list=None,  # TODO: Id(s) in the dictionary which are plotted.
+            # epochs_per_plot=0,  # No plots per epoch with <= 0. # TODO: plot in run method each ... epochs.
+            # plot_per_epoch_id_list=None,  # TODO: Id(s) in the dictionary which are plotted.
         )
 
         if hparams_string:
@@ -316,6 +316,7 @@ class ModelTrainer(object):
         makedirs_safe(os.path.join(hparams.out_dir, hparams.networks_dir, hparams.checkpoints_dir))
         # Create the default model path if not set or retrieve the name from the given path.
         if hparams.model_path is None:
+            assert(hparams.model_name is not None)  # A model_path or model_name has to be given. No default name is used.
             hparams.model_path = os.path.join(hparams.out_dir, hparams.networks_dir, hparams.model_name)
         elif hparams.model_name is None:
             hparams.model_name = os.path.basename(hparams.model_path)
@@ -429,16 +430,9 @@ class ModelTrainer(object):
 
     @staticmethod
     def _input_to_str_list(input):
-        # Checks for list or tuple.
-        if isinstance(input, (list, tuple)):
-            # Ensure elements are strings.
-            if not isinstance(input[0], str):
-                return list(map(str, input))
-            else:
-                return input
-        # Checks for string input.
-        elif isinstance(input, str):
-            # Check if string is a path, then read ids from file.
+        # Checks for string input first.
+        if isinstance(input, str):
+            # Check if string is a path by trying to read ids from file.
             try:
                 with open(input) as f:
                     id_list = f.readlines()
@@ -447,7 +441,11 @@ class ModelTrainer(object):
                 return id_list
             except IOError:
                 # String is single input id, convert to list.
-                return (input)
+                return [input]
+        # Checks for list or tuple.
+        elif isinstance(input, (list, tuple)):
+            # Ensure elements are strings.
+            return list(map(str, input))
         raise ValueError("Unkown input {} of type {}.".format(input, type(input)))
 
     @staticmethod

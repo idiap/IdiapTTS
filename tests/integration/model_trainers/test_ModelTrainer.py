@@ -77,8 +77,8 @@ class TestModelTrainer(unittest.TestCase):
         trainer.OutputGen = WorldFeatLabelGen(dir_world_features, num_coded_sps=hparams.num_coded_sps, add_deltas=True)
         trainer.OutputGen.get_normalisation_params(dir_world_features)
 
-        trainer.dataset_train = LabelGensDataset(trainer.id_list_train, trainer.InputGen, trainer.OutputGen, hparams)
-        trainer.dataset_val = LabelGensDataset(trainer.id_list_val, trainer.InputGen, trainer.OutputGen, hparams)
+        trainer.dataset_train = LabelGensDataset(trainer.id_list_train, trainer.InputGen, trainer.OutputGen, hparams, match_lengths=True)
+        trainer.dataset_val = LabelGensDataset(trainer.id_list_val, trainer.InputGen, trainer.OutputGen, hparams, match_lengths=True)
 
         trainer.loss_function = torch.nn.MSELoss(reduction='none')
 

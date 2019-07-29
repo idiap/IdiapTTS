@@ -11,7 +11,6 @@ cat <<- EOF
 
     Compute HTK full labels for all ids listed in <file_id_list>.
     Audio files are searched in database/wav/.
-    By default ensures a half second of silence in front and back of each file before computing the labels.
 
     OPTIONS:
         -h                        show this help
@@ -110,11 +109,6 @@ for block in $(eval echo "{0..${iterations}}"); do
 done
 sed -i 's/[()]//g' ${dir_labels}/utts_selected.data
 sed -i 's/ /'$'\t''/' ${dir_labels}/utts_selected.data  # Convert first space into tab to match expected format of tts_frontend.
-
-# # Create links to all selected .txt files.
-# for utt in "${utts[@]}"; do
-#     ln -sf ${dir_data}/txt/${utt}.txt ${dir_labels}/${utt}.txt
-# done
 
 # Split into working blocks.
 if [ "$num_blocks" -gt "99" ]; then

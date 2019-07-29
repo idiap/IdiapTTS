@@ -17,13 +17,13 @@ import random
 # Third-party imports.
 
 # Local source tree imports.
-from idiaptts.src.model_trainers.AcousticDeltasModelTrainer import AcousticDeltasModelTrainer
+from idiaptts.src.model_trainers.AcousticModelTrainer import AcousticModelTrainer
 from idiaptts.src.neural_networks.pytorch.loss.WMSELoss import WMSELoss
 
 
-class MyAcousticDeltasModelTrainer(AcousticDeltasModelTrainer):
+class MyAcousticModelTrainer(AcousticModelTrainer):
     """
-    Implementation of an AcousticDeltasModelTrainer with predefined parameters.
+    Implementation of an AcousticModelTrainer with predefined parameters.
     The model predicts MGC, LF0, and BAP with deltas and double deltas and a V/UV flag.
     It uses MLPG to get the final features.
 
@@ -53,7 +53,7 @@ class MyAcousticDeltasModelTrainer(AcousticDeltasModelTrainer):
 def main():
     logging.basicConfig(level=logging.INFO)
 
-    hparams = MyAcousticDeltasModelTrainer.create_hparams()  # TODO: Parse input for hparams.
+    hparams = MyAcousticModelTrainer.create_hparams()  # TODO: Parse input for hparams.
 
     # General parameters
     hparams.num_questions = 425
@@ -70,7 +70,6 @@ def main():
     # Training parameters.
     hparams.epochs = 15
     hparams.use_gpu = True
-    # hparams.model_type = "RNNDYN-2_TANH_1024-3_BiLSTM_512-1_FC_97"
     hparams.model_type = "RNNDYN-2_RELU_1024-3_BiLSTM_512-1_FC_97"
     hparams.batch_size_train = 32
     hparams.batch_size_val = 64
@@ -84,12 +83,12 @@ def main():
     hparams.use_best_as_final_model = True
 
     # Training.
-    trainer = MyAcousticDeltasModelTrainer(hparams)
+    trainer = MyAcousticModelTrainer(hparams)
     trainer.init(hparams)
     trainer.train(hparams)
     trainer.benchmark(hparams)
 
-    synth_file_id_list = ["LJ038-0064", "LJ001-0133"]
+    synth_file_id_list = random.choices(trainer.id_list_test, k=3)
     # hparams.synth_gen_figure = False
     hparams.synth_vocoder = "WORLD"
     # hparams.synth_vocoder = "r9y9wavenet_quantized_16k_world_feats_English"

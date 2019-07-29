@@ -29,7 +29,7 @@ from idiaptts.src.neural_networks.pytorch.loss.WeightedNonzeroMSELoss import Wei
 from idiaptts.src.data_preparation.PyTorchLabelGensDataset import PyTorchLabelGensDataset
 from idiaptts.src.DataPlotter import DataPlotter
 from idiaptts.misc.utils import interpolate_lin
-from idiaptts.src.model_trainers.AcousticDeltasModelTrainer import AcousticDeltasModelTrainer
+from idiaptts.src.model_trainers.AcousticModelTrainer import AcousticModelTrainer
 
 
 class AtomModelTrainer(ModelTrainer):
@@ -83,8 +83,8 @@ class AtomModelTrainer(ModelTrainer):
         self.OutputGen = AtomLabelGen(wcad_root, dir_atom_labels, thetas, k, hparams.frame_size_ms)
         self.OutputGen.get_normalisation_params(dir_atom_labels)
 
-        self.dataset_train = PyTorchLabelGensDataset(self.id_list_train, self.InputGen, self.OutputGen, hparams)
-        self.dataset_val = PyTorchLabelGensDataset(self.id_list_val, self.InputGen, self.OutputGen, hparams)
+        self.dataset_train = PyTorchLabelGensDataset(self.id_list_train, self.InputGen, self.OutputGen, hparams, match_lengths=True)
+        self.dataset_val = PyTorchLabelGensDataset(self.id_list_val, self.InputGen, self.OutputGen, hparams, match_lengths=True)
 
         if self.loss_function is None:
             self.loss_function = WeightedNonzeroMSELoss(hparams.use_gpu, hparams.weight_zero, hparams.weight_non_zero,
@@ -282,10 +282,10 @@ class AtomModelTrainer(ModelTrainer):
         """
         self.logger.info("Generate mgc, vuv and bap with " + hparams.synth_acoustic_model_path)
 
-        acoustic_model_hparams = AcousticDeltasModelTrainer.create_hparams()
+        acoustic_model_hparams = AcousticModelTrainer.create_hparams()
         acoustic_model_hparams.model_name = os.path.basename(hparams.synth_acoustic_model_path)
         acoustic_model_hparams.model_path = hparams.synth_acoustic_model_path
-        acoustic_model_handler = AcousticDeltasModelTrainer(acoustic_model_hparams)
+        acoustic_model_handler = AcousticModelTrainer(acoustic_model_hparams)
 
         org_model_handler = self.model_handler
         self.model_handler = acoustic_model_handler

@@ -100,7 +100,7 @@ class TestModelTrainer(unittest.TestCase):
 
         # Single input id.
         out = ModelTrainer._input_to_str_list("121")
-        self.assertEqual("121", out)
+        self.assertEqual(["121"], out)
 
         # Wrong input.
         with self.assertRaises(ValueError):

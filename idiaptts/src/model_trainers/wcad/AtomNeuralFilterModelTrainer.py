@@ -89,8 +89,8 @@ class AtomNeuralFilterModelTrainer(ModelTrainer):
         self.OutputGen = FlatLF0LabelGen(dir_lf0_labels, dir_atom_labels)
         self.OutputGen.get_normalisation_params(dir_atom_labels)
 
-        self.dataset_train = PyTorchLabelGensDataset(self.id_list_train, self.InputGen, self.OutputGen, hparams)
-        self.dataset_val = PyTorchLabelGensDataset(self.id_list_val, self.InputGen, self.OutputGen, hparams)
+        self.dataset_train = PyTorchLabelGensDataset(self.id_list_train, self.InputGen, self.OutputGen, hparams, match_lengths=True)
+        self.dataset_val = PyTorchLabelGensDataset(self.id_list_val, self.InputGen, self.OutputGen, hparams, match_lengths=True)
 
         self.atom_trainer = AtomVUVDistPosModelTrainer(wcad_root, dir_atom_labels, dir_lf0_labels,
                                                        dir_question_labels, id_list,

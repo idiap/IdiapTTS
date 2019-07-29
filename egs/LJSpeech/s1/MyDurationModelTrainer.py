@@ -31,7 +31,7 @@ class MyDurationModelTrainer(DurationModelTrainer):
         """Set your parameters here."""
 
         dir_durations = os.path.join(hparams.work_dir, "dur")
-        dir_monophone_labels = os.path.join(hparams.work_dir, "labels", "mono_no_align")
+        dir_monophone_labels = os.path.join(hparams.work_dir, "labels", "label_state_align")
         file_symbol_dict = os.path.join(hparams.work_dir, "labels", "mono_phone.list")
 
         # Read which files to process.
@@ -40,7 +40,7 @@ class MyDurationModelTrainer(DurationModelTrainer):
         # Trim entries in-place.
         id_list[:] = [s.strip(' \t\n\r') for s in id_list]
 
-        super().__init__(dir_durations, dir_monophone_labels, id_list, file_symbol_dict, hparams)
+        super().__init__(dir_monophone_labels, dir_durations, id_list, file_symbol_dict, hparams)
 
 
 def main():
@@ -77,9 +77,6 @@ def main():
     trainer.init(hparams)
     trainer.train(hparams)
     trainer.benchmark(hparams)
-
-    # synth_file_id_list = ["LJ038-0064", "LJ001-0133"]
-    # trainer.synth(use_gpu, synth_file_id_list, model_name=model_name)
 
 
 if __name__ == "__main__":

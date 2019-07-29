@@ -101,8 +101,8 @@ class AtomVUVDistPosModelTrainer(AtomModelTrainer):
         self.OutputGen = AtomVUVDistPosLabelGen(wcad_root, dir_atom_labels, dir_lf0_labels, thetas, k, hparams.frame_size_ms, window_size=dist_window_size)
         self.OutputGen.get_normalisation_params(dir_atom_labels)
 
-        self.dataset_train = PyTorchLabelGensDataset(self.id_list_train, self.InputGen, self.OutputGen, hparams, length_check=True)
-        self.dataset_val = PyTorchLabelGensDataset(self.id_list_val, self.InputGen, self.OutputGen, hparams, length_check=True)
+        self.dataset_train = PyTorchLabelGensDataset(self.id_list_train, self.InputGen, self.OutputGen, hparams, match_lengths=True)
+        self.dataset_val = PyTorchLabelGensDataset(self.id_list_val, self.InputGen, self.OutputGen, hparams, match_lengths=True)
 
         if self.loss_function is None:
             self.loss_function = WeightedNonzeroWMSEAtomLoss(hparams.use_gpu, hparams.atom_loss_theta, hparams.weight_vuv, hparams.weight_zero, hparams.weight_non_zero, reduce=False)

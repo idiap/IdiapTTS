@@ -17,7 +17,7 @@ import logging
 # Local source tree imports.
 import idiaptts
 from idiaptts.src.TTSModel import TTSModel
-from idiaptts.src.model_trainers.AcousticDeltasModelTrainer import AcousticDeltasModelTrainer
+from idiaptts.src.model_trainers.AcousticModelTrainer import AcousticModelTrainer
 
 
 def main():
@@ -35,7 +35,7 @@ def main():
     input_strings = args.input_strings
     logging.info("Received {} utterance(s) for synthesis.".format(len(input_strings)))
 
-    hparams = AcousticDeltasModelTrainer.create_hparams()
+    hparams = AcousticModelTrainer.create_hparams()
     hparams.voice = "full"
 
     if args.egs_dir is None:
@@ -48,10 +48,10 @@ def main():
     tts_frontend_dir = os.path.join(proj_dir, "tools", "tts_frontend")
 
     hparams.work_dir = os.path.join(egs_dir, "experiments", hparams.voice)
-    hparams.synth_dir = os.path.join(hparams.work_dir, "TTSModel") if args.out_dir is None else os.path.realpath(args.out_dir)
+    hparams.synth_dir = os.path.join(hparams.work_dir, "TTSModelDMAM") if args.out_dir is None else os.path.realpath(args.out_dir)
     hparams.use_gpu = True
 
-    hparams.front_end_dir = os.path.join(tts_frontend_dir, "English", "makeLabels.sh")
+    hparams.front_end = os.path.join(tts_frontend_dir, "English", "makeLabels.sh")
     hparams.front_end_accent = "AM"
     hparams.festival_dir = os.path.join(tools_dir, "festival")
     hparams.file_symbol_dict = os.path.join(hparams.work_dir, "labels", "mono_phone.list")
@@ -69,8 +69,7 @@ def main():
     hparams.synth_vocoder = "WORLD"
     hparams.batch_size_val = 64
 
-    tts_model = TTSModel()
-    tts_model.run(hparams, input_strings)
+    TTSModel.run_DM_AM(hparams, input_strings)
 
 
 if __name__ == "__main__":

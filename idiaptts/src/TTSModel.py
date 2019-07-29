@@ -4,10 +4,6 @@
 # Copyright (c) 2019 Idiap Research Institute, http://www.idiap.ch/
 # Written by Bastian Schnell <bastian.schnell@idiap.ch>
 #
-#
-# Copyright (c) 2019 Idiap Research Institute, http://www.idiap.ch/
-# Written by 
-#
 
 
 # System imports.
@@ -24,12 +20,32 @@ import numpy as np
 from idiaptts.misc.utils import makedirs_safe
 from idiaptts.src.model_trainers.DurationModelTrainer import DurationModelTrainer
 from idiaptts.src.data_preparation.questions.QuestionLabelGen import QuestionLabelGen
-from idiaptts.src.model_trainers.AcousticDeltasModelTrainer import AcousticDeltasModelTrainer
+from idiaptts.src.model_trainers.AcousticModelTrainer import AcousticModelTrainer
 
 
 class TTSModel(object):
+    """This class provides static methods to run TTS (text-to-speech) for different setups."""
 
-    def run(self, hparams, input_strings):
+    @staticmethod
+    def run_DM_AM(hparams, input_strings):
+        """
+        A function for TTS with a pre-trained duration and acoustic model.
+
+        :param hparams:            Hyper-parameter container. The following parameters are used:
+                                   front_end:                    Full path to the makeLabels.sh script in tools/tts_frontend, depends on the language.
+                                   festival_dir:                 Full path to the directory with the festival bin/ folder.
+                                   front_end_accent (optional):  Give an accent to the front_end, used in tts_frontend.
+                                   duration_labels_dir:          Full path to the folder containing the normalisation parameters used to train the duration model.
+                                   file_symbol_dict:             A file containing all the used phonemes (has been used to train the duration model, usually mono_phone.list).
+                                   duration_model:               Full path to the pre-trained duration model.
+                                   num_phoneme_states:           Number of states per phoneme, for each a duration is predicted by the duration model.
+                                   file_questions:               Full path to question file used to train the acoustic model.
+                                   question_labels_norm_file:    Full path to normalisation file of questions used to train the acoustic model.
+                                   num_questions:                Number of questions which form the input dimension to the acoustic model.
+                                   acoustic_model:               Full path to acoustic model.
+        :param input_strings:
+        :return:
+        """
         # Create a temporary directory to store all files.
         with tempfile.TemporaryDirectory() as tmp_dir_name:
             # tmp_dir_name = os.path.realpath("TMP")
@@ -69,9 +85,9 @@ class TTSModel(object):
             hparams.batch_size_test = len(input_strings)
             hparams.test_set_perc = 0.0
             hparams.val_set_perc = 0.0
-            duration_model_trainer = DurationModelTrainer(hparams.duration_labels_dir,
-                                                          os.path.join(tmp_dir_name, "mono_no_align"),
-                                                          id_list,
+            hparams.phoneme_label_type = "mono_no_align"
+            duration_model_trainer = DurationModelTrainer(os.path.join(tmp_dir_name, "mono_no_align"),
+                                                          hparams.duration_labels_dir, id_list,
                                                           hparams.file_symbol_dict, hparams)
             hparams.model_path = hparams.duration_model
 
@@ -100,7 +116,7 @@ class TTSModel(object):
 
             # Run acoustic model and synthesise.
             shutil.copy2(hparams.question_labels_norm_file, tmp_dir_name)  # Get normalisation parameters in same directory.
-            acoustic_model_trainer = AcousticDeltasModelTrainer(hparams.world_features_dir, tmp_dir_name, id_list, hparams.num_questions, hparams)
+            acoustic_model_trainer = AcousticModelTrainer(hparams.world_features_dir, tmp_dir_name, id_list, hparams.num_questions, hparams)
             hparams.model_path = hparams.acoustic_model
             acoustic_model_trainer.init(hparams)
             hparams.model_name = ""  # No suffix in synthesised files.
@@ -110,7 +126,7 @@ class TTSModel(object):
 
 
 def main():
-    hparams = AcousticDeltasModelTrainer.create_hparams()
+    hparams = AcousticModelTrainer.create_hparams()
 
     hparams.voice = "demo"
     hparams.work_dir = os.path.realpath(os.path.join("experiments", hparams.voice))
@@ -132,8 +148,7 @@ def main():
     hparams.num_coded_sps = 30
     hparams.acoustic_model = os.path.join(hparams.work_dir, "AcousticDeltasModel", "nn", "Bds.nn")
 
-    tts_model = TTSModel()
-    tts_model.run(hparams, ["This is a test.", "Hello World!"])
+    TTSModel.run_DM_AM(hparams, ["This is a test.", "Hello World!"])
 
 
 if __name__ == "__main__":

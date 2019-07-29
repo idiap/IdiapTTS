@@ -12,16 +12,16 @@ import numpy
 import soundfile
 import warnings
 
-from idiaptts.src.model_trainers.AcousticDeltasModelTrainer import AcousticDeltasModelTrainer
+from idiaptts.src.model_trainers.AcousticModelTrainer import AcousticModelTrainer
 
 
-class TestAcousticDeltasModelTrainer(unittest.TestCase):
+class TestAcousticModelTrainer(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
         # Load test data
-        cls.dir_world_features = "integration/fixtures/WORLD"
-        cls.dir_question_labels = "integration/fixtures/questions"
+        cls.dir_world_features = os.path.join("integration", "fixtures", "WORLD")
+        cls.dir_question_labels = os.path.join("integration", "fixtures", "questions")
         cls.id_list = cls._get_id_list()
 
     @classmethod
@@ -30,11 +30,11 @@ class TestAcousticDeltasModelTrainer(unittest.TestCase):
         os.rmdir(hparams.out_dir)  # Remove class name directory, should be empty.
 
     def _get_hparams(self):
-        hparams = AcousticDeltasModelTrainer.create_hparams()
+        hparams = AcousticModelTrainer.create_hparams()
         # General parameters
         hparams.num_questions = 409
         hparams.voice = "full"
-        hparams.data_dir = os.path.realpath("integration/fixtures/database")
+        hparams.data_dir = os.path.realpath(os.path.join("integration", "fixtures", "database"))
         hparams.out_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), type(self).__name__)
 
         hparams.sampling_frequency = 16000
@@ -57,7 +57,7 @@ class TestAcousticDeltasModelTrainer(unittest.TestCase):
 
     @staticmethod
     def _get_id_list():
-        with open(os.path.join("integration/fixtures/database/file_id_list.txt")) as f:
+        with open(os.path.join("integration", "fixtures", "database", "file_id_list.txt")) as f:
             id_list = f.readlines()
         # Trim entries in-place.
         id_list[:] = [s.strip(' \t\n\r') for s in id_list]
@@ -67,7 +67,7 @@ class TestAcousticDeltasModelTrainer(unittest.TestCase):
         hparams = self._get_hparams()
         hparams.out_dir = os.path.join(hparams.out_dir, "test_init")  # Add function name to path.
 
-        trainer = AcousticDeltasModelTrainer(self.dir_world_features, self.dir_question_labels, self.id_list, hparams.num_questions, hparams)
+        trainer = AcousticModelTrainer(self.dir_world_features, self.dir_question_labels, self.id_list, hparams.num_questions, hparams)
         trainer.init(hparams)
 
         shutil.rmtree(hparams.out_dir)
@@ -78,7 +78,7 @@ class TestAcousticDeltasModelTrainer(unittest.TestCase):
         hparams.seed = 1234
         hparams.use_best_as_final_model = False
 
-        trainer = AcousticDeltasModelTrainer(self.dir_world_features, self.dir_question_labels, self.id_list, hparams.num_questions, hparams)
+        trainer = AcousticModelTrainer(self.dir_world_features, self.dir_question_labels, self.id_list, hparams.num_questions, hparams)
         trainer.init(hparams)
         _, all_loss_train, _ = trainer.train(hparams)
 
@@ -93,7 +93,7 @@ class TestAcousticDeltasModelTrainer(unittest.TestCase):
         hparams.out_dir = os.path.join(hparams.out_dir, "test_benchmark")  # Add function name to path.
         hparams.seed = 1
 
-        trainer = AcousticDeltasModelTrainer(self.dir_world_features, self.dir_question_labels, self.id_list, hparams.num_questions, hparams)
+        trainer = AcousticModelTrainer(self.dir_world_features, self.dir_question_labels, self.id_list, hparams.num_questions, hparams)
         trainer.init(hparams)
         scores = trainer.benchmark(hparams)
 
@@ -109,7 +109,7 @@ class TestAcousticDeltasModelTrainer(unittest.TestCase):
         hparams.model_name = "test_model_in409_out67.nn"
         hparams.model_path = os.path.join("integration", "fixtures", hparams.model_name)
 
-        trainer = AcousticDeltasModelTrainer(self.dir_world_features, self.dir_question_labels, self.id_list, hparams.num_questions, hparams)
+        trainer = AcousticModelTrainer(self.dir_world_features, self.dir_question_labels, self.id_list, hparams.num_questions, hparams)
         trainer.init(hparams)
 
         with warnings.catch_warnings():
@@ -139,7 +139,7 @@ class TestAcousticDeltasModelTrainer(unittest.TestCase):
         hparams.synth_load_org_vuv = True
         hparams.synth_load_org_bap = True
 
-        trainer = AcousticDeltasModelTrainer(self.dir_world_features, self.dir_question_labels, self.id_list, hparams.num_questions, hparams)
+        trainer = AcousticModelTrainer(self.dir_world_features, self.dir_question_labels, self.id_list, hparams.num_questions, hparams)
         trainer.init(hparams)
         hparams.synth_dir = hparams.out_dir
         trainer.synth(hparams, self.id_list[:num_test_files])

@@ -34,7 +34,10 @@ Run `./05_prepare_WORLD_deltas_labels.sh full <num_workers> database/file_id_lis
 # Training
 
 ### Duration model
+Train the duration model by running `python MyDurationModelTrainer.py`. The class contains a not fine-tuned set of hyper-parameters. It uses a bi-GRU based network to predict durations for the five states of each input phoneme. Input phonemes are given as one-hot vectors.
 
 ### Acoustic model
-Train the baseline model by running `python BaselineTrainer.py`. The class contains all the hyper-parameters used for our experiments. It uses a bi-GRU based acoustic model to predict acoustic features with deltas and double deltas. At synthesis time it reloads the extracted BAP and MGC features and uses only the prediction of V/UV and LF0.
+Train the acoustic model by running `python MyAcousticModelTrainer.py`. The class contains a not fine-tuned set of hyper-parameters. It uses a bi-LSTM based network to predict acoustic features (30 MGC, LF0, VUV, 1 BAP) with deltas and double deltas.
 
+# Synthesis
+Run `python RunTTSModelDMAM.py --out_dir <the directory to save the synthesised audio to> --egs_dir <the egs directory in which you have trained your duration and acoustic model under experiments/full/> --input_strings <a list of strings to synthesise>` for TTS with the pre-trained duration and acoustic model. The script uses the *tools/tts_frontend* for English with an American accent to generate phonemes from text. It then gives these to the duration model (the name is the default name used to train it) to predict durations for the five states per phoneme. The predicted durations are added to the HTK full labels. The same question file as for training the acoustic model is used to generate question labels from the now "aligned" phonemes. These features are input to the acoustic model (default name as above is expected) to synthesise the acoustic feature. The waveform is generated using the WORLD vocoder.

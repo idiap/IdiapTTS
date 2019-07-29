@@ -17,7 +17,7 @@ queue=$1
 out_dir=$2
 
 # Magic variables
-sub_dir="TTSModel"
+sub_dir="TTSModelDMAM"
 log_dir="${out_dir}/${sub_dir}/log"
 
 mkdir -p "${log_dir}"

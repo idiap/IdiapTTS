@@ -17,5 +17,9 @@ Follow the instructions given in *INSTALL.md*.
 Instructions to run specific experiments are in the *README* files of the respective *egs* folders.
 
 ## Publications
+#### Interspeech '18: A Neural Model to Predict Parameters for a Generalized Command Response Model of Intonation
+Instructions to produce results similar to those reported in the paper can be found in *egs/blizzard08_roger/s1/*.
+
+
 #### Icassp'19: An End-to-End Network to Synthesize Intonation using a Generalized Command Response Model
 Instructions to reproduce the results of the paper can be found in *egs/blizzard08_roger/s2/*.

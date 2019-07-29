@@ -21,14 +21,14 @@ class PyTorchLabelGensDataset(Dataset):
     """Dataset that generate the samples from two LabelGen objects."""
 
     def __init__(self, id_list, label_gen_in, label_gen_out, hparams,
-                 length_check=True, len_in_out_multiplier=1, random_select=False, max_frames_input=-1):
+                 match_lengths=False, len_in_out_multiplier=1, random_select=False, max_frames_input=-1):
         """
         Initialise a dataset that generate the samples from two LabelGen objects.
 
         :param id_list:                 List of ids used in this dataset.
         :param label_gen_in:            LabelGen for input labels.
         :param label_gen_out:           LabelGen for output labels.
-        :param length_check:            Check lengths of input and output labels match. Guaranteed for random_select.
+        :param match_lengths:           Check lengths of input and output labels match. Guaranteed for random_select.
         :param len_in_out_multiplier:   Multiplier of length between input and output labels in time (can be < 1).
         :param random_select:           Randomly selects a sequential part of the labels. This avoids memory issues.
                                         If True, max_frames_input has to be > 0 and length_check is implicit.
@@ -49,8 +49,8 @@ class PyTorchLabelGensDataset(Dataset):
         if random_select:
             assert(max_frames_input >= 1)  # When random_select is used a maximum number of input frames is required.
             self.fun_getitem = self.getitem_random_select
-        elif length_check:
-            self.fun_getitem = self.getitem_length_check
+        elif match_lengths:
+            self.fun_getitem = self.getitem_match_lengths
         else:
             self.fun_getitem = self.getitem_no_length_check
 
@@ -67,7 +67,7 @@ class PyTorchLabelGensDataset(Dataset):
     def getitem_by_name(self, id_name, load_target):
         return self.getitem_no_length_check(id_name, load_target)
 
-    def getitem_length_check(self, id_name, load_target=True):
+    def getitem_match_lengths(self, id_name, load_target=True):
         """
         Load labels and trim to match lengths. The self.len_in_out_multiplier is considered here.
         Ensures: len(labels_in) * self.len_in_out_multiplier = len(labels_out)
@@ -101,9 +101,7 @@ class PyTorchLabelGensDataset(Dataset):
                 labels_out = self.LabelGenOut.trim_end_sample(labels_out, trim_end)
                 labels_out = self.LabelGenOut.trim_end_sample(labels_out, trim_front, reverse=True)
 
-            # if len(labels_in) != len(labels_out):
-            #     raise NotImplementedError("Length of input labels (" + str(len(labels_in))
-            #                               + ") does not match length of output labels (" + str(len(labels_out)) + ").")
+            assert(len(labels_in) == len(labels_out))
         return labels_in, labels_out
 
     def getitem_random_select(self, id_name, load_target=True):

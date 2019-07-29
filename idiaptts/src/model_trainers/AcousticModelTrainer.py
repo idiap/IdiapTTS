@@ -31,7 +31,7 @@ from idiaptts.src.data_preparation.world.WorldFeatLabelGen import interpolate_li
 from idiaptts.src.data_preparation.PyTorchLabelGensDataset import PyTorchLabelGensDataset as LabelGensDataset
 
 
-class AcousticDeltasModelTrainer(ModelTrainer):  # TODO: Rename to AcousticModelTrainer
+class AcousticModelTrainer(ModelTrainer):  # TODO: Rename to AcousticModelTrainer
     """
     Implementation of a ModelTrainer for the generation of acoustic data.
 
@@ -64,7 +64,7 @@ class AcousticDeltasModelTrainer(ModelTrainer):  # TODO: Rename to AcousticModel
         if hparams.synth_dir is None:
             hparams.synth_dir = os.path.join(hparams.out_dir, "synth")
 
-        super(AcousticDeltasModelTrainer, self).__init__(id_list, hparams)
+        super(AcousticModelTrainer, self).__init__(id_list, hparams)
 
         self.InputGen = QuestionLabelGen(dir_question_labels, num_questions)
         self.InputGen.get_normalisation_params(dir_question_labels)
@@ -72,8 +72,8 @@ class AcousticDeltasModelTrainer(ModelTrainer):  # TODO: Rename to AcousticModel
         self.OutputGen = WorldFeatLabelGen(dir_world_features, add_deltas=hparams.add_deltas, num_coded_sps=hparams.num_coded_sps)
         self.OutputGen.get_normalisation_params(dir_world_features)
 
-        self.dataset_train = LabelGensDataset(self.id_list_train, self.InputGen, self.OutputGen, hparams)
-        self.dataset_val = LabelGensDataset(self.id_list_val, self.InputGen, self.OutputGen, hparams)
+        self.dataset_train = LabelGensDataset(self.id_list_train, self.InputGen, self.OutputGen, hparams, match_lengths=True)
+        self.dataset_val = LabelGensDataset(self.id_list_val, self.InputGen, self.OutputGen, hparams, match_lengths=True)
 
         if self.loss_function is None:
             self.loss_function = torch.nn.MSELoss(reduction='none')

@@ -18,12 +18,12 @@ import random
 # Third-party imports.
 
 # Local source tree imports.
-from idiaptts.src.model_trainers.AcousticDeltasModelTrainer import AcousticDeltasModelTrainer
+from idiaptts.src.model_trainers.AcousticModelTrainer import AcousticModelTrainer
 
 
-class MyAcousticDeltasModelTrainer(AcousticDeltasModelTrainer):
+class MyAcousticModelTrainer(AcousticModelTrainer):
     """
-    Implementation of an AcousticDeltasModelTrainer with predefined parameters.
+    Implementation of an AcousticModelTrainer with predefined parameters.
 
     Use question labels as input and WORLD features as output. Synthesize audio from model output.
     """
@@ -50,7 +50,7 @@ class MyAcousticDeltasModelTrainer(AcousticDeltasModelTrainer):
 def main():
     logging.basicConfig(level=logging.INFO)
 
-    hparams = MyAcousticDeltasModelTrainer.create_hparams()  # TODO: Parse input for hparams.
+    hparams = MyAcousticModelTrainer.create_hparams()  # TODO: Parse input for hparams.
 
     # General parameters
     hparams.num_questions = 425
@@ -78,7 +78,7 @@ def main():
     hparams.epochs_per_checkpoint = 5
 
     # Training.
-    trainer = MyAcousticDeltasModelTrainer(hparams)
+    trainer = MyAcousticModelTrainer(hparams)
     trainer.init(hparams)
     trainer.train(hparams)
     trainer.benchmark(hparams)
