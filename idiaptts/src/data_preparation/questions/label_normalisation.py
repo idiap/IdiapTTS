@@ -1,4 +1,9 @@
 #!/usr/bin/env python3
+#
+# Copyright (c) 2019 Idiap Research Institute, http://www.idiap.ch/
+# Written by Bastian Schnell <bastian.schnell@idiap.ch>
+#
+
 # Scripts taken from Merlin and adapted.
 # https://github.com/CSTR-Edinburgh/merlin
 # TODO: This file needs cleanup.
