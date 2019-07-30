@@ -29,21 +29,28 @@ from idiaptts.misc.utils import makedirs_safe, file_len
 
 
 class PhonemeLabelGen(LabelGen):
+    """
+    A class to load phonemes from full HTK labels. Durations in the labels are ignored so they do not need to be
+    aligned. The labels have to be generated before. This class does not provide any generation functionality.
+
+    """
 
     ext_phonemes = ".lab"
     logger = logging.getLogger(__name__)
 
-    def __init__(self, dir_labels, file_symbol_dict):
+    def __init__(self, dir_labels, file_symbol_dict, label_type="HTK full", add_EOF=False):
 
         # Attributes.
         self.dir_labels = dir_labels
         self.symbol_dict = self._get_symbol_dict(file_path_full=file_symbol_dict)
         self.num_symbols = len(self.symbol_dict)
+        self.label_type = label_type
+        self.add_EOF = add_EOF
         self.norm_params = None
 
     def __getitem__(self, id_name):
         """Return the preprocessed sample with the given id_name."""
-        sample = self.load_sample(id_name, self.dir_labels, self.symbol_dict)
+        sample = self.load_sample(id_name, self.dir_labels, self.symbol_dict, self.label_type)
         sample = self.preprocess_sample(sample)
 
         return sample
@@ -78,28 +85,47 @@ class PhonemeLabelGen(LabelGen):
             return sample[:-length, ...]
 
     def preprocess_sample(self, sample, norm_params=None):
+
+        if self.add_EOF:
+            extended_sample = np.empty((sample.shape[0] + 1, *sample.shape[1:]), dtype=sample.dtype)  # Create one more for EOF symbol.
+            extended_sample[:len(sample)] = sample
+            extended_sample[-1] = self.symbol_dict['EOF']  # Add EOF symbol.
         return sample
 
     def postprocess_sample(self, sample, norm_params=None):
+        if self.add_EOF:
+            sample = sample[:-1]  # Remove EOF symbol.
         return sample
 
     @staticmethod
-    def load_sample(id_name, dir_out, symbol_dict):
+    def load_sample(id_name, dir_out, symbol_dict, label_type="HTK full"):
         label_file = os.path.join(dir_out, id_name + PhonemeLabelGen.ext_phonemes)
         with open(label_file) as f:
-            symbols = f.read()
-        symbols = symbols.split()
+            if label_type == "HTK full":  # Input are HTK full labels.
+                symbols = list()
+                for line in f.read().split('\n')[::5]:  # Read only one line per state.
+                    if len(line) > 0:  # Skip empty lines.
+                        line_split = line.split()
+                        full_label = line_split[2]
+                        symbol = full_label.split('-')[1].split('+')[0]
+                        symbols.append(symbol)
+            elif label_type == "mono_no_align":  # Input are files with one phoneme per line (mono_no_align).
+                symbols = f.read()
+                symbols = symbols.split()
+            else:
+                raise NotImplementedError("Unknown label type {} while loading {}.".format(label_type, label_file))
 
-        ids = np.zeros((len(symbols) + 1, 1), dtype=np.float32)
+        ids = np.zeros((len(symbols), 1), dtype=np.float32)
+        # Convert symbols to ids.
         for index, symbol in enumerate(symbols):
             ids[index] = symbol_dict[symbol]
-        ids[-1] = symbol_dict['EOF']  # Add EOF symbol.
 
         return ids
 
-    @staticmethod
-    def gen_data(dir_in, file_questions, dir_out=None, file_id_list=None, id_list=None, return_dict=False):
-        raise NotImplementedError("The generation of monophones is not implemented. Please use festival to create Monophones. OR be the first to implement it!")
+    def gen_data(self, dir_in, dir_out=None, file_id_list=None, id_list=None, return_dict=False):
+        raise NotImplementedError("The generation of monophones is not implemented."
+                                  "Please use festival to create Monophones, or be the first to implement it!")
+
 
 def main():
     logging.basicConfig(level=logging.DEBUG)
@@ -117,6 +143,10 @@ def main():
                         type=str, dest="file_id_list_path", default=None)
     parser.add_argument("-o", "--dir_out", help="Output directory to store the labels.",
                         type=str, dest="dir_out", required=True)
+    parser.add_argument("-t", "--label_type",
+                        help="Type of the labels saved in the dir_labels directory.",
+                        choices=("HTK full", "mono_no_align"),
+                        type=str, dest="label_type", default="HTK full", required=False)
 
     # Parse arguments
     args = parser.parse_args()
@@ -139,8 +169,8 @@ def main():
     # PhonemeLabelGen.gen_data(dir_labels, file_phonemes, dir_out=dir_out, file_id_list=args.file_id_list_path, id_list=id_list, return_dict=False)
 
     # DEBUG
-    phoneme_gen = PhonemeLabelGen(dir_labels, file_phonemes)
-    test_label = phoneme_gen["roger_5535"]
+    phoneme_gen = PhonemeLabelGen(dir_labels, file_phonemes, args.label_type)
+    test_label = phoneme_gen["LJ001-0007"]
     print(test_label)
 
     sys.exit(0)

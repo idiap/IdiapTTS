@@ -61,7 +61,7 @@ class TTSModel(object):
                     text_file.write("synth{}\t{}\n".format(idx, text))  # TODO: Remove parenthesis etc.
 
             # Call the front end on the synth.txt file.
-            front_end_arguments = [hparams.front_end_dir, hparams.festival_dir, utts_file]
+            front_end_arguments = [hparams.front_end, hparams.festival_dir, utts_file]
             if hasattr(hparams, "front_end_accent") and hparams.front_end_accent is not None:
                 front_end_arguments.append(hparams.front_end_accent)
             front_end_arguments.append(tmp_dir_name)
@@ -125,31 +125,31 @@ class TTSModel(object):
         return 0
 
 
-def main():
-    hparams = AcousticModelTrainer.create_hparams()
-
-    hparams.voice = "demo"
-    hparams.work_dir = os.path.realpath(os.path.join("experiments", hparams.voice))
-    hparams.synth_dir = os.path.join(hparams.work_dir, "TTSModel")
-    hparams.use_gpu = True
-
-    hparams.front_end_dir = "../../../tools/tts_frontend/English/makeLabels.sh"
-    hparams.front_end_accent = "AM"
-    hparams.festival_dir = "../../../tools/festival/"
-    hparams.duration_labels_dir = os.path.join(hparams.work_dir, "dur")
-    hparams.duration_model = os.path.join(hparams.work_dir, "DurationModel", "nn", "DM-1-b64.nn")
-    hparams.file_symbol_dict = os.path.join(hparams.work_dir, "labels", "mono_phone.list")
-    hparams.min_phoneme_length = 50000
-    hparams.num_phoneme_states = 5
-    hparams.file_questions = "../../../tools/tts_frontend/questions/questions-en-radio_dnn_416.hed"
-    hparams.num_questions = 425
-    hparams.question_labels_norm_file = os.path.join(hparams.work_dir, "questions", "min-max.bin")
-    hparams.world_features_dir = os.path.join(hparams.work_dir, "WORLD")
-    hparams.num_coded_sps = 30
-    hparams.acoustic_model = os.path.join(hparams.work_dir, "AcousticDeltasModel", "nn", "Bds.nn")
-
-    TTSModel.run_DM_AM(hparams, ["This is a test.", "Hello World!"])
-
-
-if __name__ == "__main__":
-    main()
+# def main():
+#     hparams = AcousticModelTrainer.create_hparams()
+#
+#     hparams.voice = "demo"
+#     hparams.work_dir = os.path.realpath(os.path.join("experiments", hparams.voice))
+#     hparams.synth_dir = os.path.join(hparams.work_dir, "TTSModel")
+#     hparams.use_gpu = True
+#
+#     hparams.front_end = "../../../tools/tts_frontend/English/makeLabels.sh"
+#     hparams.front_end_accent = "AM"
+#     hparams.festival_dir = "../../../tools/festival/"
+#     hparams.duration_labels_dir = os.path.join(hparams.work_dir, "dur")
+#     hparams.duration_model = os.path.join(hparams.work_dir, "DurationModel", "nn", "DM-1-b64.nn")
+#     hparams.file_symbol_dict = os.path.join(hparams.work_dir, "labels", "mono_phone.list")
+#     hparams.min_phoneme_length = 50000
+#     hparams.num_phoneme_states = 5
+#     hparams.file_questions = "../../../tools/tts_frontend/questions/questions-en-radio_dnn_416.hed"
+#     hparams.num_questions = 425
+#     hparams.question_labels_norm_file = os.path.join(hparams.work_dir, "questions", "min-max.bin")
+#     hparams.world_features_dir = os.path.join(hparams.work_dir, "WORLD")
+#     hparams.num_coded_sps = 30
+#     hparams.acoustic_model = os.path.join(hparams.work_dir, "AcousticDeltasModel", "nn", "Bds.nn")
+#
+#     TTSModel.run_DM_AM(hparams, ["This is a test.", "Hello World."])
+#
+#
+# if __name__ == "__main__":
+#     main()

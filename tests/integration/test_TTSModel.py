@@ -21,31 +21,10 @@ class TestTTSModel(unittest.TestCase):
         # Load test ids.
         cls.id_list = cls._get_id_list()
 
-    # @classmethod
-    # def tearDownClass(cls):
-    #     hparams = cls._get_hparams(cls())
-    #     os.rmdir(hparams.out_dir)  # Remove class name directory, should be empty.
-
-    # def _get_hparams(self):
-    #     hparams = DurationModelTrainer.create_hparams()
-    #     # General parameters
-    #     # hparams.voice = "full"
-    #     hparams.data_dir = os.path.realpath(os.path.join("integration", "fixtures", "database"))
-    #     hparams.out_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), type(self).__name__)
-    #
-    #     hparams.seed = 1
-    #
-    #     # Training parameters.
-    #     hparams.epochs = 3
-    #     hparams.use_gpu = False
-    #     hparams.model_type = "RNNDYN-1_RELU_32-1_FC_5"
-    #     hparams.batch_size_train = 64
-    #     hparams.batch_size_val = 64
-    #     hparams.learning_rate = 0.001
-    #     hparams.model_name = "test_model.nn"
-    #     hparams.epochs_per_checkpoint = 2
-    #
-    #     return hparams
+    @classmethod
+    def tearDownClass(cls):
+        hparams = cls._get_hparams(cls())
+        os.rmdir(hparams.out_dir)  # Remove class name directory, should be empty.
 
     @staticmethod
     def _get_id_list():
@@ -124,7 +103,7 @@ class TestTTSModel(unittest.TestCase):
         hparams.synth_dir = hparams_duration.out_dir
         hparams.use_gpu = False
         tools_dir = os.path.join(os.path.dirname(os.path.realpath(".")), "tools")
-        hparams.front_end_dir = os.path.join(tools_dir, "tts_frontend", "English", "makeLabels.sh")
+        hparams.front_end = os.path.join(tools_dir, "tts_frontend", "English", "makeLabels.sh")
         hparams.front_end_accent = "AM"
         hparams.festival_dir = os.path.join(tools_dir, "festival")
         hparams.duration_labels_dir = os.path.join(hparams.work_dir, "dur")
