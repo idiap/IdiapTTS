@@ -60,7 +60,7 @@ def main():
     hparams.voice = "full"
     hparams.work_dir = os.path.realpath(os.path.join("experiments", hparams.voice))
     hparams.data_dir = os.path.realpath("database")
-    hparams.out_dir = os.path.join(hparams.work_dir, "AcousticDeltasModel")
+    hparams.out_dir = os.path.join(hparams.work_dir, "AcousticModel")
 
     hparams.num_coded_sps = 30
     hparams.sampling_frequency = 16000

@@ -8,7 +8,7 @@ set -o noclobber # Prevents the bash shell from overwriting files, but you can f
 export SHELLOPTS # Used to pass above shell options to any called subscripts.
 
 # echo "$@"
-# Run example: ./run-train_duration_model $queue_gpu "experiments/demo/" "DurationModel.nn"
+# Run example: ./train_duration_model $queue_gpu "experiments/demo/" "DurationModel"
 tmp_dir=/idiap/temp/$(whoami)/tmp/
 mkdir -p "${tmp_dir}"
 export TMP="${tmp_dir}"
