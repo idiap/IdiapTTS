@@ -206,11 +206,10 @@ class TestModelTrainer(unittest.TestCase):
 
         shutil.rmtree(hparams.out_dir)
 
-    def test_init_e3_create(self):
+    def test_init_create(self):
         # Try epochs=3, creating a new model.
         hparams = self._get_hparams()
-        # hparams.epochs = 3
-        hparams.out_dir = os.path.join(hparams.out_dir, "test_init_e3_create")  # Add function name to path.
+        hparams.out_dir = os.path.join(hparams.out_dir, "test_init_create")  # Add function name to path.
         hparams.model_type = "RNNDYN-1_RELU_32-1_FC_97"
         trainer = self._get_trainer(hparams)
         with unittest.mock.patch.object(trainer.logger, "warning") as mock_logger:
@@ -221,11 +220,10 @@ class TestModelTrainer(unittest.TestCase):
 
         shutil.rmtree(hparams.out_dir)
 
-    def test_init_e3_load(self):
+    def test_init_load(self):
         # Try epochs=3, loading existing model.
         hparams = self._get_hparams()
-        # hparams.epochs = 3
-        hparams.out_dir = os.path.join(hparams.out_dir, "test_init_e3_load")  # Add function name to path.
+        hparams.out_dir = os.path.join(hparams.out_dir, "test_init_load")  # Add function name to path.
         hparams.model_type = None
         target_dir = os.path.join(hparams.out_dir, hparams.networks_dir)
         makedirs_safe(target_dir)
@@ -253,10 +251,10 @@ class TestModelTrainer(unittest.TestCase):
 
         shutil.rmtree(hparams.out_dir)
 
-    def test_train_e3(self):
+    def test_train_e4(self):
         for seed in [13]:  # itertools.count(0):
             hparams = self._get_hparams()
-            hparams.out_dir = os.path.join(hparams.out_dir, "test_train_e3")  # Add function name to path.
+            hparams.out_dir = os.path.join(hparams.out_dir, "test_train_e4")  # Add function name to path.
             hparams.seed = seed
             trainer = self._get_trainer(hparams)
 
@@ -300,10 +298,10 @@ class TestModelTrainer(unittest.TestCase):
 
         shutil.rmtree(hparams.out_dir)
 
-    def test_train_e3_save_best(self):
+    def test_train_e4_save_best(self):
         # logging.basicConfig(level=logging.INFO)
         hparams = self._get_hparams()
-        hparams.out_dir = os.path.join(hparams.out_dir, "test_train_e3_save_best")  # Add function name to path.
+        hparams.out_dir = os.path.join(hparams.out_dir, "test_train_e4_save_best")  # Add function name to path.
         hparams.seed = 0
 
         # for seed in itertools.count():

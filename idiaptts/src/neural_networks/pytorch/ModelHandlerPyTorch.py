@@ -44,7 +44,6 @@ class ModelHandlerPyTorch(ModelHandler):
     # Default constructor
     #
     def __init__(self, hparams):
-        """Default constructor. Checks CUDA support if use_gpu is True."""
 
         if not hasattr(hparams, "batch_size_train") or not hparams.batch_size_train > 1:
             hparams.variable_sequence_length_train = False
@@ -211,23 +210,22 @@ class ModelHandlerPyTorch(ModelHandler):
 
     def set_dataset(self, hparams, dataset_train, dataset_val, collate_fn=None):
         common_divisor = hparams.num_gpus  # Will be 1 if used on CPU.
-        dataloader_train = DataLoader(dataset=dataset_train,
-                                      batch_size=hparams.batch_size_train,
-                                      shuffle=hparams.shuffle_train_set,
-                                      num_workers=hparams.dataset_num_workers_gpu if hparams.use_gpu else hparams.dataset_num_workers_cpu,
-                                      collate_fn=partial(self.prepare_batch if collate_fn is None else collate_fn,
-                                                         common_divisor=common_divisor,
-                                                         batch_first=hparams.batch_first),
-                                      pin_memory=hparams.dataset_pin_memory)
-        dataloader_val = DataLoader(dataset_val,
-                                     batch_size=hparams.batch_size_val,  # Used to be batch_size_test, please change it in your My* class.
-                                     shuffle=hparams.shuffle_val_set,
-                                     num_workers=hparams.dataset_num_workers_gpu if hparams.use_gpu else hparams.dataset_num_workers_cpu,
-                                     collate_fn=partial(self.prepare_batch if collate_fn is None else collate_fn,
-                                                        common_divisor=common_divisor,
-                                                        batch_first=hparams.batch_first),
-                                     pin_memory=hparams.dataset_pin_memory)
-        self.set_dataloaders(dataloader_train, dataloader_val)
+        self.dataloader_train = DataLoader(dataset=dataset_train,
+                                           batch_size=hparams.batch_size_train,
+                                           shuffle=hparams.shuffle_train_set,
+                                           num_workers=hparams.dataset_num_workers_gpu if hparams.use_gpu else hparams.dataset_num_workers_cpu,
+                                           collate_fn=partial(self.prepare_batch if collate_fn is None else collate_fn,
+                                                              common_divisor=common_divisor,
+                                                              batch_first=hparams.batch_first),
+                                           pin_memory=hparams.dataset_pin_memory)
+        self.dataloader_val = DataLoader(dataset_val,
+                                         batch_size=hparams.batch_size_val,  # Used to be batch_size_test, please change it in your My* class.
+                                         shuffle=hparams.shuffle_val_set,
+                                         num_workers=hparams.dataset_num_workers_gpu if hparams.use_gpu else hparams.dataset_num_workers_cpu,
+                                         collate_fn=partial(self.prepare_batch if collate_fn is None else collate_fn,
+                                                            common_divisor=common_divisor,
+                                                            batch_first=hparams.batch_first),
+                                         pin_memory=hparams.dataset_pin_memory)
 
     def set_optimiser(self, hparams):
         """Initialise a PyTorch optimiser here."""
@@ -704,15 +702,16 @@ class ModelHandlerPyTorch(ModelHandler):
         if hparams.use_gpu:
             assert(hparams.num_gpus <= torch.cuda.device_count())  # Specified number of GPUs is incorrect.
 
-        # Only override loss function if not loaded from checkpoint.
-        if self.loss_function is None:
-            assert(loss_function is not None)  # Please set self.loss_function in the trainer construction.
-            self.loss_function = loss_function
-        if hparams.use_gpu:
-            self.loss_function = loss_function.cuda()
+        assert(loss_function is not None)  # Please set self.loss_function in the trainer construction.
+        self.loss_function = loss_function.cuda() if hparams.use_gpu else loss_function
 
         self.set_optimiser(hparams)
         self.set_scheduler(hparams, self.current_epoch)
+
+        if hparams.ema_decay and not self.ema:
+            average_model = self.model_factory.create(self.model_type, self.dim_in, self.dim_out, hparams)
+            average_model.set_state_dict(self.model.get_state_dict())
+            self.ema = ExponentialMovingAverage(average_model, hparams.ema_decay)
 
         all_loss = list()  # List which is returned, containing all loss so that progress is visible.
         all_loss_train = list()
@@ -743,6 +742,17 @@ class ModelHandlerPyTorch(ModelHandler):
             all_loss_train.append(train_loss)
             if np.isnan(train_loss):
                 return
+
+            if hparams.epochs_per_scheduler_step:
+                if hparams.epochs_per_test > hparams.epochs_per_scheduler_step:
+                    self.logger.warning("Model is validated only every {} epochs, ".format(hparams.epochs_per_test) +
+                                        "but scheduler is supposed to run every {} epochs.".format(hparams.epochs_per_scheduler_step))
+                if hparams.epochs_per_test % hparams.epochs_per_scheduler_step != 0:
+                    self.logger.warning("hparams.epochs_per_test ({}) % hparams.epochs_per_scheduler_step ({}) != 0. "
+                                        .format(hparams.epochs_per_test, hparams.epochs_per_scheduler_step) +
+                                        "Note that the scheduler is only run when current_epoch % " +
+                                        "hparams.epochs_per_scheduler_step == 0. Therefore hparams.epochs_per_scheduler_step " +
+                                        "should be a factor of hparams.epochs_per_test.")
 
             if self.current_epoch % hparams.epochs_per_test == 0:
                 # Compute error on validation set.

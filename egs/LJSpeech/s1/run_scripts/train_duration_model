@@ -39,5 +39,5 @@ grid_args="-l ${queue} -l hostname=vgne*|jurasix* -S $(which python3) -v PYTHONP
 if [ "${queue}" == "cpu" ]; then  # [ == ] literal matching
     $(which python3) MyDurationModelTrainer.py
 else
-    qsub ${grid_args} -e ${log_file} -o ${log_file} -N ${name}$ MyDurationModelTrainer.py
+    qsub ${grid_args} -e ${log_file} -o ${log_file} -N ${name} MyDurationModelTrainer.py
 fi

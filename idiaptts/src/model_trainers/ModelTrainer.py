@@ -314,9 +314,10 @@ class ModelTrainer(object):
 
         # Create the necessary directories.
         makedirs_safe(os.path.join(hparams.out_dir, hparams.networks_dir, hparams.checkpoints_dir))
+
         # Create the default model path if not set or retrieve the name from the given path.
         if hparams.model_path is None:
-            assert(hparams.model_name is not None)  # A model_path or model_name has to be given. No default name is used.
+            assert(hparams.model_name is not None)  # A model_path or model_name has to be given. No default exists.
             hparams.model_path = os.path.join(hparams.out_dir, hparams.networks_dir, hparams.model_name)
         elif hparams.model_name is None:
             hparams.model_name = os.path.basename(hparams.model_path)
@@ -625,7 +626,7 @@ class ModelTrainer(object):
         :param synth:                 Use the self.synthesize method to generate audio.
         :param benchmark:             Benchmark the given ids with the self.compute_score function.
         :param gen_figure:            Generate figures with the self.gen_figure_from_output function.
-        :return:                      (Dictionary of network outputs, dictionary of post-processed (by self.OutputGen) network outputs)
+        :return:                      (Dictionary of outputs, dictionary of post-processed (by self.OutputGen) outputs)
         """
 
         self.logger.info("Get model outputs as batches of size {}.".format(min(batch_size, len(id_list))))
@@ -681,7 +682,7 @@ class ModelTrainer(object):
         return dict_outputs, dict_outputs_post
 
     def gen_figure_from_output(self, id_name, output, hidden, hparams):
-        raise NotImplementedError("Class %s doesn't implement gen_figure(id_name, output, hparams)" % self.__class__.__name__)
+        raise NotImplementedError("Class %s doesn't implement gen_figure_from_output(id_name, output, hidden, hparams)" % self.__class__.__name__)
 
     def synth_ref(self, hparams, file_id_list):
         # Create reference audio files containing only the vocoder degradation.

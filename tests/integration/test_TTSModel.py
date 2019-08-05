@@ -23,7 +23,7 @@ class TestTTSModel(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        hparams = cls._get_hparams(cls())
+        hparams = cls._get_duration_hparams(cls())
         os.rmdir(hparams.out_dir)  # Remove class name directory, should be empty.
 
     @staticmethod
