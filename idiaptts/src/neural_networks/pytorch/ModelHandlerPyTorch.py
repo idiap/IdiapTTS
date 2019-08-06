@@ -17,6 +17,7 @@ import importlib
 from datetime import datetime
 from operator import itemgetter
 import logging
+import copy
 
 # Third-party imports.
 from torch.optim.lr_scheduler import *
@@ -28,7 +29,8 @@ from idiaptts.misc.utils import get_gpu_memory_map
 from idiaptts.src.neural_networks.ModelHandler import ModelHandler
 from idiaptts.src.neural_networks.pytorch.models.RNNDyn import *
 from idiaptts.misc.utils import makedirs_safe
-# from idiaptts.src.neural_networks.pytorch.ExponentialMovingAverage import ExponentialMovingAverage
+from idiaptts.src.neural_networks.pytorch.ExponentialMovingAverage import ExponentialMovingAverage
+from idiaptts.src.neural_networks.pytorch.ModelFactory import ModelFactory
 
 
 class ModelHandlerPyTorch(ModelHandler):
@@ -52,42 +54,17 @@ class ModelHandlerPyTorch(ModelHandler):
 
         super().__init__()
 
-        self.model_name = hparams.model_name if hasattr(hparams, "model_name") else None
+        self.model = None
+        self.model_type = None
+        self.dim_in = None
+        self.dim_out = None
+        self.model_name = hparams.model_name if hasattr(hparams, "model_name") else None  # TODO: Remove?
         self.current_epoch = None
         self.start_epoch = None
 
         self._scheduler_step_fn = None
         self.ema = None  # Exponential moving average object.
-
-        # Register different architectures.
-        self.register_architecture(RNNDyn)
-        self.register_architecture(MerlinAcoustic)
-        self.register_architecture(Interspeech18baseline)
-        self.register_architecture(BaselineRNN_Yamagishi)
-        self.register_architecture(Icassp19baseline)
-
-        # Register optional architectures.
-        requirement_warping_layer = importlib.util.find_spec("WarpingLayer")
-        if requirement_warping_layer:
-            from idiaptts.src.neural_networks.pytorch.models.WarpingLayer import WarpingLayer
-            self.register_architecture(WarpingLayer)
-
-        requirement_neuralfilters = importlib.util.find_spec("neural_filters")
-        if requirement_neuralfilters:
-            from idiaptts.src.neural_networks.pytorch.models.NeuralFilters import NeuralFilters
-            from idiaptts.src.neural_networks.pytorch.models.PhraseNeuralFilters import PhraseNeuralFilters
-            self.register_architecture(PhraseNeuralFilters)
-            self.register_architecture(NeuralFilters)
-
-        # requirement_wavenet_vocoder = importlib.util.find_spec("wavenet_vocoder")
-        # if requirement_wavenet_vocoder:
-        #     from idiaptts.src.neural_networks.pytorch.models.WaveNetWrapper import WaveNetWrapper
-        #     self.register_architecture(WaveNetWrapper)
-
-        requirement_nvtacotron2 = importlib.util.find_spec("tools.tacotron2")
-        if requirement_nvtacotron2:
-            from idiaptts.src.neural_networks.pytorch.models.NVTacotron2Wrapper import NVTacotron2Wrapper
-            self.register_architecture(NVTacotron2Wrapper)
+        self.model_factory = ModelFactory()  # Factory object to create different kind of architectures.
 
     @staticmethod
     def cuda_is_available():
@@ -294,55 +271,101 @@ class ModelHandlerPyTorch(ModelHandler):
 
     def create_model(self, hparams, dim_in, dim_out):
 
+        # Use model factory to create the model.
+        self.logger.info("Create network of type: " + hparams.model_type)
+        self.model = self.model_factory.create(hparams.model_type, dim_in, dim_out, hparams)
+        self.model_type = hparams.model_type
+        self.dim_in = dim_in
+        self.dim_out = dim_out
+
+        if hparams.model_name is not None:
+            self.logger.info("Selected network name: " + hparams.model_name)
+
+        # Reset epochs.
         self.current_epoch = 0
         self.start_epoch = 0
 
-        architecture_found = False
-        for architecture in self.registered_architectures:
-            if re.match(architecture.IDENTIFIER, hparams.model_type) is not None:
-                self.model = architecture(dim_in, dim_out, hparams)
-                self.logger.info("Create network of type: " + hparams.model_type)
-                if hparams.model_name is not None:
-                    self.logger.info("Selected network name: " + hparams.model_name)
-                architecture_found = True
-                break
+    @staticmethod
+    def save_model(file_path, model, model_type, dim_in, dim_out, verbose=False):
+        """Saves all information needed to recreate the same model."""
+        torch.save({'model_type': model_type,
+                    'dim_in': dim_in,
+                    'dim_out': dim_out,
+                    'model_state_dict': model.state_dict()},
+                   file_path)
+        if verbose:
+            logging.info("Save model to {}.".format(file_path))
 
-        if not architecture_found:
-            raise TypeError("Unkown network type: " + hparams.model_type + ". No model was created.")
+    @staticmethod
+    def load_model(model_factory, file_path, hparams, verbose=True):
+        dim_in = None
+        dim_out = None
+        model_type = None
 
-        # Send model to gpu, if requested.
+        checkpoint = torch.load(file_path, map_location=lambda storage, loc: storage)
+        try:
+            expected_model_type = hparams.model_type
+            model_type = checkpoint['model_type']
+            if expected_model_type:  # Can be None, when model should loaded by name.
+                assert(expected_model_type == model_type)  # Expected type in hparams and loaded type should match.
+            hparams.model_type = model_type  # Use the loaded model type during creation in factory.
+            dim_in = checkpoint['dim_in']
+            dim_out = checkpoint['dim_out']
+            model = model_factory.create(model_type, dim_in, dim_out, hparams, verbose)
+            hparams.model_type = expected_model_type  # Can still be None.
+            if verbose:
+                logging.info("Load model state dict from " + file_path)
+            model.load_state_dict(checkpoint['model_state_dict'])
+        except KeyError:  # Ensure backwards compatibility.
+            model = checkpoint['model']
+
         if hparams.use_gpu:
-            self.logger.info("Convert network to GPU.")
-            self.model = self.model.cuda()
+            if hasattr(model, "set_gpu_flag") and callable(model.set_gpu_flag):
+                model.set_gpu_flag(hparams.use_gpu)
 
-    def load_model(self, file_path, use_gpu, initial_lr=0.0):
+        return model, model_type, dim_in, dim_out
+
+    def load_checkpoint(self, file_path, hparams, initial_lr=0.0):
         """
-        Load a model by name, also transfers to GPU if requested in constructor.
+        Load a checkpoint, also transfers model and optimiser to GPU if hparams.use_gpu is True.
 
         :param file_path:         Full path to checkpoint.
-        :param use_gpu:           Convert model to GPU if true.
+        :param hparams:           Hyper-parameter container. Has to contain use_gpu key.
         :param initial_lr:        Initial learning rate of the model. Required by some schedulers to compute the
                                   learning rate of the current epoch/iteration.
         :return:                  The loaded model.
         """
+        self.logger.info("Load checkpoint from {}.".format(file_path))
+
+        # Load model from checkpoint (and to GPU).
+        self.model, self.model_type, self.dim_in, self.dim_out = self.load_model(self.model_factory, file_path, hparams, verbose=True)
+
+        if hparams.ema_decay:
+            try:
+                self.ema, *_ = self.load_model(self.model_factory,
+                                               file_path + "_ema",
+                                               hparams,
+                                               verbose=True)
+            except FileNotFoundError:
+                self.logger.warning("EMA is enabled but no EMA model can be found at {}. ".format(file_path + "_ema") +
+                                    "A new one will be created for training.")
+                self.ema = None
 
         # The lambda expression makes it irrelevant if the checkpoint was saved from CPU or GPU.
         checkpoint = torch.load(file_path, map_location=lambda storage, loc: storage)
-        self.logger.info("Load model from " + file_path)
-        self.current_epoch = checkpoint['epoch']
-        self.start_epoch = self.current_epoch
-        self.model = checkpoint['model']
+
+        # Load remaining checkpoint information.
+        self.start_epoch = self.current_epoch = checkpoint['epoch']
         self.model_name = checkpoint['model_name']
-        if hasattr(self.model, "set_gpu_flag") and callable(self.model.set_gpu_flag):
-            self.model.set_gpu_flag(use_gpu)
         self.optimiser = checkpoint['optimiser']
+        # Initial learning rate is required by some optimisers to compute the learning rate of the current epoch.
         if self.optimiser is not None:
             for group in self.optimiser.param_groups:
                 if hasattr(group, 'initial_lr'):
                     group.setdefault('initial_lr', initial_lr)
-        if use_gpu:
-            self.model.cuda()
 
+        # Move optimiser to GPU.
+        if hparams.use_gpu:
             # self.optimiser.cuda()  # Not implemented in master, but here:
             # https://github.com/andreh7/pytorch/blob/235ce5ba688a49f804422226ddc62a721bb811e0/torch/optim/optimizer.py
             # Requires the following function.
@@ -366,21 +389,35 @@ class ModelHandlerPyTorch(ModelHandler):
 
         return self.model
 
-    def save_model(self, file_path):
-        """Save epoch number, the whole model, and whole optimiser."""
-        self.logger.info("Save model to " + file_path)
+    def save_checkpoint(self, file_path):
+        """
+        Save checkpoint which consists of epoch number, model type, in/out dimensions, model state dict, whole
+        optimiser, etc. Also save the EMA seperately when one exists.
+        """
+        self.logger.info("Save checkpoint to " + file_path)
         makedirs_safe(os.path.dirname(file_path))  # Create directory if necessary.
-        torch.save({'epoch': self.current_epoch,
-                    'model': self.model,
-                    'model_name': self.model_name,
-                    'optimiser': self.optimiser
-                    },
-                   file_path)
+        checkpoint_dict = {'epoch': self.current_epoch,
+                           'model_name': self.model_name,
+                           'optimiser': self.optimiser
+                           # 'loss_function': loss_function
+                          }
+        if self.model_type:
+            checkpoint_dict.update({'model_type': self.model_type,
+                                    'dim_in': self.dim_in,
+                                    'dim_out': self.dim_out,
+                                    'model_state_dict': self.model.state_dict()})
+        else:
+            checkpoint_dict.update({'model': self.model})  # Special case where model_type is not given.
+
+        torch.save(checkpoint_dict, file_path)
         # TODO: Also save the random generator states:
         #       torch.random.get_rng_state()
         #       torch.random.set_rng_state()
         #       Same for random package?
         # TODO: Save scheduler_type in checkpoint as well.
+
+        if self.ema:
+            self.save_model(file_path + "_ema", self.ema.model, self.model_type, self.dim_in, self.dim_out, verbose=True)
 
     def forward(self, in_tensor, hparams, batch_seq_lengths=None, target=None):
         """Forward one example through the model.
@@ -710,7 +747,7 @@ class ModelHandlerPyTorch(ModelHandler):
 
         if hparams.ema_decay and not self.ema:
             average_model = self.model_factory.create(self.model_type, self.dim_in, self.dim_out, hparams)
-            average_model.set_state_dict(self.model.get_state_dict())
+            average_model.load_state_dict(self.model.state_dict())
             self.ema = ExponentialMovingAverage(average_model, hparams.ema_decay)
 
         all_loss = list()  # List which is returned, containing all loss so that progress is visible.
@@ -770,15 +807,17 @@ class ModelHandlerPyTorch(ModelHandler):
                     path_checkpoint = os.path.join(hparams.out_dir, hparams.networks_dir, hparams.checkpoints_dir)
                     # Check when to save a checkpoint.
                     if hparams.epochs_per_checkpoint > 0 and self.current_epoch % hparams.epochs_per_checkpoint == 0:
-                        self.save_model(os.path.join(path_checkpoint, hparams.model_name + "-e" + str(self.current_epoch) + '-' + str(self.loss_function)))
+                        model_name = "{}-e{}-{}".format(hparams.model_name, self.current_epoch, self.loss_function)
+                        self.save_checkpoint(os.path.join(path_checkpoint, model_name))
                     # Always save best checkpoint with special name.
                     if loss < best_loss or np.isnan(best_loss):
                         best_loss = loss
-                        self.save_model(os.path.join(path_checkpoint, hparams.model_name + "-best"))
+                        model_name = hparams.model_name + "-best"
+                        self.save_checkpoint(os.path.join(path_checkpoint, model_name))
 
                 # Run the scheduler_type if one exists.
                 if self.scheduler is not None:
-                    if hparams.epochs_per_scheduler_step is not None and self.current_epoch % hparams.epochs_per_scheduler_step == 0:
+                    if hparams.epochs_per_scheduler_step and self.current_epoch % hparams.epochs_per_scheduler_step == 0:
                         # self.logger.info("Call scheduler.")
                         self._scheduler_step_fn(loss, self.current_epoch + 1)
 

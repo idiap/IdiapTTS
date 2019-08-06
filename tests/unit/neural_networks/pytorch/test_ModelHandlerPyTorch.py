@@ -44,14 +44,14 @@ class TestModelHandlerPyTorch(unittest.TestCase):
         dim_in, dim_out = 10, 4
         model_handler = ModelHandlerPyTorch(hparams)
         model_handler.model = torch.nn.Sequential(torch.nn.Linear(dim_in, dim_out))
-        model_handler.save_model(model_path)
+        model_handler.save_checkpoint(model_path)
 
         # Create a new model handler and test load save.
         hparams.model_type = None
         model_handler = ModelHandlerPyTorch(hparams)
-        model_handler.load_model(model_path, False)
+        model_handler.load_checkpoint(model_path, hparams)
         model_copy_path = os.path.join(hparams.out_dir, "test_model_copy.nn")
-        model_handler.save_model(model_copy_path)
+        model_handler.save_checkpoint(model_copy_path)
 
         # self.assertTrue(filecmp.cmp(model_path, model_copy_path, False))  # This does not work.
         self.assertTrue(equal_checkpoint(model_path, model_copy_path), "Loaded and saved models are not the same.")

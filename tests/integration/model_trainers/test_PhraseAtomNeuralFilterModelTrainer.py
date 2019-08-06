@@ -88,6 +88,7 @@ class TestPhraseAtomNeuralFilterModelTrainer(unittest.TestCase):
         hparams_atom.epochs = 0  # If 0, model is loaded by name.
 
         # Register hyper-parameter containers of subtrainers.
+        hparams.hparams_atom = hparams_atom
         hparams.hparams_flat = hparams_flat
         hparams_flat.hparams_atom = hparams_atom
         # Set path to pre-trained models in fixtures directory.

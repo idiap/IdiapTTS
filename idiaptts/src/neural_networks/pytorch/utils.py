@@ -6,6 +6,7 @@
 #
 
 import torch
+import filecmp
 
 
 def equal_iterable(item1, item2):
@@ -58,6 +59,13 @@ def equal_model(model1, model2):
 
 
 def equal_checkpoint(model1_path, model2_path):
+
+    # Try binary test first.
+    if filecmp.cmp(model1_path, model2_path, shallow=False):
+        return True
+
+    # When binary test fails check details manually. This is required for models which are saved in the old way by
+    # saving the whole model and not only the state dictionary.
     checkpoint1 = torch.load(model1_path)
     checkpoint2 = torch.load(model2_path)
 
@@ -67,10 +75,19 @@ def equal_checkpoint(model1_path, model2_path):
     if not checkpoint1["epoch"] == checkpoint2["epoch"]:
         return False
 
-    model1 = checkpoint1["model"]
-    model2 = checkpoint2["model"]
-    if not equal_model(model1, model2):
-        return False
+    try:
+        model1 = checkpoint1["model"]
+        model2 = checkpoint2["model"]
+        if not equal_model(model1, model2):
+            return False
+    except KeyError:
+        state_dict1 = checkpoint1["model_state_dict"]
+        state_dict2 = checkpoint2["model_state_dict"]
+        if not state_dict1.keys() == state_dict2.keys():
+            return False
+        for key, value in state_dict1.items():
+            if not (state_dict2[key] == value).all():
+                return False
 
     optimiser1 = checkpoint1["optimiser"]
     optimiser2 = checkpoint2["optimiser"]

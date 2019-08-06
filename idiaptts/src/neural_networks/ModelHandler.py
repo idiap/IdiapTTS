@@ -43,17 +43,6 @@ class ModelHandler(object):
         self.optimiser = None
         self.scheduler = None
 
-        # List of registered architectures.
-        self.registered_architectures = list()
-
-    def register_architecture(self, class_object):
-        """Adds the class object to the list registered_architectures."""
-        self.registered_architectures.append(class_object)
-
-    def set_dataloaders(self, dataloader_train, dataloader_val):
-        self.dataloader_train = dataloader_train
-        self.dataloader_val = dataloader_val
-
     def create_model(self, hparams, dim_in, dim_out):
         """
         Create a new model.
@@ -61,24 +50,24 @@ class ModelHandler(object):
         :param hparams:           Hyper-parameter container.
         :param dim_in:            Input dimension of data.
         :param dim_out:           Output dimension of data.
-        :return:                  The created model.
+        :return:                  Nothing. The model is created at self.model.
         """
         raise NotImplementedError("Class %s doesn't implement create_model()" % self.__class__.__name__)
 
-    def load_model(self, file_path, use_gpu, initial_lr):
+    def load_checkpoint(self, file_path, hparams, initial_lr):
         """
-        Load a model by name, also transfers to GPU if requested in constructor.
+        Load a checkpoint, also transfers to GPU if hparams.use_gpu is True.
 
         :param file_path:         Full path to checkpoint.
-        :param use_gpu:           Determines if model should be send to GPU memory.
-        :param initial_lr:        Learning rate of first epoch. Necessary when continuing training.
-        :return:                  The loaded model.
+        :param hparams:           Hyper-parameter container. Needs to have use_gpu.
+        :param initial_lr:        Learning rate of first epoch. Necessary when continuing training by some optimisers.
+        :return:                  Nothing. The model is loaded to self.model.
         """
-        raise NotImplementedError("Class %s doesn't implement load_model()" % self.__class__.__name__)
+        raise NotImplementedError("Class %s doesn't implement load_checkpoint()" % self.__class__.__name__)
 
-    def save_model(self, file_path):
-        """Save a CPU version of the model combined with optimiser parameters."""
-        raise NotImplementedError("Class %s doesn't implement save_model()" % self.__class__.__name__)
+    def save_checkpoint(self, file_path):
+        """Save a CPU version of the model combined with optimiser and other parameters."""
+        raise NotImplementedError("Class %s doesn't implement save_checkpoint()" % self.__class__.__name__)
 
     def forward(self, in_tensor, hparams, batch_seq_lengths=None):
         """Forward one example through the model.

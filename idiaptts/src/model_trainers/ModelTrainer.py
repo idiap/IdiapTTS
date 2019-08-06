@@ -327,9 +327,10 @@ class ModelTrainer(object):
             # Try to load the model. If it doesn't exist, create a new one and save it.
             # Return the loaded/created model, because no training was requested.
             try:
-                self.model_handler.load_model(hparams.model_path,
-                                              hparams.use_gpu,
-                                              hparams.optimiser_args["lr"] if hasattr(hparams, "optimiser_args") and "lr" in hparams.optimiser_args
+                self.model_handler.load_checkpoint(hparams.model_path,
+                                                   hparams,
+                                                   hparams.optimiser_args["lr"] if hasattr(hparams, "optimiser_args")
+                                                                           and "lr" in hparams.optimiser_args
                                                                            else 0.0)
             except FileNotFoundError:
                 if hparams.model_type is None:
@@ -339,15 +340,17 @@ class ModelTrainer(object):
                     self.logger.warning('Model does not exist at {}. Creating a new one instead and saving it.'.format(hparams.model_path))
                     dim_in, dim_out = self.dataset_train.get_dims()
                     self.model_handler.create_model(hparams, dim_in, dim_out)
-                    self.model_handler.save_model(model_path_out)
+                    self.model_handler.save_checkpoint(model_path_out)
 
             self.logger.info("Model ready.")
             return self.model_handler
 
         if hparams.model_type is None:
-            self.model_handler.load_model(hparams.model_path,
-                                          hparams.use_gpu,
-                                          hparams.optimiser_args["lr"] if hasattr(hparams, "optimiser_args") and "lr" in hparams.optimiser_args else 0.0)
+            self.model_handler.load_checkpoint(hparams.model_path,
+                                               hparams,
+                                               hparams.optimiser_args["lr"] if hasattr(hparams, "optimiser_args")
+                                                                               and "lr" in hparams.optimiser_args
+                                                                            else 0.0)
         else:
             dim_in, dim_out = self.dataset_train.get_dims()
             self.model_handler.create_model(hparams, dim_in, dim_out)
@@ -415,17 +418,22 @@ class ModelTrainer(object):
             if hparams.use_best_as_final_model:
                 best_model_path = os.path.join(hparams.out_dir, hparams.networks_dir, hparams.checkpoints_dir, hparams.model_name + "-best")
                 try:
-                    self.model_handler.load_model(best_model_path,
-                                                  hparams.use_gpu,
-                                                  hparams.optimiser_args["lr"] if hparams.optimiser_args["lr"] is not None
-                                                                               else hparams.learning_rate)
-                    self.logger.info("Using best (epoch {}) as final model.".format(self.model_handler.current_epoch))
+                    self.model_handler.load_checkpoint(best_model_path,
+                                                       hparams,
+                                                       hparams.optimiser_args["lr"] if hparams.optimiser_args["lr"]
+                                                                                    else hparams.learning_rate)
+                    if self.model_handler.ema:  # EMA model should be used as best model.
+                        self.model_handler.model = self.model_handler.ema
+                        self.model_handler.ema = None  # Reset this one so that a new one is created for further training.
+                        self.logger.info("Using best EMA model (epoch {}) as final model.".format(self.model_handler.current_epoch))
+                    else:
+                        self.logger.info("Using best (epoch {}) as final model.".format(self.model_handler.current_epoch))
                 except FileNotFoundError:
                     self.logger.warning("No best model exists yet. Continue with the current one.")
 
             # Save the model if requested.
             if hparams.save_final_model:
-                self.model_handler.save_model(os.path.join(hparams.out_dir, hparams.networks_dir, hparams.model_name))
+                self.model_handler.save_checkpoint(os.path.join(hparams.out_dir, hparams.networks_dir, hparams.model_name))
 
         return all_loss, all_loss_train, self.model_handler
 
@@ -762,7 +770,7 @@ class ModelTrainer(object):
     #     synth_output = copy.copy(synth_output)
     #
     #     wavenet_model_handler = ModelHandlerPyTorch(hparams)
-    #     wavenet_model_handler.load_model(hparams.synth_vocoder_path, hparams.use_gpu)
+    #     wavenet_model_handler.load_checkpoint(hparams.synth_vocoder_path, hparams.use_gpu)
     #
     #     input_fs_Hz = 1000.0 / hparams.frame_size_ms
     #     in_to_out_multiplier = hparams.frame_rate_output_Hz / input_fs_Hz

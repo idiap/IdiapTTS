@@ -119,6 +119,7 @@ def main():
     hparams_atom.epochs = 50  # If 0, model is loaded by hparams.model_name + "_atoms"
     hparams_atom.train_hidden_init = False
 
+    hparams_phrase.hparams_atom = hparams_atom
     hparams_flat.hparams_atom = hparams_atom
     hparams_phrase.hparams_flat = hparams_flat
 
