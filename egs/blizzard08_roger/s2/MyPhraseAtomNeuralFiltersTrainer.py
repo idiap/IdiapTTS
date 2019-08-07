@@ -119,19 +119,20 @@ def main():
     hparams_atom.epochs = 50  # If 0, model is loaded by hparams.model_name + "_atoms"
     hparams_atom.train_hidden_init = False
 
-    hparams_phrase.hparams_atom = hparams_atom
     hparams_flat.hparams_atom = hparams_atom
+    hparams_phrase.hparams_atom = hparams_atom
     hparams_phrase.hparams_flat = hparams_flat
 
-    hparams_phrase.flat_model_path = os.path.join(hparams_phrase.out_dir, hparams_phrase.networks_dir,
-                                                  hparams_flat.model_name)
     hparams_flat.atom_model_path = os.path.join(hparams_flat.out_dir, hparams_flat.networks_dir,
                                                 hparams_atom.model_name)
+    hparams_phrase.atom_model_path = hparams_flat.atom_model_path
+    hparams_phrase.flat_model_path = os.path.join(hparams_phrase.out_dir, hparams_phrase.networks_dir,
+                                                  hparams_flat.model_name)
 
     # Training
     trainer = MyPhraseAtomNeuralFiltersTrainer(hparams_phrase)
-    trainer.init_atom(hparams_flat)
-    trainer.train_atom(hparams_flat)
+    trainer.init_atom(hparams_phrase)
+    trainer.train_atom(hparams_phrase)
     trainer.init_flat(hparams_phrase)
     trainer.train_flat(hparams_phrase)
     trainer.init(hparams_phrase)

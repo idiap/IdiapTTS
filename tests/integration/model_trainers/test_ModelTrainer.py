@@ -16,6 +16,7 @@ import pydub
 import array
 import logging
 import itertools
+import copy
 
 from idiaptts.src.model_trainers.ModelTrainer import ModelTrainer
 from idiaptts.src.data_preparation.questions.QuestionLabelGen import QuestionLabelGen
@@ -355,6 +356,69 @@ class TestModelTrainer(unittest.TestCase):
         hparams.optimiser_args["lr"] = 0.001
         hparams.scheduler_type = "Plateau"
 
+        trainer = self._get_trainer(hparams)
+        trainer.init(hparams)
+        trainer.train(hparams)
+
+        shutil.rmtree(hparams.out_dir)
+
+    def test_train_e3_ema(self):
+        # logging.basicConfig(level=logging.INFO)
+
+        hparams = self._get_hparams()
+        hparams.out_dir = os.path.join(hparams.out_dir, "test_train_e3_ema")  # Add function name to path.
+        hparams.seed = 1234
+        trainer = self._get_trainer(hparams)
+
+        hparams.model_type = "RNNDYN-1_RELU_32-1_FC_67"
+        hparams.epochs = 1
+        hparams.batch_size_train = len(self.id_list)
+        hparams.batch_size_val = hparams.batch_size_train
+        hparams.epochs_per_checkpoint = 2
+        trainer.init(hparams)
+        hparams.optimiser_args["lr"] = 0.01
+        hparams.scheduler_type = "None"
+        hparams.use_best_as_final_model = False
+        hparams.start_with_test = True
+        hparams.ema_decay = 0.9
+
+        models = [copy.deepcopy(trainer.model_handler.model)]
+        # print("Test model {}: {}".format(0, list(models[-1].parameters())[0]))
+        all_loss_train = list()
+        iterations = 4
+        for epoch in range(iterations):
+            tmp_all_loss, tmp_all_loss_train, _ = trainer.train(hparams)
+            all_loss_train.append(tmp_all_loss_train[-1])
+            models.append(copy.deepcopy(trainer.model_handler.model))
+            # print("Test model {}: {}".format(epoch + 1, list(models[-1].parameters())[0]))
+
+        # Expected number of checkpoints saved?
+        checkpoint_dir = os.path.join(hparams.out_dir, hparams.networks_dir, hparams.checkpoints_dir)
+        self.assertEqual((int(hparams.epochs * iterations / hparams.epochs_per_checkpoint) + 1) * 2,  #*2 for ema model.
+                         len([name for name in os.listdir(checkpoint_dir) if
+                              os.path.isfile(os.path.join(checkpoint_dir, name))]))
+
+        # EMA model is average of others.
+        expected_weights = list(models[0].parameters())[0].detach()
+        # print("Exp {}: {}".format(0, expected_weights))
+        for index, model in enumerate(models[1:]):
+            expected_weights = expected_weights * hparams.ema_decay + (1 - hparams.ema_decay) * list(model.parameters())[0].detach()
+            # print("Exp {}: {}".format(index, expected_weights))
+        self.assertTrue((list(trainer.model_handler.ema.model.parameters())[0] - expected_weights).abs().max() < 1E-5)
+
+        # Final model saved?
+        saved_model_path = os.path.join(hparams.out_dir, hparams.networks_dir, hparams.model_name + "_ema")
+        self.assertTrue(os.path.isfile(saved_model_path))
+
+        # Final ema model is last ema model?
+        self.assertTrue(filecmp.cmp(saved_model_path, os.path.join(checkpoint_dir,
+                                                                   "{}-e{}-{}_ema".format(hparams.model_name,
+                                                                                        hparams.epochs * iterations,
+                                                                                        trainer.loss_function)),
+                                    False), msg="Saved EAM model is not the same as final checkpoint.")
+
+        # Try continue training.
+        hparams.model_type = None
         trainer = self._get_trainer(hparams)
         trainer.init(hparams)
         trainer.train(hparams)

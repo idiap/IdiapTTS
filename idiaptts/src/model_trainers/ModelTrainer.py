@@ -221,8 +221,7 @@ class ModelTrainer(object):
             use_saved_learning_rate=True,  # Use the learning rate saved with a model after loading it.
             replace_inf_grads_by_zero=False,  # Automatically substitute +/- inf gradients with zero during training.
             # dynamic_loss_scaling=True,
-            exponential_moving_average=False,  # TODO: Not implemented properly.
-            exponential_moving_average_decay=0.9999,  # Ignored when exponential_moving_average is False.
+            ema_decay=None,  # Any value enables EMA. EMA models are saved with a _ema in the end.
 
             scheduler_type="default",  # "None", "Plateau", "Exponential","Noam",  TODO: "Step", "Cyclic_cosine"
             scheduler_args=dict(),

@@ -495,7 +495,7 @@ class ModelHandlerPyTorch(ModelHandler):
             self.logger.info(str(datetime.now()) + ": Compute loss of validation set.")
             if self.ema is not None:
                 self.logger.info("Using averaged model for validation.")
-                model = self.ema.get_averaged_model(self.model)
+                model = self.ema.model
             model.eval()
 
         if hparams.log_memory_consumption:
@@ -652,10 +652,8 @@ class ModelHandlerPyTorch(ModelHandler):
                 self.optimiser.step()
 
                 # Update moving average.
-                if self.ema is not None:
-                    for name, param in model.named_parameters():
-                        if name in self.ema.shadow:
-                            self.ema.update(name, param.data)
+                if self.ema:
+                    self.ema.update_params(model)
 
                 # Run the scheduler_type if one exists and should be called after some iterations.
                 if self.scheduler is not None:
@@ -760,14 +758,6 @@ class ModelHandlerPyTorch(ModelHandler):
             all_loss_train.append(-1.0)  # Set a placeholder at the train losses.
             all_loss.append(loss)
             best_loss = loss  # Variable to save the current best loss.
-
-        # Add an ExponentialMovingAverage object if requested.
-        if hparams.exponential_moving_average:
-            raise NotImplementedError()
-            # self.ema = ExponentialMovingAverage(hparams.exponential_moving_average_decay)
-            # for name, param in self.model.named_parameters():
-            #     if param.requires_grad:
-            #         self.ema.register(name, param.data)
 
         # For each epoch do...
         for epoch in range(0, hparams.epochs):
