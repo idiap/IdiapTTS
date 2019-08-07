@@ -63,7 +63,7 @@ def main():
     hparams.world_features_dir = os.path.join(hparams.work_dir, "WORLD")
     hparams.num_coded_sps = 30
     hparams.duration_labels_dir = os.path.join(hparams.work_dir, "dur")
-    hparams.duration_model = os.path.join(hparams.work_dir, "DurationModel", "nn", "DM_b64_lr002.nn")
+    hparams.duration_model = os.path.join(hparams.work_dir, "DurationModel", "nn", "DM_b64_lr002_ema99.nn")
     hparams.acoustic_model = os.path.join(hparams.work_dir, "AcousticModel", "nn", "AM_b32_lr002.nn")
     hparams.synth_vocoder_path = os.path.dirname(egs_dir)
     hparams.synth_vocoder = "WORLD"

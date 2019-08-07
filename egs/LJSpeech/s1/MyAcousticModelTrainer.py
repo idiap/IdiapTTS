@@ -78,7 +78,9 @@ def main():
     hparams.optimiser_args["lr"] = 0.002
     hparams.grad_clip_norm_type = 2
     hparams.grad_clip_max_norm = 1.0
-    hparams.model_name = "AM_b{}_lr{}.nn".format(hparams.batch_size_train, str(hparams.optimiser_args["lr"]).split('.')[1])
+    hparams.model_name = "AM_b{}_lr{}.nn".format(hparams.batch_size_train,
+                                                 str(hparams.optimiser_args["lr"]).split('.')[1],
+                                                 ("_ema" + str(hparams.ema_decay).split('.')[1]) if hparams.ema_decay else "")
     hparams.scheduler_args["patience"] = 5
     hparams.use_best_as_final_model = True
 

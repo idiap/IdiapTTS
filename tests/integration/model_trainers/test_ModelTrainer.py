@@ -417,6 +417,12 @@ class TestModelTrainer(unittest.TestCase):
                                                                                         trainer.loss_function)),
                                     False), msg="Saved EAM model is not the same as final checkpoint.")
 
+        # Try continue training.
+        hparams.model_type = None
+        trainer = self._get_trainer(hparams)
+        trainer.init(hparams)
+        trainer.train(hparams)
+
         shutil.rmtree(hparams.out_dir)
 
     def test_synth_wav(self):

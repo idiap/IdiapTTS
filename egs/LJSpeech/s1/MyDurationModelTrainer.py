@@ -71,7 +71,10 @@ def main():
     hparams.epochs_per_checkpoint = 5
     hparams.scheduler_type = "Plateau"
     hparams.scheduler_args["patience"] = 5
-    hparams.model_name = "DM_b{}_lr{}.nn".format(hparams.batch_size_train, str(hparams.optimiser_args["lr"]).split('.')[1])
+    hparams.ema_decay = 0.99
+    hparams.model_name = "DM_b{}_lr{}{}.nn".format(hparams.batch_size_train,
+                                                   str(hparams.optimiser_args["lr"]).split('.')[1],
+                                                   "_ema" + str(hparams.ema_decay).split('.')[1] if hparams.ema_decay else "")
 
     trainer = MyDurationModelTrainer(hparams)
     trainer.init(hparams)
