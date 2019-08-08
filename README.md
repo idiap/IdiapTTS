@@ -16,6 +16,8 @@ Follow the instructions given in *INSTALL.md*.
 ## Experiments  
 Instructions to run specific experiments are in the *README* files of the respective *egs* folders.
 
+* *egs/LJSpeech/s1* contains TTS with a duration and acoustic model.
+
 ## Publications
 #### Interspeech '18: A Neural Model to Predict Parameters for a Generalized Command Response Model of Intonation
 Instructions to produce results similar to those reported in the paper can be found in *egs/blizzard08_roger/s1/*.

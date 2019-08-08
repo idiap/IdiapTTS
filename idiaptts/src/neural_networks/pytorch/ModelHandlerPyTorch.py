@@ -342,10 +342,11 @@ class ModelHandlerPyTorch(ModelHandler):
 
         if hparams.ema_decay:
             try:
-                self.ema, *_ = self.load_model(self.model_factory,
-                                               file_path + "_ema",
-                                               hparams,
-                                               verbose=True)
+                average_model, *_ = self.load_model(self.model_factory,
+                                                    file_path + "_ema",
+                                                    hparams,
+                                                    verbose=True)
+                self.ema = ExponentialMovingAverage(average_model, hparams.ema_decay)
             except FileNotFoundError:
                 self.logger.warning("EMA is enabled but no EMA model can be found at {}. ".format(file_path + "_ema") +
                                     "A new one will be created for training.")
