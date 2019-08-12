@@ -16,6 +16,7 @@ import pydub
 import array
 import logging
 import itertools
+import numpy
 import copy
 
 from idiaptts.src.model_trainers.ModelTrainer import ModelTrainer
@@ -252,14 +253,26 @@ class TestModelTrainer(unittest.TestCase):
 
         shutil.rmtree(hparams.out_dir)
 
-    def test_train_e4(self):
+    # @patch.object(idiaptts.src.neural_networks.pytorch.ModelFactory.ModelFactory, '__init__', side_effect=)
+    def test_train_e4_plus2(self):
+        from idiaptts.src.neural_networks.pytorch.models.RNNDyn import RNNDyn
+
+        class TestArchitecture(RNNDyn):
+            IDENTIFIER = "TestArchitecture"
+
+            def __init__(self, dim_in, dim_out, hparams):
+                hparams.model_type = super().IDENTIFIER + "-1_RELU_32-1_FC_" + str(numpy.prod(dim_out))
+                super().__init__(dim_in, dim_out, hparams)
+                hparams.model_type = self.IDENTIFIER
+
         for seed in [13]:  # itertools.count(0):
             hparams = self._get_hparams()
-            hparams.out_dir = os.path.join(hparams.out_dir, "test_train_e4")  # Add function name to path.
+            hparams.out_dir = os.path.join(hparams.out_dir, "test_train_e4_plus2")  # Add function name to path.
             hparams.seed = seed
             trainer = self._get_trainer(hparams)
+            trainer.model_handler.model_factory.register_architecture(TestArchitecture)
 
-            hparams.model_type = "RNNDYN-1_RELU_32-1_FC_67"
+            hparams.model_type = "TestArchitecture"
             hparams.epochs = 4
             hparams.batch_size_train = 2
             hparams.batch_size_val = hparams.batch_size_train
@@ -296,6 +309,15 @@ class TestModelTrainer(unittest.TestCase):
         # Final model is not best model.
         self.assertFalse(filecmp.cmp(saved_model_path, os.path.join(checkpoint_dir, hparams.model_name + "-best"), False),
                          msg="Saved model is the same as best model which should not be the same as the last epoch.")
+
+        # Try reloading and training.
+        hparams.model_type = "TestArchitecture"
+        hparams.epochs = 0
+        trainer = self._get_trainer(hparams)
+        trainer.model_handler.model_factory.register_architecture(TestArchitecture)
+        trainer.init(hparams)
+        hparams.epochs = 2
+        trainer.train(hparams)
 
         shutil.rmtree(hparams.out_dir)
 

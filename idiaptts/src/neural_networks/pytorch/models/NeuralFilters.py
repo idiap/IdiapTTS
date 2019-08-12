@@ -34,7 +34,7 @@ class NeuralFilters(nn.Module):
 
         assert(not hparams.batch_first)  # This implementation doesn't work with batch_first.
 
-        self.model_handler_atoms = ModelHandlerPyTorch(hparams)
+        self.model_handler_atoms = ModelHandlerPyTorch()
         self.model_handler_atoms.load_checkpoint(hparams.atom_model_path, hparams.hparams_atom, hparams.hparams_atom.learning_rate)
         self.add_module("atom_model", self.model_handler_atoms.model)  # Add atom model as submodule so that parameters are properly registered.
 

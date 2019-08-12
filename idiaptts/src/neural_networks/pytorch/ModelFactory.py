@@ -51,7 +51,7 @@ class ModelFactory(object):
         # if requirement_wavenet_vocoder:
         #     from idiaptts.src.neural_networks.pytorch.models.WaveNetWrapper import WaveNetWrapper
         #     self.register_architecture(WaveNetWrapper)
-        # 
+        #
         # requirement_nvtacotron2 = importlib.util.find_spec("tools.tacotron2")
         # if requirement_nvtacotron2:
         #     from idiaptts.src.neural_networks.pytorch.models.NVTacotron2Wrapper import NVTacotron2Wrapper
@@ -61,9 +61,9 @@ class ModelFactory(object):
         """Adds the class object to the list registered_architectures."""
         self.registered_architectures.append(class_object)
 
-    def _type_to_class(self, model_type, dim_in, dim_out, hparams):
+    def _type_to_class(self, model_type):
         """
-        Search in the registered architectures if their identifier is matched.
+        Search in the registered architectures to fine a matching identifier.
 
         :param model_type:     Type of the model starting with the unique model identifier.
         :return:               A new model with PyTorch parameter initialization.
@@ -73,13 +73,15 @@ class ModelFactory(object):
 
         for architecture in self.registered_architectures:
             if re.match(architecture.IDENTIFIER, model_type) is not None:
-                return architecture(dim_in, dim_out, hparams)
+                return architecture
 
         raise TypeError("Unknown network type: {}. No model was created.".format(model_type))
 
     def create(self, model_type, dim_in, dim_out, hparams, verbose=True):
         """Create a new instance of the class with PyTorch parameter initialization."""
-        model = self._type_to_class(model_type, dim_in, dim_out, hparams)
+        model_class = self._type_to_class(model_type)
+
+        model = model_class(dim_in, dim_out, hparams)
 
         # Send model to gpu, if requested.
         if hparams.use_gpu:
