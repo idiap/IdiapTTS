@@ -26,42 +26,7 @@ class WaveNetWrapper(nn.Module):
     def __init__(self, dim_in, dim_out, hparams):
         super().__init__()
 
-        default_hparams = {
-            "input_type": "mulaw-quantize",  # raw [-1, 1], mulaw [-1, 1], mulaw-quantize [0, mu]
-            "quantize_channels": 256,
-            "out_channels": 256,
-            "layers": 24,  # 20
-            "stacks": 4,  # 2
-            "residual_channels": 512,
-            "gate_channels": 512,
-            "skip_out_channels": 256,
-            "dropout": 0.95,
-            "kernel_size": 3,
-            "weight_normalization": False,
-            "cin_channels": 63,
-            "upsample_conditional_features": False,
-            "upsample_scales": [
-                5,
-                4,
-                2
-            ],
-            "freq_axis_kernel_size": 3,
-            "gin_channels": -1,
-            "n_speakers": 1,
-            "use_speaker_embedding": False,
-        }
-
-        # Fill in missing default parameters.
-        for key, value in default_hparams.items():
-            if not hasattr(hparams, key) or getattr(hparams, key) is None:
-                logging.warning("Hyperparamter {} of hparams is not set, using default value {} instead.".format(key, value))
-                setattr(hparams, key, value)
-
-        # Save the in to out ratio for incremental_forward.
-        if hparams.upsample_conditional_features:
-            self.in_out_multiplier = reduce(mul, hparams.upsample_scales, 1)
-        else:
-            self.in_out_multiplier = 1
+        self.len_in_out_multiplier = hparams.len_in_out_multiplier
 
         # Use the wavenet_vocoder builder to create the model.
         self.model = WaveNet(out_channels=hparams.out_channels,
@@ -92,7 +57,7 @@ class WaveNetWrapper(nn.Module):
         else:  # During inference.
             with torch.no_grad():
                 self.model.make_generation_fast_()
-                num_frames_to_gen = seq_lengths_inputs[0] * self.in_out_multiplier
+                num_frames_to_gen = seq_lengths_inputs[0] * self.len_in_out_multiplier
                 output = self.model.incremental_forward(c=inputs, T=num_frames_to_gen, softmax=True, quantize=True)
                 # Output shape is B x C x T.
 

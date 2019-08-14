@@ -82,36 +82,46 @@ def main():
     hparams.batch_size_synth = 1 * hparams.num_gpus
     hparams.test_set_perc = 0.01
     hparams.val_set_perc = 0.01
-    hparams.max_input_train_sec = 1.5
-    hparams.max_input_test_sec = 2.0
     hparams.use_saved_learning_rate = True  # Don't override learning rate if loaded from checkpoint.
     hparams.learning_rate = 0.001
     hparams.seed = 1234
-    hparams.epochs_per_checkpoint = 1
+    hparams.epochs_per_checkpoint = 4
     hparams.use_cond = True
     hparams.start_with_test = False
     hparams.ema_decay = 0.9999
 
     # Mu-law quantization setup.
-    # hparams.input_type = "mulaw-quantize"
-    # hparams.quantize_channels = 256
-    # hparams.out_channels = 256
-    # hparams.mu = 255
-    # GMM parameter setup.
-    hparams.input_type = "raw"
-    hparams.quantize_channels = 65536
-    num_mixtures = 4
-    hparams.out_channels = num_mixtures * 3  # num_mixtures * 3 (pi, mean, log_scale)
+    hparams.input_type = "mulaw-quantize"
+    hparams.quantize_channels = 256
+    hparams.out_channels = 256
+    hparams.mu = 255
 
     hparams.layers = 12
     hparams.stacks = 2
     hparams.kernel_size = 2
+    hparams.max_input_train_sec = 1.5
+    hparams.max_input_test_sec = 2.0
+
+    # GMM parameter setup.
+    # hparams.input_type = "raw"
+    # hparams.hinge_regularizer = True
+    # hparams.quantize_channels = 65536
+    # num_mixtures = 10
+    # hparams.out_channels = num_mixtures * 3  # num_mixtures * 3 (pi, mean, log_scale)
+
+    # hparams.layers = 30
+    # hparams.stacks = 3
+    # hparams.kernel_size = 3
+    # hparams.max_input_train_sec = 0.6
+    # hparams.max_input_test_sec = 2.0
 
     # Extra layer for conditional features.
     hparams.upsample_conditional_features = True
     hparams.upsample_scales = [
         1
     ]
+    hparams.len_in_out_multiplier = 1  # Has to match the upsampling.
+
     # hparams.layers = 30
     # hparams.stacks = 3
     if hparams.voice == "demo":

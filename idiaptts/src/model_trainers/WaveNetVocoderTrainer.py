@@ -15,7 +15,8 @@ import logging
 import sys
 import numpy as np
 import os
-from functools import partial
+from functools import partial, reduce
+from operator import mul
 
 # Third-party imports.
 
@@ -100,9 +101,13 @@ class WaveNetVocoderTrainer(ModelTrainer):
 
         # Model parameters.
         hparams.input_type = "mulaw-quantize"
+        hparams.hinge_regularizer = True  # Only used in MoL prediction (input_type="raw").
         hparams.log_scale_min = float(np.log(1e-14))  # Only used for mixture of logistic distributions.
         hparams.quantize_channels = 256  # 256 for input type mulaw-quantize, otherwise 65536
-        hparams.out_channels = 256  # Same as quantize_channels for input type mulaw-quantize otherwise num_mixtures * 3 (pi, mean, log_scale)
+        if hparams.input_type == "mulaw-quantize":
+            hparams.out_channels = hparams.quantize_channels
+        else:
+            hparams.out_channels = 10 * 3  # num_mixtures * 3 (pi, mean, log_scale)
         hparams.layers = 24  # 20
         hparams.stacks = 4  # 2
         hparams.residual_channels = 512
@@ -119,6 +124,10 @@ class WaveNetVocoderTrainer(ModelTrainer):
             4,
             2
         ]
+        if hparams.upsample_conditional_features:
+            hparams.len_in_out_multiplier = reduce(mul, hparams.upsample_scales, 1)
+        else:
+            hparams.len_in_out_multiplier = 1
         hparams.freq_axis_kernel_size = 3
         hparams.gin_channels = -1
         hparams.n_speakers = 1
