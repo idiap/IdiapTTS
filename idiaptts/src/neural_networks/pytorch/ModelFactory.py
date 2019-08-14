@@ -47,11 +47,11 @@ class ModelFactory(object):
             self.register_architecture(PhraseNeuralFilters)
             self.register_architecture(NeuralFilters)
 
-        # requirement_wavenet_vocoder = importlib.util.find_spec("wavenet_vocoder")
-        # if requirement_wavenet_vocoder:
-        #     from idiaptts.src.neural_networks.pytorch.models.WaveNetWrapper import WaveNetWrapper
-        #     self.register_architecture(WaveNetWrapper)
-        #
+        requirement_wavenet_vocoder = importlib.util.find_spec("wavenet_vocoder")
+        if requirement_wavenet_vocoder:
+            from idiaptts.src.neural_networks.pytorch.models.WaveNetWrapper import WaveNetWrapper
+            self.register_architecture(WaveNetWrapper)
+
         # requirement_nvtacotron2 = importlib.util.find_spec("tools.tacotron2")
         # if requirement_nvtacotron2:
         #     from idiaptts.src.neural_networks.pytorch.models.NVTacotron2Wrapper import NVTacotron2Wrapper
