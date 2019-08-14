@@ -38,7 +38,7 @@ class PhonemeLabelGen(LabelGen):
     ext_phonemes = ".lab"
     logger = logging.getLogger(__name__)
 
-    def __init__(self, dir_labels, file_symbol_dict, label_type="HTK full", add_EOF=False):
+    def __init__(self, dir_labels, file_symbol_dict, label_type="HTK full", add_EOF=False, one_hot=False):
 
         # Attributes.
         self.dir_labels = dir_labels
@@ -46,6 +46,8 @@ class PhonemeLabelGen(LabelGen):
         self.num_symbols = len(self.symbol_dict)
         self.label_type = label_type
         self.add_EOF = add_EOF
+        self.one_hot = one_hot
+
         self.norm_params = None
 
     def __getitem__(self, id_name):
@@ -90,6 +92,12 @@ class PhonemeLabelGen(LabelGen):
             extended_sample = np.empty((sample.shape[0] + 1, *sample.shape[1:]), dtype=sample.dtype)  # Create one more for EOF symbol.
             extended_sample[:len(sample)] = sample
             extended_sample[-1] = self.symbol_dict['EOF']  # Add EOF symbol.
+
+        if self.one_hot:
+            # Create a full identity matrix here. This is not recommended when the size is big,
+            # however the symbol dict should never be very big.
+            sample = np.squeeze(np.eye(len(self.symbol_dict), dtype=np.float32)[sample.reshape(-1)])
+
         return sample
 
     def postprocess_sample(self, sample, norm_params=None):
@@ -115,7 +123,7 @@ class PhonemeLabelGen(LabelGen):
             else:
                 raise NotImplementedError("Unknown label type {} while loading {}.".format(label_type, label_file))
 
-        ids = np.zeros((len(symbols), 1), dtype=np.float32)
+        ids = np.zeros((len(symbols), 1), dtype=np.long)
         # Convert symbols to ids.
         for index, symbol in enumerate(symbols):
             ids[index] = symbol_dict[symbol]

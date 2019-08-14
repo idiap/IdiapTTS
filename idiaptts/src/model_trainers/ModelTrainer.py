@@ -503,7 +503,7 @@ class ModelTrainer(object):
                                                                             hparams.optimiser_args["lr"] if hparams.optimiser_args["lr"]
                                                                                                          else hparams.learning_rate)
                     if self.model_handler.ema:  # EMA model should be used as best model.
-                        self.model_handler.model = self.model_handler.ema
+                        self.model_handler.model = self.model_handler.ema.model
                         self.model_handler.ema = None  # Reset this one so that a new one is created for further training.
                         self.logger.info("Using best EMA model (epoch {}) as final model.".format(self.current_epoch))
                     else:

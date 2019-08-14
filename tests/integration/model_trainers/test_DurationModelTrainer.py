@@ -102,7 +102,7 @@ class TestDurationModelTrainer(unittest.TestCase):
         trainer.init(hparams)
         scores = trainer.benchmark(hparams)
 
-        numpy.testing.assert_almost_equal(286.609, scores, 3, "Wrong benchmark score.")
+        numpy.testing.assert_almost_equal(110.900, scores, 3, "Wrong benchmark score.")
 
         shutil.rmtree(hparams.out_dir)
 

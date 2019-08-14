@@ -59,7 +59,7 @@ class DurationModelTrainer(ModelTrainer):
 
         super().__init__(id_list, hparams)
 
-        self.InputGen = PhonemeLabelGen(dir_phoneme_labels, file_symbol_dict, hparams.phoneme_label_type)
+        self.InputGen = PhonemeLabelGen(dir_phoneme_labels, file_symbol_dict, hparams.phoneme_label_type, one_hot=True)
         self.OutputGen = PhonemeDurationLabelGen(dir_durations)
         self.OutputGen.get_normalisation_params(dir_durations)
 
