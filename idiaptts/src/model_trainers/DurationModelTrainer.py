@@ -71,14 +71,14 @@ class DurationModelTrainer(ModelTrainer):
 
         if hparams.scheduler_type == "default":
             hparams.scheduler_type = "Plateau"
-            hparams.plateau_verbose = True
+            hparams.add_hparams(plateau_verbose=True)
 
     @staticmethod
     def create_hparams(hparams_string=None, verbose=False):
         hparams = ModelTrainer.create_hparams(hparams_string, verbose=False)
-        # hparams.exclude_begin_and_end_silence = False
-        hparams.phoneme_label_type = "HTK full"  # Specifies the format in which the .lab files are stored.
-                                                 # Refer to PhonemeLabelGen.load_sample for a list of possible types.
+        hparams.add_hparams(  # exclude_begin_and_end_silence=False,
+                            phoneme_label_type="HTK full")  # Specifies the format in which the .lab files are stored.
+                                                            # Refer to PhonemeLabelGen.load_sample for a list of possible types.
 
         if verbose:
             logging.info('Final parsed hparams: %s', hparams.values())

@@ -234,8 +234,6 @@ def main():
                         type=str, dest="wcad_root", required=True)
     parser.add_argument("-a", "--audio_dir", help="Directory containing the audio (wav) files.",
                         type=str, dest="audio_dir", required=True)
-    parser.add_argument("-s", "--sampling_frequency", help="Sampling frequency of all audio files [Hz].",
-                        type=int, dest="sampling_frequency", choices=[16000, 48000])
     parser.add_argument("-f", "--frame_size_ms", help="Frame size [ms] of the labels.",
                         type=int, dest="frame_size_ms", default=5)
     parser.add_argument("-i", "--file_id_list_path",
@@ -256,7 +254,6 @@ def main():
 
     wcad_root = os.path.abspath(args.wcad_root)
     audio_dir = os.path.abspath(args.audio_dir)
-    sampling_frequency = args.sampling_frequency
     frame_size = args.frame_size
     dir_out = os.path.abspath(args.dir_out)
 

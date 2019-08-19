@@ -329,8 +329,6 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("-a", "--dir_audio", help="Directory containing the audio (wav) files.",
                         type=str, dest="dir_audio", required=True)
-    # parser.add_argument("-s", "--sampling_frequency", help="Sampling frequency of all audio files [Hz].",
-    #                     type=int, dest="sampling_frequency", choices=[16000, 48000])
     parser.add_argument("-i", "--file_id_list_path",
                         help="Path to text file to read the ids of the files to process.\
                               Default uses all .wav files in the given audio_dir.",

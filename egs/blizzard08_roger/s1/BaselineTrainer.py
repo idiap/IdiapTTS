@@ -59,7 +59,6 @@ def main():
     hparams.data_dir = os.path.realpath("database")
     hparams.out_dir = os.path.join(hparams.work_dir, "BaselineModel")
 
-    hparams.sampling_frequency = 16000
     hparams.frame_size_ms = 5
     hparams.seed = 1
 

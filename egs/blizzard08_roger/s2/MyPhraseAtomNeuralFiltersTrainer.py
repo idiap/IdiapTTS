@@ -66,7 +66,6 @@ def main():
     hparams_phrase.data_dir = os.path.realpath("database")
     hparams_phrase.out_dir = os.path.join(hparams_phrase.work_dir, "PhraseAtomNeuralFilters")
 
-    hparams_phrase.sampling_frequency = 16000
     hparams_phrase.frame_size_ms = 5  # [ms]
     hparams_phrase.seed = 1
     hparams_phrase.dist_window_size = 51  # [frames] should be odd.

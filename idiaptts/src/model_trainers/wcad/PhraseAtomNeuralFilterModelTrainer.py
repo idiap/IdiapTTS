@@ -117,13 +117,13 @@ class PhraseAtomNeuralFilterModelTrainer(ModelTrainer):
     def create_hparams(hparams_string=None, verbose=False):
         hparams = ModelTrainer.create_hparams(hparams_string, verbose=False)
 
-        hparams.synth_gen_figure = False
-        hparams.complex_poles = True
-        hparams.phase_init = 0.0
-
-        hparams.vuv_loss_weight = 1
-        hparams.L1_loss_weight = 1
-        hparams.vuv_weight = 0.5
+        hparams.add_hparams(
+            synth_gen_figure=False,
+            complex_poles=True,
+            phase_init=0.0,
+            vuv_loss_weight=1,
+            L1_loss_weight=1,
+            vuv_weight=0.5)
 
         if verbose:
             logging.info('Final parsed hparams: %s', hparams.values())
@@ -430,7 +430,7 @@ class PhraseAtomNeuralFilterModelTrainer(ModelTrainer):
         plotter.set_data_list(grid_idx=plot_id, data_list=graphs_lf0)
         plotter.set_hatchstyles(grid_idx=plot_id, hatchstyles=['\\\\'])
         plotter.set_area_list(grid_idx=plot_id, area_list=[(np.invert(org_vuv.astype(bool)), '0.75', 1.0, 'Reference unvoiced')])
-        plotter.set_label(grid_idx=plot_id, xlabel='frames [' + str(self.flat_trainer.atom_trainer.OutputGen.frame_size) + ' ms]',
+        plotter.set_label(grid_idx=plot_id, xlabel='frames [' + str(hparams.frame_size_ms) + ' ms]',
                           ylabel='lf0')
         # amp_lim = max(np.max(np.abs(wcad_lf0)), np.max(np.abs(output_lf0))) * 1.1
         amp_lim = 1

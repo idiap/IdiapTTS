@@ -29,9 +29,10 @@ from idiaptts.src.data_preparation.questions.QuestionLabelGen import QuestionLab
 from idiaptts.src.data_preparation.world.WorldFeatLabelGen import WorldFeatLabelGen
 from idiaptts.src.data_preparation.world.WorldFeatLabelGen import interpolate_lin
 from idiaptts.src.data_preparation.PyTorchLabelGensDataset import PyTorchLabelGensDataset as LabelGensDataset
+from idiaptts.misc.utils import numpy_first_not_value, numpy_last_not_value
 
 
-class AcousticModelTrainer(ModelTrainer):  # TODO: Rename to AcousticModelTrainer
+class AcousticModelTrainer(ModelTrainer):
     """
     Implementation of a ModelTrainer for the generation of acoustic data.
 
@@ -80,19 +81,21 @@ class AcousticModelTrainer(ModelTrainer):  # TODO: Rename to AcousticModelTraine
 
         if hparams.scheduler_type == "default":
             hparams.scheduler_type = "Plateau"
-            hparams.plateau_verbose = True
+            hparams.add_hparams(plateau_verbose=True)
 
     @staticmethod
     def create_hparams(hparams_string=None, verbose=False):
         """Create model hyper parameter container. Parse non default from given string."""
         hparams = ModelTrainer.create_hparams(hparams_string, verbose=False)
-        hparams.num_coded_sps = 60
-        hparams.add_deltas = True
 
-        hparams.synth_load_org_sp = False
-        hparams.synth_load_org_lf0 = False
-        hparams.synth_load_org_vuv = False
-        hparams.synth_load_org_bap = False
+        hparams.add_hparams(
+            num_questions=None,
+            num_coded_sps=60,
+            add_deltas=True,
+            synth_load_org_sp=False,
+            synth_load_org_lf0=False,
+            synth_load_org_vuv=False,
+            synth_load_org_bap=False)
 
         if verbose:
             logging.info('Final parsed hparams: %s', hparams.values())

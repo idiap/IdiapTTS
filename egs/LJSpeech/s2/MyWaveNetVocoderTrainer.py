@@ -63,8 +63,7 @@ def main():
 
     # General parameters
     # hparams.num_questions = 425
-    hparams.frame_rate_output_Hz = 16000  # TODO: Same as sampling_frequency? (Synthesised audio is converted to synth_fs.)
-    # hparams.sampling_frequency = 16000  # Input audio.
+    hparams.frame_rate_output_Hz = 16000  # Output frequency.
     hparams.frame_size_ms = 5  # ms
     hparams.voice = "full"
     hparams.work_dir = os.path.realpath(os.path.join("experiments", hparams.voice))
@@ -82,7 +81,7 @@ def main():
     hparams.batch_size_synth = 1 * hparams.num_gpus
     hparams.test_set_perc = 0.01
     hparams.val_set_perc = 0.01
-    hparams.use_saved_learning_rate = True  # Don't override learning rate if loaded from checkpoint.
+    hparams.use_saved_learning_rate = False  # Don't override learning rate if loaded from checkpoint.
     hparams.learning_rate = 0.001
     hparams.seed = 1234
     hparams.epochs_per_checkpoint = 4

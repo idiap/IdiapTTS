@@ -113,7 +113,7 @@ class AtomVUVDistPosModelTrainer(AtomModelTrainer):
     @staticmethod
     def create_hparams(hparams_string=None, verbose=False):
         hparams = AtomModelTrainer.create_hparams(hparams_string, verbose=False)
-        hparams.dist_window_size = 51
+        hparams.add_hparam("dist_window_size", 51)
 
         if verbose:
             logging.info('Final parsed hparams: %s', hparams.values())

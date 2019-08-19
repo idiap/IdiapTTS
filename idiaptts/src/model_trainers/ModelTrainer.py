@@ -137,11 +137,28 @@ class ModelTrainer(object):
     def create_hparams(hparams_string=None, verbose=False):
         """Create model hyperparameters. Parse nondefault from given string."""
 
-        hparams = HParams(
+        class ExtendedHParams(HParams):
+            def add_hparams(self, **kwarg):
+                for key, value in kwarg.items():
+                    try:
+                        self.add_hparam(key, value)
+                    except ValueError:
+                        self.set_hparam(key, value)
+
+            def verify(self):
+                for attr, value in self.__dict__.items():
+                    if attr not in ["_hparam_types", "_model_structure"]:
+                        if attr not in self._hparam_types:
+                            logging.warning("Attribute {} not in types dictionary. Please use add_hparam or add_hparams to add attributes.".format(attr))
+
+        hparams = ExtendedHParams(
             ################################
             # General Parameters           #
             ################################
 
+            voice=None,  # Specifies a part of the dataset used.
+            work_dir=None,  # Directory from where the script is running.
+            data_dir=None,  # Database directory.
             logging_batch_index_perc=10,  # Percentage of samples used from the full dataset between logging the loss for training and testing.
             start_with_test=True,  # Determines if the model is tested first before any training loops.
                                    # The computed loss is also used to identify the best model so far.
@@ -205,7 +222,7 @@ class ModelTrainer(object):
             # Audio Parameters             #
             ################################
             # sampling_frequency=16000,  # TODO: Unused?
-            frame_size=5,
+            frame_size_ms=5,
             # max_wav_value=32768.0,
 
             ################################
@@ -371,6 +388,7 @@ class ModelTrainer(object):
         :return:                 A tuple of (all test loss, all training loss, the model_handler object).
         """
 
+        hparams.verify()  # Verify that attributes were added correctly, print warning for wrongly initialized ones.
         self.logger.info('Final parsed hparams: %s', hparams.values())
 
         assert(self.model_handler)  # The init function has be called before training.

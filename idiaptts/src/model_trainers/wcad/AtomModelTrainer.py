@@ -91,15 +91,16 @@ class AtomModelTrainer(ModelTrainer):
                                                         size_average=False, reduce=False)
         if hparams.scheduler_type == "default":
             hparams.scheduler_type = "Plateau"
-            hparams.plateau_patience = 10
-            hparams.plateau_factor = 0.5
-            hparams.plateau_verbos = True
+            hparams.add_hparams(
+                plateau_patience=10,
+                plateau_factor=0.5,
+                plateau_verbose=True)
 
     @staticmethod
     def create_hparams(hparams_string=None, verbose=False):
         hparams = ModelTrainer.create_hparams(hparams_string, verbose=False)
 
-        hparams.min_atom_amp = 0.3
+        hparams.add_hparam("min_atom_amp", 0.3)
 
         if verbose:
             logging.info('Final parsed hparams: %s', hparams.values())
@@ -385,132 +386,3 @@ class AtomModelTrainer(ModelTrainer):
             full_sample[:, hparams.num_coded_sps + 1] = vuv
 
         return full_output
-
-# def main():
-#     logging.basicConfig(level=logging.INFO)
-#
-#     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-#     parser.add_argument("-w", "--wcad_root", help="Directory with the WCAD scripts.",
-#                         type=str, dest="wcad_root", default=argparse.SUPPRESS, required=True)
-#     parser.add_argument("-m", "--merlin_src_root", help="Path of src directory of merlin.",
-#                         type=str, dest="merlin_src_root", default=argparse.SUPPRESS, required=True)
-#     parser.add_argument("-a", "--audio_dir", help="Directory containing the audio (wav) files.",
-#                         type=str, dest="audio_dir", default=argparse.SUPPRESS, required=True)
-#     parser.add_argument("-l", "--label_dir", help="Directory containing the label (HTK full labels, *.lab) files.",
-#                         type=str, dest="label_dir", default=argparse.SUPPRESS, required=True)
-#     parser.add_argument("-q", "--question_file", help="Full path to question file.",
-#                         type=str, dest="question_file", default=argparse.SUPPRESS, required=True)
-#     parser.add_argument("-o", "--out_dir", help="Working directory for loading and saving.",
-#                         type=str, dest="out_dir", default=argparse.SUPPRESS, required=True)
-#     parser.add_argument("--acoustic_model_name",
-#                         help="Name of the acoustic model in out_dir used to generate bap and mcep.",
-#                         type=str, dest="acoustic_model_name", default=None, required=True)
-#     parser.add_argument("-i", "--file_id_list_path",
-#                         help="Path to a text file to read the ids of the files to process.",
-#                         type=str, dest="file_id_list_path", default=argparse.SUPPRESS, required=True)
-#
-#     parser.add_argument("--theta_start", help="Start value of theta.",
-#                         type=float, dest="theta_start", default=0.01)
-#     parser.add_argument("--theta_stop", help="Stop value of theta (excluded).",
-#                         type=float, dest="theta_stop", default=0.055)
-#     parser.add_argument("--theta_step", help="Distance between the thetas.",
-#                         type=float, dest="theta_step", default=0.005)
-#
-#     parser.add_argument("-s", "--sampling_frequency", help="Sampling frequency of all audio files [Hz].",
-#                         type=int, dest="sampling_frequency", choices=[16000, 48000])
-#     parser.add_argument("-f", "--frame_size_ms", help="Frame size of the labels.",
-#                         type=int, dest="frame_size_ms", default=5)
-#
-#     parser.add_argument("--compute_labels_input",
-#                         help="If set, the labels will be recomputed "
-#                              "and not loaded from the files in the directory given in -o/--out_dir.",
-#                         dest="compute_labels_input", action='store_const', const=True, default=False)
-#     parser.add_argument("--compute_labels_output",
-#                         help="If set, the labels will be recomputed "
-#                              "and not loaded from the files in the directory given in -o/--out_dir.",
-#                         dest="compute_labels_output", action='store_const', const=True, default=False)
-#
-#     parser.add_argument("--use_gpu", help="If set computation is done on a CUDA device.",
-#                         dest="use_gpu", action='store_const', const=True, default=False)
-#     parser.add_argument("--epochs",
-#                         help="Number of epochs in training. "
-#                              "If 0 no training is performed and training data is not loaded.",
-#                         type=int, dest="epochs", default=argparse.SUPPRESS, required=True)
-#     parser.add_argument("--model_name",
-#                         help="The name used to save the model. "
-#                              "The model is only saved if training was performed (epochs > 0). "
-#                              "If --model_type is not set this name is used to load the model.",
-#                         type=str, dest="model_name", default=argparse.SUPPRESS, required=True)
-#     parser.add_argument("--model_type",
-#                         help="Name of the architecture used for the model. "
-#                              "If this is not set the model is loaded by its --model_name.",
-#                         type=str, dest="model_type", default=argparse.SUPPRESS, required=False)
-#     parser.add_argument("--batch_size",
-#                         help="Batch_size is applied to frames not utterances. "
-#                              "When RNNs are used all frames will be processed jointly, so batch_size is ignored.",
-#                         type=int, dest="batch_size", default=256)
-#     parser.add_argument("--learning_rate",
-#                         help="Learning will start with this learning rate but will decrease on plateaus.",
-#                         type=float, dest="learning_rate", default=0.002)
-#     parser.add_argument("--momentum", help="Note that some optimizers will not use a momentum value.",
-#                         type=float, dest="momentum", default=0.8)
-#     parser.add_argument("--optim", help="Name of the optimiser_type to use.",
-#                         choices=["Adam", "SGD"],
-#                         type=str, dest="optim", default="Adam")
-#
-#     # Parse arguments.
-#     args = parser.parse_args()
-#
-#     # Environment/data arguments.
-#     wcad_root = os.path.abspath(args.wcad_root)
-#     merlin_src_root = os.path.abspath(args.merlin_src_root)
-#     audio_dir = os.path.abspath(args.audio_dir)
-#     label_dir = os.path.abspath(args.label_dir)
-#     out_dir = os.path.abspath(args.out_dir)
-#
-#     question_file = os.path.abspath(args.question_file)
-#     file_id_list_path = os.path.abspath(args.file_id_list_path)
-#     acoustic_model_name = args.acoustic_model_name if args.acoustic_model_name != "None" else None
-#
-#     sampling_frequency = args.sampling_frequency
-#     frame_size_ms = args.frame_size_ms
-#     if frame_size_ms != parser.get_default("frame_size_ms"):
-#         logging.error("Merlin supports only a frame size of 5 ms.")
-#         sys.exit(1)
-#
-#     theta_start = args.theta_start
-#     theta_step = args.theta_step
-#     theta_stop = args.theta_stop
-#
-#     compute_labels_input = args.compute_labels_input
-#     compute_labels_output = args.compute_labels_output
-#     model_type = args.model_type if (hasattr(args, 'model_type') and args.model_type != "None") else None
-#     model_name = args.model_name
-#
-#     # Training arguments.
-#     use_gpu = args.use_gpu
-#     batch_size = args.batch_size
-#     learning_rate = args.learning_rate
-#     momentum = args.momentum
-#     optim = args.optim
-#     epochs = max(0, args.epochs)
-#
-#     # Read which files to process.
-#     with open(file_id_list_path) as f:
-#         file_id_list = f.readlines()
-#     # Trim entries in-place.
-#     file_id_list[:] = [s.strip(' \t\n\r') for s in file_id_list]
-#
-#     atom_model_trainer = AtomModelTrainer(merlin_src_root, wcad_root, audio_dir, label_dir, out_dir,
-#                                           theta_start, theta_stop, theta_step,
-#                                           question_file, acoustic_model_name, file_id_list,
-#                                           sampling_frequency, frame_size_ms,
-#                                           (not compute_labels_input), (not compute_labels_output))
-#     atom_model_trainer.train(epochs, use_gpu, model_type, model_name, batch_size, learning_rate, momentum, optim)
-#
-#     synth_file_id_list = ["roger_5535", "roger_10727"]
-#     atom_model_trainer.synth(synth_file_id_list, model_name=model_name)
-
-
-# if __name__ == "__main__":
-#     main()

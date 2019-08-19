@@ -44,7 +44,6 @@ class TestAtomNeuralFilterModelTrainer(unittest.TestCase):
         hparams.out_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), type(self).__name__, sub_dir)
         hparams.save_final_model = True
 
-        hparams.sampling_frequency = 16000
         hparams.frame_size_ms = 5
         hparams.num_coded_sps = 20
         hparams.seed = 1
