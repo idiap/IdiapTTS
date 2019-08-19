@@ -235,5 +235,11 @@ class WaveNetVocoderTrainer(ModelTrainer):
         if hparams.synth_vocoder == "WORLD":
             self.run_world_synth(synth_output, hparams)
         elif hparams.synth_vocoder == "r9y9wavenet_quantized_16k_world_feats":
-            self.run_r9y9wavenet_quantized_16k_world_feats_synth(synth_output, hparams)
+            self.run_r9y9wavenet_mulaw_world_feats_synth(synth_output, hparams)
         hparams.model_name = model_name
+
+    def save_for_vocoding(self, filename):
+        # Save the full model so that hyper-paramters are already set.
+        self.model_handler.save_full_model(filename, self.model_handler.model, verbose=True)
+        # Save an easily loadable version of the normalisation parameters on the input side used during training.
+        np.save(os.path.splitext(filename)[0] + "_norm_params", np.concatenate(self.InputGen.norm_params, axis=0))

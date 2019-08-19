@@ -62,15 +62,14 @@ def main():
     hparams.data_dir = os.path.realpath("database")
     hparams.out_dir = os.path.join(hparams.work_dir, "AcousticModel")
 
-    hparams.num_coded_sps = 30
-    hparams.sampling_frequency = 16000
+    hparams.num_coded_sps = 60
     hparams.frame_size_ms = 5
     hparams.seed = 1234
 
     # Training parameters.
     hparams.epochs = 15
     hparams.use_gpu = True
-    hparams.model_type = "RNNDYN-2_RELU_1024-3_BiLSTM_512-1_FC_97"
+    hparams.model_type = "RNNDYN-2_RELU_1024-3_BiLSTM_512-1_FC_187"
     hparams.batch_size_train = 32
     hparams.batch_size_val = 64
     hparams.batch_size_test = 64
@@ -88,14 +87,13 @@ def main():
     trainer = MyAcousticModelTrainer(hparams)
     trainer.init(hparams)
     trainer.train(hparams)
-    trainer.benchmark(hparams)
+    # trainer.benchmark(hparams)
 
     synth_file_id_list = random.choices(trainer.id_list_test, k=3)
-    # hparams.synth_gen_figure = False
-    hparams.synth_vocoder = "WORLD"
-    # hparams.synth_vocoder = "r9y9wavenet_quantized_16k_world_feats_English"
-    # hparams.synth_vocoder_path = "wv-1-l24x4-16k-lr_0.005.nn"
-    # hparams.synth_file_suffix = "_" + hparams.synth_vocoder
+    hparams.synth_gen_figure = False
+    # hparams.synth_vocoder = "WORLD"
+    hparams.synth_vocoder = "r9y9wavenet_mulaw_16k_world_feats_English"
+    hparams.synth_vocoder_path = os.path.realpath("wn-l12s2k2-16k.nn")
 
     # with open(os.path.join(hparams.data_dir, "file_id_list_full_eval.txt" + sys.argv[1])) as f:
     #     synth_file_id_list = f.readlines()

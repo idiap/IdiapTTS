@@ -846,53 +846,61 @@ class ModelTrainer(object):
                 file.close()
                 os.remove(file_path + ".wav")
 
-    # def run_r9y9wavenet_quantized_16k_world_feats_synth(self, synth_output, hparams):
-    #     synth_output = copy.copy(synth_output)
-    #
-    #     wavenet_model_handler = ModelHandlerPyTorch(hparams)
-    #     wavenet_model_handler.load_checkpoint(hparams.synth_vocoder_path, hparams.use_gpu)
-    #
-    #     input_fs_Hz = 1000.0 / hparams.frame_size_ms
-    #     in_to_out_multiplier = hparams.frame_rate_output_Hz / input_fs_Hz
-    #     # dir_world_features = os.path.join(self.OutputGen.dir_labels, self.dir_extracted_acoustic_features)
-    #     input_gen = WorldFeatLabelGen(None,
-    #                                   add_deltas=False,
-    #                                   sampling_fn=partial(sample_linearly, in_to_out_multiplier=in_to_out_multiplier, dtype=np.float32))
-    #     # Load normalisation parameters for wavenet input.
-    #     try:
-    #         norm_params_path = os.path.splitext(hparams.synth_vocoder_path)[0] + "_norm_params.bin"
-    #         input_gen.norm_params = np.fromfile(norm_params_path, dtype=np.float64).reshape(2, -1)
-    #     except FileNotFoundError:
-    #         self.logger.error("Cannot find normalisation parameters for WaveNet input at {}. Please save them there.".format(norm_params_path))
-    #         raise
-    #
-    #     for id_name, output in synth_output.items():
-    #         logging.info("Synthesise {} with {} vocoder.".format(id_name, hparams.synth_vocoder_path))
-    #
-    #         output = input_gen.preprocess_sample(output)
-    #         # output = output[:5]
-    #
-    #         # output (T x C) --transpose--> (C x T) --unsqueeze(0)--> (B x C x T).
-    #         output = output.transpose()[None, ...]
-    #         # Wavenet input has to be (B x C x T).
-    #         output = wavenet_model_handler.forward(output, hparams, batch_seq_lengths=(output.shape[-1],))
-    #         output = output[0].transpose()  # Remove batch dim and transpose back to (T x C).
-    #         # Revert mu-law quantization.
-    #         output = output.argmax(axis=1)
-    #         synth_output[id_name] = RawWaveformLabelGen.mu_law_companding_reversed(output, hparams.mu)
-    #
-    #     org_bit_depth = hparams.bit_depth if hasattr(hparams, 'bit_depth') else None
-    #     hparams.bit_depth = 16
-    #
-    #     # Add identifier to suffix.
-    #     old_synth_file_suffix = hparams.synth_file_suffix
-    #     hparams.synth_file_suffix += '_' + hparams.synth_vocoder
-    #
-    #     self.run_raw_synth(synth_output, hparams)
-    #
-    #     # Restore identifier.
-    #     hparams.synth_file_suffix = old_synth_file_suffix
-    #     hparams.bit_depth = org_bit_depth
+    def run_r9y9wavenet_mulaw_world_feats_synth(self, synth_output, hparams):
+        from idiaptts.src.neural_networks.pytorch.models.WaveNetWrapper import WaveNetWrapper
+        from idiaptts.src.data_preparation.audio.RawWaveformLabelGen import RawWaveformLabelGen
+
+        org_model_type = hparams.model_type
+        hparams.model_type = WaveNetWrapper.IDENTIFIER
+
+        synth_output = copy.copy(synth_output)
+
+        input_fs_Hz = 1000.0 / hparams.frame_size_ms
+        in_to_out_multiplier = hparams.frame_rate_output_Hz / input_fs_Hz
+        # dir_world_features = os.path.join(self.OutputGen.dir_labels, self.dir_extracted_acoustic_features)
+        input_gen = WorldFeatLabelGen(None,
+                                      add_deltas=False,
+                                      sampling_fn=partial(sample_linearly, in_to_out_multiplier=in_to_out_multiplier, dtype=np.float32))
+        # Load normalisation parameters for wavenet input.
+        try:
+            norm_params_path = os.path.splitext(hparams.synth_vocoder_path)[0] + "_norm_params.npy"
+            input_gen.norm_params = np.load(norm_params_path).reshape(2, -1)
+        except FileNotFoundError:
+            self.logger.error("Cannot find normalisation parameters for WaveNet input at {}."
+                              "Please save them there with numpy.save().".format(norm_params_path))
+            raise
+
+        wavenet_model_handler = ModelHandlerPyTorch()
+        wavenet_model_handler.model, *_ = wavenet_model_handler.load_model(wavenet_model_handler.model_factory, hparams.synth_vocoder_path, hparams, verbose=False)
+        # wavenet_model_handler.load_checkpoint(hparams.synth_vocoder_path, hparams.use_gpu)
+
+        for id_name, output in synth_output.items():
+            logging.info("Synthesise {} with {} vocoder.".format(id_name, hparams.synth_vocoder_path))
+
+            output = input_gen.preprocess_sample(output)
+
+            # output (T x C) --transpose--> (C x T) --unsqueeze(0)--> (B x C x T).
+            output = output.transpose()[None, ...]
+            # Wavenet input has to be (B x C x T).
+            output, _ = wavenet_model_handler.forward(output, hparams, batch_seq_lengths=(output.shape[-1],))
+            output = output[0].transpose()  # Remove batch dim and transpose back to (T x C).
+            # Revert mu-law quantization.
+            output = output.argmax(axis=1)
+            synth_output[id_name] = RawWaveformLabelGen.mu_law_companding_reversed(output, hparams.mu)
+
+        org_bit_depth = hparams.bit_depth if hasattr(hparams, 'bit_depth') else None
+        hparams.bit_depth = 16
+
+        # Add identifier to suffix.
+        old_synth_file_suffix = hparams.synth_file_suffix
+        hparams.synth_file_suffix += '_' + hparams.synth_vocoder
+
+        self.run_raw_synth(synth_output, hparams)
+
+        # Restore identifier.
+        hparams.model_type = org_model_type
+        hparams.synth_file_suffix = old_synth_file_suffix
+        hparams.bit_depth = org_bit_depth
 
     def run_raw_synth(self, synth_output, hparams):
         """Use Pydub to synthesis audio from raw data given in the synth_output dictionary."""
@@ -933,13 +941,13 @@ class ModelTrainer(object):
         if hparams.synth_vocoder == "WORLD":
             self.run_world_synth(synth_output, hparams)
         # elif hparams.synth_vocoder == "STRAIGHT":  # Add further vocoders here.
-        elif hparams.synth_vocoder == "r9y9wavenet_quantized_16k_world_feats_English":
+        elif hparams.synth_vocoder == "r9y9wavenet_mulaw_16k_world_feats_English":
 
             # If no path is given, use pre-trained model.
             if not hasattr(hparams, "synth_vocoder_path") or hparams.synth_vocoder_path is None:
                 parent_dirs = os.path.realpath(__file__).split(os.sep)
-                dir_itts = str.join(os.sep, parent_dirs[:parent_dirs.index(main_dir) + 1])
-                hparams.synth_vocoder_path = os.path.join(dir_itts, "misc", "pretrained", "r9y9wavenet_quantized_16k_world_feats_English.nn")
+                dir_root = str.join(os.sep, parent_dirs[:parent_dirs.index("IdiapTTS") + 1])
+                hparams.synth_vocoder_path = os.path.join(dir_root, "idiaptts", "misc", "pretrained", "r9y9wavenet_quantized_16k_world_feats_English.nn")
 
             # Default quantization is with mu=255.
             if not hasattr(hparams, "mu") or hparams.mu is None:
@@ -947,6 +955,8 @@ class ModelTrainer(object):
 
             org_frame_rate_output_Hz = hparams.frame_rate_output_Hz if hasattr(hparams, 'frame_rate_output_Hz') else None
             hparams.frame_rate_output_Hz = 16000
-            self.run_r9y9wavenet_quantized_16k_world_feats_synth(synth_output, hparams)
-            hparams.frame_rate_output_Hz = org_frame_rate_output_Hz
 
+            self.run_r9y9wavenet_mulaw_world_feats_synth(synth_output, hparams)
+
+            hparams.frame_rate_output_Hz = org_frame_rate_output_Hz
+            # TODO: Convert to requested frame rate.

@@ -148,6 +148,7 @@ def main():
     trainer = MyWaveNetVocoderTrainer(hparams)
     trainer.init(hparams)
     trainer.train(hparams)
+    trainer.save_for_vocoding(hparams.model_name)
 
     synth_file_id_list = random.choices(trainer.id_list_test, k=3)
     # path_db = hparams.data_dir

@@ -285,6 +285,12 @@ class ModelHandlerPyTorch(ModelHandler):
             logging.info("Save model to {}.".format(file_path))
 
     @staticmethod
+    def save_full_model(file_path, model, verbose=False):
+        torch.save({'model': model}, file_path)
+        if verbose:
+            logging.info("Save full model to {}.".format(file_path))
+
+    @staticmethod
     def load_model(model_factory, file_path, hparams, verbose=True):
         dim_in = None
         dim_out = None
@@ -294,8 +300,9 @@ class ModelHandlerPyTorch(ModelHandler):
         try:
             expected_model_type = hparams.model_type
             model_type = checkpoint['model_type']
-            if expected_model_type:  # Can be None, when model should loaded by name.
-                assert(expected_model_type == model_type)  # Expected type in hparams and loaded type should match.
+            if expected_model_type and expected_model_type != model_type:  # None when model should be loaded by name.
+                raise TypeError("Expected type in hparams ({}) and loaded type ({}) should match."
+                                .format(expected_model_type, model_type))
             hparams.model_type = model_type  # Use the loaded model type during creation in factory.
             dim_in = checkpoint['dim_in']
             dim_out = checkpoint['dim_out']
@@ -389,7 +396,7 @@ class ModelHandlerPyTorch(ModelHandler):
                            'model_name': self.model_name,
                            'optimiser': self.optimiser
                            # 'loss_function': loss_function
-                          }
+                           }
         if self.model_type:
             checkpoint_dict.update({'model_type': self.model_type,
                                     'dim_in': self.dim_in,
