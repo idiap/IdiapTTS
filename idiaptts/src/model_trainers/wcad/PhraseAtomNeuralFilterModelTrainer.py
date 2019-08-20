@@ -102,9 +102,9 @@ class PhraseAtomNeuralFilterModelTrainer(ModelTrainer):
                                                          id_list, thetas, k, num_questions, dist_window_size, hparams_flat)
 
         if self.loss_function is None:
-            self.loss_function = L1WeightedVUVMSELoss(weight=hparams_phrase.vuv_weight,
+            self.loss_function = L1WeightedVUVMSELoss(weight_unvoiced=hparams_phrase.weight_unvoiced,
                                                       vuv_loss_weight=hparams_phrase.vuv_loss_weight,
-                                                      L1_weight=hparams_phrase.L1_loss_weight,
+                                                      L1_loss_weight=hparams_phrase.L1_loss_weight,
                                                       reduce=False)
         if hparams_phrase.scheduler_type == "default":
             hparams_phrase.scheduler_type = "None"
@@ -117,13 +117,22 @@ class PhraseAtomNeuralFilterModelTrainer(ModelTrainer):
     def create_hparams(hparams_string=None, verbose=False):
         hparams = ModelTrainer.create_hparams(hparams_string, verbose=False)
 
-        hparams.synth_gen_figure = False
-        hparams.complex_poles = True
-        hparams.phase_init = 0.0
-
-        hparams.vuv_loss_weight = 1
-        hparams.L1_loss_weight = 1
-        hparams.vuv_weight = 0.5
+        hparams.add_hparams(
+            thetas=None,  # One initial theta value per filter.
+            k=2,  # Order of the impulse response of the atoms.
+            min_atom_amp=0.25,  # Post-processing removes atoms with an absolute amplitude smaller than this.
+            complex_poles=True,  # Comples poles possible.
+            phase_init=0.0,  # Initial phase of the filters.
+            vuv_loss_weight=1,  # Weight of the VUV RMSE.
+            L1_loss_weight=1,  # Weight of the L1 loss on the spiking inputs.
+            weight_unvoiced=0.5,  # Weight on unvoiced frames.
+            num_questions=None,  # Dimension of the input questions.
+            dist_window_size=51,  # Size of distribution around spikes when training the AtomModel.
+            atom_model_path=None,  # Path to load a pre-trained atom model from.
+            hparams_atom=None,  # Hyper-parameter container used in the AtomModelTrainer
+            flat_model_path=None,  # Path to load a pre-trained atom neural filter model from (without phrase curve).
+            hparams_flat=None,  # Hyper-parameter container used in the AtomNeuralFilterModelTrainer.
+            )
 
         if verbose:
             logging.info('Final parsed hparams: %s', hparams.values())
@@ -430,7 +439,7 @@ class PhraseAtomNeuralFilterModelTrainer(ModelTrainer):
         plotter.set_data_list(grid_idx=plot_id, data_list=graphs_lf0)
         plotter.set_hatchstyles(grid_idx=plot_id, hatchstyles=['\\\\'])
         plotter.set_area_list(grid_idx=plot_id, area_list=[(np.invert(org_vuv.astype(bool)), '0.75', 1.0, 'Reference unvoiced')])
-        plotter.set_label(grid_idx=plot_id, xlabel='frames [' + str(self.flat_trainer.atom_trainer.OutputGen.frame_size) + ' ms]',
+        plotter.set_label(grid_idx=plot_id, xlabel='frames [' + str(hparams.frame_size_ms) + ' ms]',
                           ylabel='lf0')
         # amp_lim = max(np.max(np.abs(wcad_lf0)), np.max(np.abs(output_lf0))) * 1.1
         amp_lim = 1

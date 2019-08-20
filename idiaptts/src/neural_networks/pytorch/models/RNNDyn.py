@@ -36,6 +36,7 @@ class RNNDyn(nn.Module):
         self.emb_groups = nn.ModuleList()
 
         # Translate model name to layer groups.
+        assert(str(hparams.model_type).startswith(RNNDyn.IDENTIFIER))
         self.name_to_groups(hparams.model_type, hparams.hidden_init, hparams.train_hidden_init, hparams.f_get_emb_index if hasattr(hparams, "f_get_emb_index") else None)
 
         # Get output dimension from created model. Has to match with data.
@@ -342,6 +343,7 @@ class MerlinAcoustic(RNNDyn):
     def __init__(self, dim_in, dim_out, hparams):
         hparams.model_type = super().IDENTIFIER + "-6_TANH_512-1_FC_" + str(np.prod(dim_out))
         super().__init__(dim_in, dim_out, hparams)
+        hparams.model_type = self.IDENTIFIER
 
 
 class Interspeech18baseline(RNNDyn):
@@ -350,6 +352,7 @@ class Interspeech18baseline(RNNDyn):
     def __init__(self, dim_in, dim_out, hparams):
         hparams.model_type = super().IDENTIFIER + "-2_RELU_1024-3_BiGRU_512-1_FC_" + str(np.prod(dim_out))
         super().__init__(dim_in, dim_out, hparams)
+        hparams.model_type = self.IDENTIFIER
 
 
 class Icassp19baseline(RNNDyn):
@@ -358,6 +361,7 @@ class Icassp19baseline(RNNDyn):
     def __init__(self, dim_in, dim_out, hparams):
         hparams.model_type = super().IDENTIFIER + "-2_RELU_1024-3_BiLSTM_512-1_FC_" + str(np.prod(dim_out))
         super().__init__(dim_in, dim_out, hparams)
+        hparams.model_type = self.IDENTIFIER
 
 
 class BaselineRNN_Yamagishi(RNNDyn):
@@ -366,3 +370,4 @@ class BaselineRNN_Yamagishi(RNNDyn):
     def __init__(self, dim_in, dim_out, hparams):
         hparams.model_type = super().IDENTIFIER + "-2_RELU_1024-3_BiGRU_512-1_FC_" + str(np.prod(dim_out))
         super().__init__(dim_in, dim_out, hparams)
+        hparams.model_type = self.IDENTIFIER

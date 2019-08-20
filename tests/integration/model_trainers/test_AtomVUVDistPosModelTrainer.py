@@ -41,7 +41,6 @@ class TestAtomVUVDistPosModelTrainer(unittest.TestCase):
         hparams.out_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), type(self).__name__)
         hparams.world_dir = os.path.realpath(os.path.join("integration", "fixtures", "WORLD"))
 
-        hparams.sampling_frequency = 16000
         hparams.frame_size_ms = 5
         hparams.num_coded_sps = 20
         hparams.seed = 1
@@ -53,7 +52,7 @@ class TestAtomVUVDistPosModelTrainer(unittest.TestCase):
         hparams.batch_size_train = 2
         hparams.batch_size_val = 2
         hparams.use_saved_learning_rate = True
-        hparams.learning_rate = 0.0002
+        hparams.optimiser_args["lr"] = 0.0002
         hparams.model_name = "test_model.nn"
         hparams.epochs_per_checkpoint = 2
 

@@ -29,16 +29,15 @@ class SilenceRemover(object):
     """
     logger = logging.getLogger(__name__)
 
-    # Constants.
-    audio_extension = ".wav"
-    min_silence_ms = 200
+    def __init__(self, min_silence_ms=200):
+        self.min_silence_ms = min_silence_ms
 
-    def process_list(self, id_list, dir_wav, dir_out, format="wav", silence_threshold_db=-50, chunk_size_ms=10):
+    def process_list(self, id_list, dir_audio, dir_out, format="wav", silence_threshold_db=-50, chunk_size_ms=10):
 
         # logging.getLogger("pydub.converter").setLevel(level=logging.INFO)
 
         for file_id in id_list:
-            self.process_file(file_id + self.audio_extension, dir_wav, dir_out, format, silence_threshold_db, chunk_size_ms)
+            self.process_file(file_id + format, dir_audio, dir_out, format, silence_threshold_db, chunk_size_ms)
 
     @staticmethod
     def _detect_leading_silence(sound, silence_threshold_db=-50.0, chunk_size_ms=10):
@@ -61,8 +60,8 @@ class SilenceRemover(object):
 
         return trim_ms
 
-    def process_file(self, file, dir_wav, dir_out, audio_format="wav", silence_threshold_db=-50, chunk_size_ms=10):
-        sound = AudioSegment.from_file(os.path.join(dir_wav, file), format=audio_format)
+    def process_file(self, file, dir_audio, dir_out, audio_format="wav", silence_threshold_db=-50, chunk_size_ms=10):
+        sound = AudioSegment.from_file(os.path.join(dir_audio, file), format=audio_format)
 
         trim_start = self._detect_leading_silence(sound, silence_threshold_db, chunk_size_ms)
         trim_end = self._detect_leading_silence(sound.reverse(), silence_threshold_db, chunk_size_ms)
@@ -143,9 +142,7 @@ def main():
     makedirs_safe(args.dir_out)
 
     # Start silence removal.
-    silence_remover = SilenceRemover()
-    if args.min_silence_ms is not None:
-        silence_remover.min_silence_ms = args.min_silence_ms
+    silence_remover = SilenceRemover(args.min_silence_ms)
     silence_remover.process_list(id_list, args.dir_wav, args.dir_out,
                                  args.format, args.silence_threshold_db, args.chunk_size_ms)
 

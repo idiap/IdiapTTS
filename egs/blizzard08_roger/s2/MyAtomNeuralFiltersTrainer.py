@@ -68,7 +68,6 @@ def main():
     hparams.data_dir = os.path.realpath("database")
     hparams.out_dir = os.path.join(hparams.work_dir, "AtomNeuralFilters")
 
-    hparams.sampling_frequency = 16000
     hparams.frame_size_ms = 5  # [ms]
     hparams.seed = 1
     hparams.dist_window_size = 51  # [frames] should be odd.
@@ -81,13 +80,13 @@ def main():
     hparams.model_name = "neural_filters.nn"
     hparams.batch_size_train = 5
     hparams.batch_size_val = 5
-    hparams.learning_rate = 0.0006
+    hparams.optimiser_args["lr"] = 0.0006
     hparams.complex_poles = False
     hparams.start_with_test = False
 
     hparams.vuv_loss_weight = 0.1
     hparams.L1_loss_weight = 0.1
-    hparams.vuv_weight = 0
+    hparams.weight_unvoiced = 0
 
     hparams_atom = copy.deepcopy(hparams)
     hparams_atom.synth_gen_figure = False
@@ -95,7 +94,7 @@ def main():
     # hparams_atom.model_type = None
     hparams_atom.model_name = hparams.model_name + "_atoms"
     hparams_atom.dropout = 0.0
-    hparams_atom.learning_rate = 0.0002
+    hparams_atom.optimiser_args["lr"] = 0.0002
     hparams_atom.batch_size_train = 2
     hparams_atom.epochs = 50  # If 0, model is loaded by hparams.model_name + "_atoms"
 

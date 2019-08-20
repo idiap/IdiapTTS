@@ -54,15 +54,15 @@ class WaveNetVocoderTrainer(ModelTrainer):
 
         super().__init__(id_list, hparams)
 
-        in_to_out_multiplier = int(hparams.frame_rate_output_Hz / (1000.0 / hparams.frame_size))
-        max_frames_input_trainset = int(1000.0 / hparams.frame_size * hparams.max_input_train_sec) * in_to_out_multiplier  # Multiply by number of seconds.
-        max_frames_input_testset = int(1000.0 / hparams.frame_size * hparams.max_input_test_sec) * in_to_out_multiplier  # Ensure that test takes all frames. NOTE: Had to limit it because of memory constraints.
+        in_to_out_multiplier = int(hparams.frame_rate_output_Hz / (1000.0 / hparams.frame_size_ms))
+        max_frames_input_trainset = int(1000.0 / hparams.frame_size_ms * hparams.max_input_train_sec) * in_to_out_multiplier  # Multiply by number of seconds.
+        max_frames_input_testset = int(1000.0 / hparams.frame_size_ms * hparams.max_input_test_sec) * in_to_out_multiplier  # Ensure that test takes all frames. NOTE: Had to limit it because of memory constraints.
 
         self.InputGen = WorldFeatLabelGen(dir_world_features, add_deltas=False, sampling_fn=partial(sample_linearly, in_to_out_multiplier=in_to_out_multiplier, dtype=np.float32), num_coded_sps=hparams.num_coded_sps)
         self.InputGen.get_normalisation_params(dir_world_features)
 
         self.OutputGen = RawWaveformLabelGen(frame_rate_output_Hz=hparams.frame_rate_output_Hz,
-                                             frame_size_ms=hparams.frame_size,
+                                             frame_size_ms=hparams.frame_size_ms,
                                              mu=hparams.mu if hparams.input_type == "mulaw-quantize" else None,
                                              silence_threshold_quantized=hparams.silence_threshold_quantized)
         # No normalisation parameters required.
@@ -88,50 +88,55 @@ class WaveNetVocoderTrainer(ModelTrainer):
     @staticmethod
     def create_hparams(hparams_string=None, verbose=False):
         """Create model hyperparameters. Parse nondefault from given string."""
-        hparams = ModelTrainer.create_hparams(hparams_string, verbose=False)
+        hparams=ModelTrainer.create_hparams(hparams_string, verbose=False)
 
-        hparams.batch_first = True
-        hparams.frame_rate_output_Hz = 16000
-        hparams.mu = 255
-        hparams.bit_depth = 16
-        hparams.silence_threshold_quantized = None  # Beginning and end of audio below the threshold are trimmed.
-        hparams.teacher_forcing_in_test = True
-        hparams.exponential_moving_average = False  # TODO: Reactivate and make work.
-        hparams.exponential_moving_average_decay = 0.9999
+        hparams.add_hparams(
+            batch_first=True,
+            frame_rate_output_Hz=16000,
+            mu=255,
+            bit_depth=16,
+            silence_threshold_quantized=None,  # Beginning and end of audio below the threshold are trimmed.
+            teacher_forcing_in_test=True,
+            exponential_moving_average=False,  # TODO: Reactivate and make work.
+            exponential_moving_average_decay=0.9999,
 
-        # Model parameters.
-        hparams.input_type = "mulaw-quantize"
-        hparams.hinge_regularizer = True  # Only used in MoL prediction (input_type="raw").
-        hparams.log_scale_min = float(np.log(1e-14))  # Only used for mixture of logistic distributions.
-        hparams.quantize_channels = 256  # 256 for input type mulaw-quantize, otherwise 65536
+            # Model parameters.
+            input_type="mulaw-quantize",
+            hinge_regularizer=True,  # Only used in MoL prediction (input_type="raw").
+            log_scale_min=float(np.log(1e-14)),  # Only used for mixture of logistic distributions.
+            quantize_channels=256)  # 256 for input type mulaw-quantize, otherwise 65536
         if hparams.input_type == "mulaw-quantize":
-            hparams.out_channels = hparams.quantize_channels
+            hparams.add_hparam("out_channels", hparams.quantize_channels)
         else:
-            hparams.out_channels = 10 * 3  # num_mixtures * 3 (pi, mean, log_scale)
-        hparams.layers = 24  # 20
-        hparams.stacks = 4  # 2
-        hparams.residual_channels = 512
-        hparams.gate_channels = 512
-        hparams.skip_out_channels = 256
-        hparams.dropout = 1 - 0.95
-        hparams.kernel_size = 3
-        hparams.weight_normalization = True
-        hparams.use_cond = True  # Determines if conditioning is used.
-        hparams.cin_channels = 63
-        hparams.upsample_conditional_features = False
-        hparams.upsample_scales = [
-            5,
-            4,
-            2
-        ]
+            hparams.add_hparam("out_channels", 10 * 3)  # num_mixtures * 3 (pi, mean, log_scale)
+
+        hparams.add_hparams(
+            layers=24,  # 20
+            stacks=4,  # 2
+            residual_channels=512,
+            gate_channels=512,
+            skip_out_channels=256,
+            dropout=1 - 0.95,
+            kernel_size=3,
+            weight_normalization=True,
+            use_cond=True,  # Determines if conditioning is used.
+            cin_channels=63,
+            upsample_conditional_features=False,
+            upsample_scales=[
+                5,
+                4,
+                2
+            ])
         if hparams.upsample_conditional_features:
             hparams.len_in_out_multiplier = reduce(mul, hparams.upsample_scales, 1)
         else:
             hparams.len_in_out_multiplier = 1
-        hparams.freq_axis_kernel_size = 3
-        hparams.gin_channels = -1
-        hparams.n_speakers = 1
-        hparams.use_speaker_embedding = False
+
+        hparams.add_hparams(
+            freq_axis_kernel_size=3,
+            gin_channels=-1,
+            n_speakers=1,
+            use_speaker_embedding=False)
 
         if verbose:
             logging.info('Final parsed hparams: %s', hparams.values())
@@ -235,5 +240,11 @@ class WaveNetVocoderTrainer(ModelTrainer):
         if hparams.synth_vocoder == "WORLD":
             self.run_world_synth(synth_output, hparams)
         elif hparams.synth_vocoder == "r9y9wavenet_quantized_16k_world_feats":
-            self.run_r9y9wavenet_quantized_16k_world_feats_synth(synth_output, hparams)
+            self.run_r9y9wavenet_mulaw_world_feats_synth(synth_output, hparams)
         hparams.model_name = model_name
+
+    def save_for_vocoding(self, filename):
+        # Save the full model so that hyper-paramters are already set.
+        self.model_handler.save_full_model(filename, self.model_handler.model, verbose=True)
+        # Save an easily loadable version of the normalisation parameters on the input side used during training.
+        np.save(os.path.splitext(filename)[0] + "_norm_params", np.concatenate(self.InputGen.norm_params, axis=0))

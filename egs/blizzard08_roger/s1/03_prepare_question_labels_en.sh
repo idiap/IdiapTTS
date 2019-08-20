@@ -97,7 +97,11 @@ echo "Generate questions..."
 file_list_min_max=()
 #file_list_mean_std=()
 for (( b=1; b <= $num_blocks; b++ )); do
-    file_list_min_max+=("${dir_questions}"/${name_file_id_list}_block${b}-min-max.bin)
+    file_path="${dir_questions}"/${name_file_id_list}_block${b}-min-max.bin
+    while [ ! -f ${file_path} ]; do  # Wait until normalisation file is created by OS.
+        sleep 2
+    done
+    file_list_min_max+=(${file_path})
     #file_list_mean_std+=("${dir_questions}"/${name_file_id_list}_block${b}-mean-std_dev.bin)
 done
 python3 ${dir_misc}/normalisation/MinMaxExtractor.py \

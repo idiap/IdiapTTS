@@ -83,7 +83,6 @@ def main():
     hparams.optimiser_args["lr"] = 0.0002
     hparams.epochs_per_checkpoint = 5
 
-    hparams.sampling_frequency = 16000
     hparams.frame_size_ms = 5
     hparams.seed = 1
 

@@ -63,9 +63,9 @@ class WeightedNonzeroWMSEAtomLoss(AtomLoss):
         # TODO: Accept reduction keyword.
         self.reduce = reduce
         self.size_average = size_average
-        self.register_buffer('weights_vuv', torch.tensor(weights_vuv))
-        self.register_buffer('weights_zero', torch.tensor(weights_zero))
-        self.register_buffer('weights_non_zero', torch.tensor(weights_non_zero))
+        self.register_buffer('weights_vuv', torch.tensor(weights_vuv, dtype=torch.float32))
+        self.register_buffer('weights_zero', torch.tensor(weights_zero, dtype=torch.float32))
+        self.register_buffer('weights_non_zero', torch.tensor(weights_non_zero, dtype=torch.float32))
 
     def forward(self, input, target):
 
@@ -87,7 +87,6 @@ class WeightedNonzeroWMSEAtomLoss(AtomLoss):
         output_vuv = input[:, :, 0]
         error_vuv = (output_vuv - target_vuv)**2
 
-        # vuv_weight_tensor = output_vuv.abs()
         vuv_weight = self.weights_vuv
         vuv_weight_tensor = vuv_weight + (1 - vuv_weight) * target_vuv
         error_pos_flag = error_pos_flag * vuv_weight_tensor

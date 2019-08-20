@@ -66,7 +66,6 @@ def main():
     hparams_phrase.data_dir = os.path.realpath("database")
     hparams_phrase.out_dir = os.path.join(hparams_phrase.work_dir, "PhraseAtomNeuralFilters")
 
-    hparams_phrase.sampling_frequency = 16000
     hparams_phrase.frame_size_ms = 5  # [ms]
     hparams_phrase.seed = 1
     hparams_phrase.dist_window_size = 51  # [frames] should be odd.
@@ -83,7 +82,7 @@ def main():
 
     hparams_phrase.vuv_loss_weight = 0.3
     hparams_phrase.L1_loss_weight = 0.3
-    hparams_phrase.vuv_weight = 0
+    hparams_phrase.weight_unvoiced = 0
 
     hparams_flat = copy.deepcopy(hparams_phrase)
 
@@ -103,7 +102,7 @@ def main():
     hparams_flat.model_name = hparams_phrase.model_name + "_flat"
 
     hparams_flat.batch_size_train = 5
-    hparams_flat.learning_rate = 0.001
+    hparams_flat.optimiser_args["lr"] = 0.001
     hparams_flat.complex_poles = True
     hparams_flat.start_with_test = True
     hparams_flat.scheduler_type = "Plateau"
@@ -114,20 +113,20 @@ def main():
     # hparams_atom.model_type = None
     hparams_atom.model_name = hparams_flat.model_name + "_atoms"
     hparams_atom.dropout = 0.0
-    hparams_atom.learning_rate = 0.0002
+    hparams_atom.optimiser_args["lr"] = 0.0002
     hparams_atom.batch_size_train = 2
     hparams_atom.epochs = 50  # If 0, model is loaded by hparams.model_name + "_atoms"
     hparams_atom.train_hidden_init = False
 
-    hparams_flat.hparams_atom = hparams_atom
     hparams_phrase.hparams_atom = hparams_atom
+    hparams_flat.hparams_atom = hparams_atom
     hparams_phrase.hparams_flat = hparams_flat
 
     hparams_flat.atom_model_path = os.path.join(hparams_flat.out_dir, hparams_flat.networks_dir,
                                                 hparams_atom.model_name)
-    hparams_phrase.atom_model_path = hparams_flat.atom_model_path
     hparams_phrase.flat_model_path = os.path.join(hparams_phrase.out_dir, hparams_phrase.networks_dir,
                                                   hparams_flat.model_name)
+    hparams_phrase.atom_model_path = hparams_flat.atom_model_path
 
     # Training
     trainer = MyPhraseAtomNeuralFiltersTrainer(hparams_phrase)

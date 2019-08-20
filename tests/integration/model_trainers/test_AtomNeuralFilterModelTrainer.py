@@ -44,12 +44,11 @@ class TestAtomNeuralFilterModelTrainer(unittest.TestCase):
         hparams.out_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), type(self).__name__, sub_dir)
         hparams.save_final_model = True
 
-        hparams.sampling_frequency = 16000
         hparams.frame_size_ms = 5
         hparams.num_coded_sps = 20
         hparams.seed = 1
         hparams.dist_window_size = 31  # [frames] should be odd.
-        hparams.complex_poles = False  # TODO: Test True,
+        hparams.complex_poles = False
 
         # Training parameters.
         hparams.epochs = 3
@@ -58,7 +57,7 @@ class TestAtomNeuralFilterModelTrainer(unittest.TestCase):
         hparams.batch_size_train = 2
         hparams.batch_size_val = 2
         hparams.use_saved_learning_rate = True
-        hparams.learning_rate = 0.0006
+        hparams.optimiser_args["lr"] = 0.0006
         hparams.model_path = os.path.join("integration", "fixtures", "neural_filters_model_in409_out2.nn")
         hparams.model_name = "test_model.nn"
         hparams.epochs_per_checkpoint = 2
@@ -66,7 +65,7 @@ class TestAtomNeuralFilterModelTrainer(unittest.TestCase):
 
         hparams.vuv_loss_weight = 0.1
         hparams.L1_loss_weight = 0.1
-        hparams.vuv_weight = 0
+        hparams.weight_unvoiced = 0
         hparams.atom_model_path = os.path.join("integration", "fixtures", "test_model_in409_out7.nn")
 
         hparams_atom = copy.deepcopy(hparams)
@@ -75,7 +74,7 @@ class TestAtomNeuralFilterModelTrainer(unittest.TestCase):
         hparams_atom.model_name = hparams.model_name + "_atoms"
         hparams_atom.model_path = os.path.join("integration", "fixtures", "test_model_in409_out7.nn")
         hparams_atom.dropout = 0.0
-        hparams_atom.learning_rate = 0.0002
+        hparams_atom.optimiser_args["lr"] = 0.0002
         hparams_atom.batch_size_train = 2
         hparams_atom.epochs = 0  # If 0, model is loaded by name.
 
@@ -249,4 +248,5 @@ class TestAtomNeuralFilterModelTrainer(unittest.TestCase):
         shutil.rmtree(hparams.out_dir)
 
     def test_complex_poles(self):
+        # TODO:
         pass

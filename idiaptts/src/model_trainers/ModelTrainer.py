@@ -64,6 +64,11 @@ class ModelTrainer(object):
 
         assert(hparams is not None)
 
+        if not hasattr(hparams, "batch_size_train") or not hparams.batch_size_train > 1:
+            hparams.variable_sequence_length_train = False
+        if not hasattr(hparams, "batch_size_val") or not hparams.batch_size_val > 1:
+            hparams.variable_sequence_length_val = False
+
         if hparams.use_gpu:
             if hparams.num_gpus > 1:
                 os.environ['CUDA_VISIBLE_DEVICES'] = str(tuple(range(hparams.num_gpus)))
@@ -107,9 +112,11 @@ class ModelTrainer(object):
                                                                            else id_list_shuffled[num_valset:]
         assert(len(self.id_list_train) > 0)
 
-        # Data attributes.
-        self.model_handler = None  # A handler for the NN models depending on the NN frameworks.
+        # Create and initialize model.
+        self.logger.info("Create ModelHandler.")
+        self.model_handler = ModelHandlerPyTorch()  # A handler for the NN models depending on the NN frameworks.
 
+        # Data attributes.
         self.InputGen = None  # Used in the datasets.
         self.OutputGen = None  # Used in the datasets.
         self.dataset_train = None
@@ -124,15 +131,34 @@ class ModelTrainer(object):
         if not hasattr(self, "loss_function"):
             self.loss_function = None  # Has to be defined by subclass.
 
+        self.current_epoch = None
+
     @staticmethod
     def create_hparams(hparams_string=None, verbose=False):
         """Create model hyperparameters. Parse nondefault from given string."""
 
-        hparams = HParams(
+        class ExtendedHParams(HParams):
+            def add_hparams(self, **kwarg):
+                for key, value in kwarg.items():
+                    try:
+                        self.add_hparam(key, value)
+                    except ValueError:
+                        self.set_hparam(key, value)
+
+            def verify(self):
+                for attr, value in self.__dict__.items():
+                    if attr not in ["_hparam_types", "_model_structure"]:
+                        if attr not in self._hparam_types:
+                            logging.warning("Attribute {} not in types dictionary. Please use add_hparam or add_hparams to add attributes.".format(attr))
+
+        hparams = ExtendedHParams(
             ################################
             # General Parameters           #
             ################################
 
+            voice=None,  # Specifies a part of the dataset used.
+            work_dir=None,  # Directory from where the script is running.
+            data_dir=None,  # Database directory.
             logging_batch_index_perc=10,  # Percentage of samples used from the full dataset between logging the loss for training and testing.
             start_with_test=True,  # Determines if the model is tested first before any training loops.
                                    # The computed loss is also used to identify the best model so far.
@@ -196,7 +222,7 @@ class ModelTrainer(object):
             # Audio Parameters             #
             ################################
             # sampling_frequency=16000,  # TODO: Unused?
-            frame_size=5,
+            frame_size_ms=5,
             # max_wav_value=32768.0,
 
             ################################
@@ -302,11 +328,6 @@ class ModelTrainer(object):
 
     def init(self, hparams):
 
-        # Create and initialize model.
-        self.logger.info("Create ModelHandler.")
-        self.model_handler = ModelHandlerPyTorch(hparams)
-
-        self.logger.info("Model handler ready.")
         self.logger.info("CPU memory: " + str(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1e3) + " MB.")
         if hparams.use_gpu:
             self.logger.info("GPU memory: " + str(get_gpu_memory_map()) + " MB.")
@@ -326,11 +347,11 @@ class ModelTrainer(object):
             # Try to load the model. If it doesn't exist, create a new one and save it.
             # Return the loaded/created model, because no training was requested.
             try:
-                self.model_handler.load_checkpoint(hparams.model_path,
-                                                   hparams,
-                                                   hparams.optimiser_args["lr"] if hasattr(hparams, "optimiser_args")
-                                                                           and "lr" in hparams.optimiser_args
-                                                                           else 0.0)
+                self.current_epoch = self.model_handler.load_checkpoint(hparams.model_path,
+                                                                        hparams,
+                                                                        hparams.optimiser_args["lr"] if hasattr(hparams, "optimiser_args")
+                                                                                                     and "lr" in hparams.optimiser_args
+                                                                                                     else 0.0)
             except FileNotFoundError:
                 if hparams.model_type is None:
                     self.logger.error("Model does not exist at {} and you didn't give model_type to create a new one.".format(hparams.model_path))
@@ -339,20 +360,22 @@ class ModelTrainer(object):
                     self.logger.warning('Model does not exist at {}. Creating a new one instead and saving it.'.format(hparams.model_path))
                     dim_in, dim_out = self.dataset_train.get_dims()
                     self.model_handler.create_model(hparams, dim_in, dim_out)
-                    self.model_handler.save_checkpoint(model_path_out)
+                    self.current_epoch = 0
+                    self.model_handler.save_checkpoint(model_path_out, self.current_epoch)
 
             self.logger.info("Model ready.")
-            return self.model_handler
+            return
 
         if hparams.model_type is None:
-            self.model_handler.load_checkpoint(hparams.model_path,
-                                               hparams,
-                                               hparams.optimiser_args["lr"] if hasattr(hparams, "optimiser_args")
-                                                                               and "lr" in hparams.optimiser_args
-                                                                            else 0.0)
+            self.current_epoch = self.model_handler.load_checkpoint(hparams.model_path,
+                                                                    hparams,
+                                                                    hparams.optimiser_args["lr"] if hasattr(hparams, "optimiser_args")
+                                                                                                 and "lr" in hparams.optimiser_args
+                                                                                                 else 0.0)
         else:
             dim_in, dim_out = self.dataset_train.get_dims()
             self.model_handler.create_model(hparams, dim_in, dim_out)
+            self.current_epoch = 0
 
         self.logger.info("Model ready.")
 
@@ -365,7 +388,10 @@ class ModelTrainer(object):
         :return:                 A tuple of (all test loss, all training loss, the model_handler object).
         """
 
+        hparams.verify()  # Verify that attributes were added correctly, print warning for wrongly initialized ones.
         self.logger.info('Final parsed hparams: %s', hparams.values())
+
+        assert(self.model_handler)  # The init function has be called before training.
 
         # Skip training if epochs is not greater 0.
         if hparams.epochs <= 0:
@@ -402,10 +428,83 @@ class ModelTrainer(object):
         #         outputs.append(nn_model.forward(dict_input_labels[self.plot_per_epoch_id_name]))
         #     self.plot_outputs(epochs, self.plot_per_epoch_id_name, outputs, dict_output_labels[self.plot_per_epoch_id_name])
         # else:
-        t_start = timer()
+        # assert(self.loss_function)    # Please set self.loss_function in the trainer construction.
 
+        # Some sanity checks.
+        if hparams.epochs_per_scheduler_step:
+            if hparams.epochs_per_test > hparams.epochs_per_scheduler_step:
+                self.logger.warning("Model is validated only every {} epochs, ".format(hparams.epochs_per_test) +
+                                    "but scheduler is supposed to run every {} epochs.".format(hparams.epochs_per_scheduler_step))
+            if hparams.epochs_per_test % hparams.epochs_per_scheduler_step != 0:
+                self.logger.warning("hparams.epochs_per_test ({}) % hparams.epochs_per_scheduler_step ({}) != 0. "
+                                    .format(hparams.epochs_per_test, hparams.epochs_per_scheduler_step) +
+                                    "Note that the scheduler is only run when current_epoch % " +
+                                    "hparams.epochs_per_scheduler_step == 0. Therefore hparams.epochs_per_scheduler_step " +
+                                    "should be a factor of hparams.epochs_per_test.")
+
+        t_start = timer()
         self.logger.info('Start training: ' + str(datetime.now()))
-        all_loss, all_loss_train = self.model_handler.run(hparams, self.loss_function)
+        # all_loss, all_loss_train = self.model_handler.run(hparams, self.loss_function)
+
+        self.model_handler.set_optimiser(hparams)
+        self.model_handler.set_scheduler(hparams, self.current_epoch)
+
+        assert(self.loss_function)  # Please set self.loss_function in the trainer construction.
+        self.model_handler.loss_function = self.loss_function.cuda() if hparams.use_gpu else self.loss_function
+
+        all_loss = list()  # List which is returned, containing all loss so that progress is visible.
+        all_loss_train = list()
+        best_loss = np.nan
+        start_epoch = self.current_epoch
+
+        # Compute error before first iteration.
+        if hparams.start_with_test:
+            self.logger.info('Test epoch [{}/{}]:'.format(self.current_epoch, start_epoch + hparams.epochs))
+            loss, loss_features = self.model_handler.test(hparams, self.current_epoch)
+            all_loss_train.append(-1.0)  # Set a placeholder at the train losses.
+            all_loss.append(loss)
+            best_loss = loss  # Variable to save the current best loss.
+
+        for _ in range(hparams.epochs):
+            # Increment epoch number.
+            self.current_epoch += 1
+
+            # Train one epoch.
+            self.logger.info('Train epoch [{}/{}]:'.format(self.current_epoch, start_epoch + hparams.epochs))
+            train_loss = self.model_handler.train(hparams, self.current_epoch, self.loss_function)
+            all_loss_train.append(train_loss)
+            if np.isnan(train_loss):
+                break
+
+            # Test if requested.
+            if self.current_epoch % hparams.epochs_per_test == 0:
+                self.logger.info('Test epoch [{}/{}]:'.format(self.current_epoch, start_epoch + hparams.epochs))
+                # Compute error on validation set.
+                loss, loss_features = self.model_handler.test(hparams, self.current_epoch)
+
+                # Save loss in a list which is returned.
+                all_loss.append(loss)
+
+                # Stop when loss is NaN. Reloading from checkpoint if necessary.
+                if np.isnan(loss):
+                    break
+
+                # Save checkpoint if path is given.
+                if hparams.out_dir is not None:
+                    path_checkpoint = os.path.join(hparams.out_dir, hparams.networks_dir, hparams.checkpoints_dir)
+                    # Check when to save a checkpoint.
+                    if hparams.epochs_per_checkpoint > 0 and self.current_epoch % hparams.epochs_per_checkpoint == 0:
+                        model_name = "{}-e{}-{}".format(hparams.model_name, self.current_epoch, self.loss_function)
+                        self.model_handler.save_checkpoint(os.path.join(path_checkpoint, model_name), self.current_epoch)
+                    # Always save best checkpoint with special name.
+                    if loss < best_loss or np.isnan(best_loss):
+                        best_loss = loss
+                        model_name = hparams.model_name + "-best"
+                        self.model_handler.save_checkpoint(os.path.join(path_checkpoint, model_name), self.current_epoch)
+
+                # Run the scheduler if requested.
+                if hparams.epochs_per_scheduler_step and self.current_epoch % hparams.epochs_per_scheduler_step == 0:
+                    self.model_handler.run_scheduler(loss, self.current_epoch + 1)
 
         t_training = timer() - t_start
         self.logger.info('Training time: ' + str(timedelta(seconds=t_training)))
@@ -417,22 +516,22 @@ class ModelTrainer(object):
             if hparams.use_best_as_final_model:
                 best_model_path = os.path.join(hparams.out_dir, hparams.networks_dir, hparams.checkpoints_dir, hparams.model_name + "-best")
                 try:
-                    self.model_handler.load_checkpoint(best_model_path,
-                                                       hparams,
-                                                       hparams.optimiser_args["lr"] if hparams.optimiser_args["lr"]
-                                                                                    else hparams.learning_rate)
+                    self.current_epoch = self.model_handler.load_checkpoint(best_model_path,
+                                                                            hparams,
+                                                                            hparams.optimiser_args["lr"] if hparams.optimiser_args["lr"]
+                                                                                                         else hparams.learning_rate)
                     if self.model_handler.ema:  # EMA model should be used as best model.
-                        self.model_handler.model = self.model_handler.ema
+                        self.model_handler.model = self.model_handler.ema.model
                         self.model_handler.ema = None  # Reset this one so that a new one is created for further training.
-                        self.logger.info("Using best EMA model (epoch {}) as final model.".format(self.model_handler.current_epoch))
+                        self.logger.info("Using best EMA model (epoch {}) as final model.".format(self.current_epoch))
                     else:
-                        self.logger.info("Using best (epoch {}) as final model.".format(self.model_handler.current_epoch))
+                        self.logger.info("Using best (epoch {}) as final model.".format(self.current_epoch))
                 except FileNotFoundError:
                     self.logger.warning("No best model exists yet. Continue with the current one.")
 
             # Save the model if requested.
             if hparams.save_final_model:
-                self.model_handler.save_checkpoint(os.path.join(hparams.out_dir, hparams.networks_dir, hparams.model_name))
+                self.model_handler.save_checkpoint(os.path.join(hparams.out_dir, hparams.networks_dir, hparams.model_name), self.current_epoch)
 
         return all_loss, all_loss_train, self.model_handler
 
@@ -765,53 +864,61 @@ class ModelTrainer(object):
                 file.close()
                 os.remove(file_path + ".wav")
 
-    # def run_r9y9wavenet_quantized_16k_world_feats_synth(self, synth_output, hparams):
-    #     synth_output = copy.copy(synth_output)
-    #
-    #     wavenet_model_handler = ModelHandlerPyTorch(hparams)
-    #     wavenet_model_handler.load_checkpoint(hparams.synth_vocoder_path, hparams.use_gpu)
-    #
-    #     input_fs_Hz = 1000.0 / hparams.frame_size_ms
-    #     in_to_out_multiplier = hparams.frame_rate_output_Hz / input_fs_Hz
-    #     # dir_world_features = os.path.join(self.OutputGen.dir_labels, self.dir_extracted_acoustic_features)
-    #     input_gen = WorldFeatLabelGen(None,
-    #                                   add_deltas=False,
-    #                                   sampling_fn=partial(sample_linearly, in_to_out_multiplier=in_to_out_multiplier, dtype=np.float32))
-    #     # Load normalisation parameters for wavenet input.
-    #     try:
-    #         norm_params_path = os.path.splitext(hparams.synth_vocoder_path)[0] + "_norm_params.bin"
-    #         input_gen.norm_params = np.fromfile(norm_params_path, dtype=np.float64).reshape(2, -1)
-    #     except FileNotFoundError:
-    #         self.logger.error("Cannot find normalisation parameters for WaveNet input at {}. Please save them there.".format(norm_params_path))
-    #         raise
-    #
-    #     for id_name, output in synth_output.items():
-    #         logging.info("Synthesise {} with {} vocoder.".format(id_name, hparams.synth_vocoder_path))
-    #
-    #         output = input_gen.preprocess_sample(output)
-    #         # output = output[:5]
-    #
-    #         # output (T x C) --transpose--> (C x T) --unsqueeze(0)--> (B x C x T).
-    #         output = output.transpose()[None, ...]
-    #         # Wavenet input has to be (B x C x T).
-    #         output = wavenet_model_handler.forward(output, hparams, batch_seq_lengths=(output.shape[-1],))
-    #         output = output[0].transpose()  # Remove batch dim and transpose back to (T x C).
-    #         # Revert mu-law quantization.
-    #         output = output.argmax(axis=1)
-    #         synth_output[id_name] = RawWaveformLabelGen.mu_law_companding_reversed(output, hparams.mu)
-    #
-    #     org_bit_depth = hparams.bit_depth if hasattr(hparams, 'bit_depth') else None
-    #     hparams.bit_depth = 16
-    #
-    #     # Add identifier to suffix.
-    #     old_synth_file_suffix = hparams.synth_file_suffix
-    #     hparams.synth_file_suffix += '_' + hparams.synth_vocoder
-    #
-    #     self.run_raw_synth(synth_output, hparams)
-    #
-    #     # Restore identifier.
-    #     hparams.synth_file_suffix = old_synth_file_suffix
-    #     hparams.bit_depth = org_bit_depth
+    def run_r9y9wavenet_mulaw_world_feats_synth(self, synth_output, hparams):
+        from idiaptts.src.neural_networks.pytorch.models.WaveNetWrapper import WaveNetWrapper
+        from idiaptts.src.data_preparation.audio.RawWaveformLabelGen import RawWaveformLabelGen
+
+        org_model_type = hparams.model_type
+        hparams.model_type = WaveNetWrapper.IDENTIFIER
+
+        synth_output = copy.copy(synth_output)
+
+        input_fs_Hz = 1000.0 / hparams.frame_size_ms
+        in_to_out_multiplier = hparams.frame_rate_output_Hz / input_fs_Hz
+        # dir_world_features = os.path.join(self.OutputGen.dir_labels, self.dir_extracted_acoustic_features)
+        input_gen = WorldFeatLabelGen(None,
+                                      add_deltas=False,
+                                      sampling_fn=partial(sample_linearly, in_to_out_multiplier=in_to_out_multiplier, dtype=np.float32))
+        # Load normalisation parameters for wavenet input.
+        try:
+            norm_params_path = os.path.splitext(hparams.synth_vocoder_path)[0] + "_norm_params.npy"
+            input_gen.norm_params = np.load(norm_params_path).reshape(2, -1)
+        except FileNotFoundError:
+            self.logger.error("Cannot find normalisation parameters for WaveNet input at {}."
+                              "Please save them there with numpy.save().".format(norm_params_path))
+            raise
+
+        wavenet_model_handler = ModelHandlerPyTorch()
+        wavenet_model_handler.model, *_ = wavenet_model_handler.load_model(wavenet_model_handler.model_factory, hparams.synth_vocoder_path, hparams, verbose=False)
+        # wavenet_model_handler.load_checkpoint(hparams.synth_vocoder_path, hparams.use_gpu)
+
+        for id_name, output in synth_output.items():
+            logging.info("Synthesise {} with {} vocoder.".format(id_name, hparams.synth_vocoder_path))
+
+            output = input_gen.preprocess_sample(output)
+
+            # output (T x C) --transpose--> (C x T) --unsqueeze(0)--> (B x C x T).
+            output = output.transpose()[None, ...]
+            # Wavenet input has to be (B x C x T).
+            output, _ = wavenet_model_handler.forward(output, hparams, batch_seq_lengths=(output.shape[-1],))
+            output = output[0].transpose()  # Remove batch dim and transpose back to (T x C).
+            # Revert mu-law quantization.
+            output = output.argmax(axis=1)
+            synth_output[id_name] = RawWaveformLabelGen.mu_law_companding_reversed(output, hparams.mu)
+
+        org_bit_depth = hparams.bit_depth if hasattr(hparams, 'bit_depth') else None
+        hparams.bit_depth = 16
+
+        # Add identifier to suffix.
+        old_synth_file_suffix = hparams.synth_file_suffix
+        hparams.synth_file_suffix += '_' + hparams.synth_vocoder
+
+        self.run_raw_synth(synth_output, hparams)
+
+        # Restore identifier.
+        hparams.model_type = org_model_type
+        hparams.synth_file_suffix = old_synth_file_suffix
+        hparams.bit_depth = org_bit_depth
 
     def run_raw_synth(self, synth_output, hparams):
         """Use Pydub to synthesis audio from raw data given in the synth_output dictionary."""
@@ -852,13 +959,13 @@ class ModelTrainer(object):
         if hparams.synth_vocoder == "WORLD":
             self.run_world_synth(synth_output, hparams)
         # elif hparams.synth_vocoder == "STRAIGHT":  # Add further vocoders here.
-        elif hparams.synth_vocoder == "r9y9wavenet_quantized_16k_world_feats_English":
+        elif hparams.synth_vocoder == "r9y9wavenet_mulaw_16k_world_feats_English":
 
             # If no path is given, use pre-trained model.
             if not hasattr(hparams, "synth_vocoder_path") or hparams.synth_vocoder_path is None:
                 parent_dirs = os.path.realpath(__file__).split(os.sep)
-                dir_itts = str.join(os.sep, parent_dirs[:parent_dirs.index(main_dir) + 1])
-                hparams.synth_vocoder_path = os.path.join(dir_itts, "misc", "pretrained", "r9y9wavenet_quantized_16k_world_feats_English.nn")
+                dir_root = str.join(os.sep, parent_dirs[:parent_dirs.index("IdiapTTS") + 1])
+                hparams.synth_vocoder_path = os.path.join(dir_root, "idiaptts", "misc", "pretrained", "r9y9wavenet_quantized_16k_world_feats_English.nn")
 
             # Default quantization is with mu=255.
             if not hasattr(hparams, "mu") or hparams.mu is None:
@@ -866,6 +973,8 @@ class ModelTrainer(object):
 
             org_frame_rate_output_Hz = hparams.frame_rate_output_Hz if hasattr(hparams, 'frame_rate_output_Hz') else None
             hparams.frame_rate_output_Hz = 16000
-            self.run_r9y9wavenet_quantized_16k_world_feats_synth(synth_output, hparams)
-            hparams.frame_rate_output_Hz = org_frame_rate_output_Hz
 
+            self.run_r9y9wavenet_mulaw_world_feats_synth(synth_output, hparams)
+
+            hparams.frame_rate_output_Hz = org_frame_rate_output_Hz
+            # TODO: Convert to requested frame rate.
