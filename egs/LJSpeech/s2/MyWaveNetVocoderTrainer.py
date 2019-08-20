@@ -34,25 +34,20 @@ class MyWaveNetVocoderTrainer(WaveNetVocoderTrainer):
         """Set your parameters here."""
         dir_world_features = os.path.join(hparams.work_dir, "WORLD")
 
-        # if hparams.voice == "demo":
-        #     # DEBUG
-        #     with open(os.path.join(os.path.realpath("database"), "file_id_list_test.txt")) as f:
-        #         id_list = f.readlines()
-        #     id_list[:] = [s.strip(' \t\n\r') for s in id_list]
-        #     for index, id_name in enumerate(id_list):
-        #         id_list[index] = os.path.join(os.path.realpath("database"), "wav", id_name + ".wav")
-        # else:
         # Read which files to process.
         with open(os.path.join(os.path.realpath("database"), "file_id_list_" + hparams.voice + ".txt")) as f:
             id_list = f.readlines()
         id_list[:] = [s.strip(' \t\n\r') for s in id_list]
-        # The WaveNet implemenation requires the full path.
+
+        # The WaveNet implementation requires the full path.
         for index, id_name in enumerate(id_list):
             id_list[index] = os.path.join(os.path.realpath(hparams.data_dir), id_name + ".wav")
-        # for directory in hparams.data_dir:
-        #     id_list += glob.glob(os.path.join(directory, "**", "*.wav"), recursive=True)  # Recursively find all wav files.
-        assert(len(id_list) > 0)
 
+        # Or recursively find all wav files in data directory.
+        # for directory in hparams.data_dir:
+        #     id_list += glob.glob(os.path.join(directory, "**", "*.wav"), recursive=True)
+
+        assert(len(id_list) > 0)
         super().__init__(dir_world_features, id_list, hparams)
 
 
@@ -62,9 +57,8 @@ def main():
     hparams = MyWaveNetVocoderTrainer.create_hparams()  # TODO: Parse input for hparams.
 
     # General parameters
-    # hparams.num_questions = 425
     hparams.frame_rate_output_Hz = 16000  # Output frequency.
-    hparams.frame_size_ms = 5  # ms
+    hparams.frame_size_ms = 5
     hparams.voice = "full"
     hparams.work_dir = os.path.realpath(os.path.join("experiments", hparams.voice))
     hparams.data_dir = os.path.realpath("database/wav/")
@@ -81,10 +75,11 @@ def main():
     hparams.batch_size_synth = 1 * hparams.num_gpus
     hparams.test_set_perc = 0.01
     hparams.val_set_perc = 0.01
-    hparams.use_saved_learning_rate = False  # Don't override learning rate if loaded from checkpoint.
+    hparams.use_saved_learning_rate = False
     hparams.learning_rate = 0.001
     hparams.seed = 1234
-    hparams.epochs_per_checkpoint = 4
+    hparams.epochs_per_test = 4
+    hparams.epochs_per_checkpoint = hparams.epochs_per_test
     hparams.use_cond = True
     hparams.start_with_test = False
     hparams.ema_decay = 0.9999
@@ -101,7 +96,7 @@ def main():
     hparams.max_input_train_sec = 1.5
     hparams.max_input_test_sec = 2.0
 
-    # GMM parameter setup.
+    # MoL parameter setup.
     # hparams.input_type = "raw"
     # hparams.hinge_regularizer = True
     # hparams.quantize_channels = 65536
@@ -121,8 +116,6 @@ def main():
     ]
     hparams.len_in_out_multiplier = 1  # Has to match the upsampling.
 
-    # hparams.layers = 30
-    # hparams.stacks = 3
     if hparams.voice == "demo":
         # DEBUG: Small network for tests.
         hparams.layers = 4
@@ -134,15 +127,14 @@ def main():
         hparams.max_input_test_sec = 1.0
 
     hparams.model_type = "r9y9WaveNet"
-    hparams.model_name = "wn-2-l{}s{}k{}-{}{}{}k-lr_{}{}.nn".format(hparams.layers,
-                                                                    hparams.stacks,
-                                                                    hparams.kernel_size,
-                                                                    ("raw{}-".format(num_mixtures) if not hparams.input_type == "mulaw-quantize" else ""),
-                                                                    ("uncond-" if not hparams.use_cond else ""),
-                                                                    int(hparams.frame_rate_output_Hz / 1000),
-                                                                    hparams.learning_rate,
-                                                                    ("-dp" if hparams.num_gpus > 1 else ""))
-    # hparams.model_name = "wavenet_vocoder-1-l30-16k-lr_0005-e40.nn"
+    hparams.model_name = "wn-l{}s{}k{}-{}{}{}k-lr_{}{}.nn".format(hparams.layers,
+                                                                  hparams.stacks,
+                                                                  hparams.kernel_size,
+                                                                  ("raw{}-".format(num_mixtures) if not hparams.input_type == "mulaw-quantize" else ""),
+                                                                  ("uncond-" if not hparams.use_cond else ""),
+                                                                  int(hparams.frame_rate_output_Hz / 1000),
+                                                                  hparams.learning_rate,
+                                                                  ("-dp" if hparams.num_gpus > 1 else ""))
 
     trainer = MyWaveNetVocoderTrainer(hparams)
     trainer.init(hparams)
@@ -150,17 +142,16 @@ def main():
     trainer.save_for_vocoding(hparams.model_name)
 
     synth_file_id_list = random.choices(trainer.id_list_test, k=3)
-    # path_db = hparams.data_dir
     for index, id_name in enumerate(synth_file_id_list):
         synth_file_id_list[index] = os.path.splitext(id_name)[0]  # Get rid of the .wav in the ids.
-        # synth_file_id_list[index] = os.path.join(path_db, id_name[:7], id_name + ".wav")
+        # synth_file_id_list[index] = os.path.join(path_db, id_name[:7], id_name + ".wav")  # Multi-speaker case.
 
     trainer.synth(hparams, synth_file_id_list)
     # trainer.synth_ref(synth_file_id_list, hparams)
     # hparams.synth_vocoder = "WORLD"
     # trainer.synth_vocoder(synth_file_id_list, hparams)
 
-    # trainer.benchmark(hparams) Not implemented.
+    # trainer.benchmark(hparams) # Not implemented.
 
 
 if __name__ == '__main__':

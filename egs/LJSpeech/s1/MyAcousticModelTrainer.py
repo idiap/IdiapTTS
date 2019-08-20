@@ -91,9 +91,11 @@ def main():
 
     synth_file_id_list = random.choices(trainer.id_list_test, k=3)
     hparams.synth_gen_figure = False
-    # hparams.synth_vocoder = "WORLD"
-    hparams.synth_vocoder = "r9y9wavenet_mulaw_16k_world_feats_English"
-    hparams.synth_vocoder_path = os.path.realpath("wn-l12s2k2-16k.nn")
+    # Use the following line to synthesise with the WORLD vocoder.
+    hparams.synth_vocoder = "WORLD"
+    # Use the following two lines to synthesise with a pre-trained WaveNet (will take some time).
+    # hparams.synth_vocoder = "r9y9wavenet_mulaw_16k_world_feats_English"
+    # hparams.synth_vocoder_path = os.path.realpath("wn-l12s2k2-16k.nn")
 
     # with open(os.path.join(hparams.data_dir, "file_id_list_full_eval.txt" + sys.argv[1])) as f:
     #     synth_file_id_list = f.readlines()
