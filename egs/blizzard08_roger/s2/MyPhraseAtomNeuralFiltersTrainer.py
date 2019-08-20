@@ -102,7 +102,7 @@ def main():
     hparams_flat.model_name = hparams_phrase.model_name + "_flat"
 
     hparams_flat.batch_size_train = 5
-    hparams_flat.learning_rate = 0.001
+    hparams_flat.optimiser_args["lr"] = 0.001
     hparams_flat.complex_poles = True
     hparams_flat.start_with_test = True
     hparams_flat.scheduler_type = "Plateau"
@@ -113,7 +113,7 @@ def main():
     # hparams_atom.model_type = None
     hparams_atom.model_name = hparams_flat.model_name + "_atoms"
     hparams_atom.dropout = 0.0
-    hparams_atom.learning_rate = 0.0002
+    hparams_atom.optimiser_args["lr"] = 0.0002
     hparams_atom.batch_size_train = 2
     hparams_atom.epochs = 50  # If 0, model is loaded by hparams.model_name + "_atoms"
     hparams_atom.train_hidden_init = False

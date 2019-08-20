@@ -44,7 +44,7 @@ class TestModelTrainer(unittest.TestCase):
     def _get_hparams(self):
         hparams = ModelTrainer.create_hparams()
         # General parameters
-        hparams.num_questions = 409
+        hparams.add_hparam("num_questions", 409)
         hparams.epochs = 0
         hparams.test_set_perc = 0.05
         hparams.val_set_perc = 0.05
@@ -380,7 +380,9 @@ class TestModelTrainer(unittest.TestCase):
 
         trainer = self._get_trainer(hparams)
         trainer.init(hparams)
-        trainer.train(hparams)
+        with unittest.mock.patch.object(trainer.logger, "warning") as mock_logger:
+            trainer.train(hparams)
+            mock_logger.assert_called_with("No best model exists yet. Continue with the current one.")
 
         shutil.rmtree(hparams.out_dir)
 

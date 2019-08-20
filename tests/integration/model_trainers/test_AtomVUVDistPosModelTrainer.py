@@ -52,7 +52,7 @@ class TestAtomVUVDistPosModelTrainer(unittest.TestCase):
         hparams.batch_size_train = 2
         hparams.batch_size_val = 2
         hparams.use_saved_learning_rate = True
-        hparams.learning_rate = 0.0002
+        hparams.optimiser_args["lr"] = 0.0002
         hparams.model_name = "test_model.nn"
         hparams.epochs_per_checkpoint = 2
 

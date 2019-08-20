@@ -80,12 +80,12 @@ class AtomVUVDistPosModelTrainer(AtomModelTrainer):
         if not hasattr(hparams, "weight_zero") or hparams.weight_zero is None:
             non_zero_occurrence = min(0.99, 0.015 / len(thetas))
             zero_occurrence = 1 - non_zero_occurrence
-            hparams.weight_non_zero = 1 / non_zero_occurrence
-            hparams.weight_zero = 1 / zero_occurrence
+            hparams.add_hparam("weight_non_zero", 1 / non_zero_occurrence)
+            hparams.add_hparam("weight_zero", 1 / zero_occurrence)
         if not hasattr(hparams, "weight_vuv") or hparams.weight_vuv is None:
-            hparams.weight_vuv = 0.5
+            hparams.add_hparam("weight_vuv", 0.5)
         if not hasattr(hparams, "atom_loss_theta") or hparams.atom_loss_theta is None:
-            hparams.atom_loss_theta = 0.01
+            hparams.add_hparam("atom_loss_theta", 0.01)
 
         # Explicitly call only the constructor of the baseclass of AtomModelTrainer.
         super(AtomModelTrainer, self).__init__(id_list, hparams)
@@ -105,7 +105,12 @@ class AtomVUVDistPosModelTrainer(AtomModelTrainer):
         self.dataset_val = PyTorchLabelGensDataset(self.id_list_val, self.InputGen, self.OutputGen, hparams, match_lengths=True)
 
         if self.loss_function is None:
-            self.loss_function = WeightedNonzeroWMSEAtomLoss(hparams.use_gpu, hparams.atom_loss_theta, hparams.weight_vuv, hparams.weight_zero, hparams.weight_non_zero, reduce=False)
+            self.loss_function = WeightedNonzeroWMSEAtomLoss(use_gpu=hparams.use_gpu,
+                                                             theta=hparams.atom_loss_theta,
+                                                             weights_vuv=hparams.weight_vuv,
+                                                             weights_zero=hparams.weight_zero,
+                                                             weights_non_zero=hparams.weight_non_zero,
+                                                             reduce=False)
 
         if hparams.scheduler_type == "default":
             hparams.scheduler_type = "None"

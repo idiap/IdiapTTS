@@ -100,7 +100,11 @@ class AtomModelTrainer(ModelTrainer):
     def create_hparams(hparams_string=None, verbose=False):
         hparams = ModelTrainer.create_hparams(hparams_string, verbose=False)
 
-        hparams.add_hparam("min_atom_amp", 0.3)
+        hparams.add_hparams(thetas=None,
+                            k=None,
+                            min_atom_amp=0.3,
+                            num_questions=None
+                            )
 
         if verbose:
             logging.info('Final parsed hparams: %s', hparams.values())

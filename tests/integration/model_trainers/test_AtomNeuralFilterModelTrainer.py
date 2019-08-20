@@ -57,7 +57,7 @@ class TestAtomNeuralFilterModelTrainer(unittest.TestCase):
         hparams.batch_size_train = 2
         hparams.batch_size_val = 2
         hparams.use_saved_learning_rate = True
-        hparams.learning_rate = 0.0006
+        hparams.optimiser_args["lr"] = 0.0006
         hparams.model_path = os.path.join("integration", "fixtures", "neural_filters_model_in409_out2.nn")
         hparams.model_name = "test_model.nn"
         hparams.epochs_per_checkpoint = 2
@@ -74,7 +74,7 @@ class TestAtomNeuralFilterModelTrainer(unittest.TestCase):
         hparams_atom.model_name = hparams.model_name + "_atoms"
         hparams_atom.model_path = os.path.join("integration", "fixtures", "test_model_in409_out7.nn")
         hparams_atom.dropout = 0.0
-        hparams_atom.learning_rate = 0.0002
+        hparams_atom.optimiser_args["lr"] = 0.0002
         hparams_atom.batch_size_train = 2
         hparams_atom.epochs = 0  # If 0, model is loaded by name.
 
@@ -248,4 +248,5 @@ class TestAtomNeuralFilterModelTrainer(unittest.TestCase):
         shutil.rmtree(hparams.out_dir)
 
     def test_complex_poles(self):
+        # TODO:
         pass
