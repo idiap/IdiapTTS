@@ -48,7 +48,7 @@ class TestAtomNeuralFilterModelTrainer(unittest.TestCase):
         hparams.num_coded_sps = 20
         hparams.seed = 1
         hparams.dist_window_size = 31  # [frames] should be odd.
-        hparams.complex_poles = False  # TODO: Test True,
+        hparams.complex_poles = False
 
         # Training parameters.
         hparams.epochs = 3
@@ -65,7 +65,7 @@ class TestAtomNeuralFilterModelTrainer(unittest.TestCase):
 
         hparams.vuv_loss_weight = 0.1
         hparams.L1_loss_weight = 0.1
-        hparams.vuv_weight = 0
+        hparams.weight_unvoiced = 0
         hparams.atom_model_path = os.path.join("integration", "fixtures", "test_model_in409_out7.nn")
 
         hparams_atom = copy.deepcopy(hparams)

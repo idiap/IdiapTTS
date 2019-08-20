@@ -86,7 +86,7 @@ def main():
 
     hparams.vuv_loss_weight = 0.1
     hparams.L1_loss_weight = 0.1
-    hparams.vuv_weight = 0
+    hparams.weight_unvoiced = 0
 
     hparams_atom = copy.deepcopy(hparams)
     hparams_atom.synth_gen_figure = False

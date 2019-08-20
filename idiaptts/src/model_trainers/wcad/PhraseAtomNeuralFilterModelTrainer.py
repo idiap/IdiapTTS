@@ -102,9 +102,9 @@ class PhraseAtomNeuralFilterModelTrainer(ModelTrainer):
                                                          id_list, thetas, k, num_questions, dist_window_size, hparams_flat)
 
         if self.loss_function is None:
-            self.loss_function = L1WeightedVUVMSELoss(weight=hparams_phrase.vuv_weight,
+            self.loss_function = L1WeightedVUVMSELoss(weight_unvoiced=hparams_phrase.weight_unvoiced,
                                                       vuv_loss_weight=hparams_phrase.vuv_loss_weight,
-                                                      L1_weight=hparams_phrase.L1_loss_weight,
+                                                      L1_loss_weight=hparams_phrase.L1_loss_weight,
                                                       reduce=False)
         if hparams_phrase.scheduler_type == "default":
             hparams_phrase.scheduler_type = "None"
@@ -118,12 +118,21 @@ class PhraseAtomNeuralFilterModelTrainer(ModelTrainer):
         hparams = ModelTrainer.create_hparams(hparams_string, verbose=False)
 
         hparams.add_hparams(
-            synth_gen_figure=False,
-            complex_poles=True,
-            phase_init=0.0,
-            vuv_loss_weight=1,
-            L1_loss_weight=1,
-            vuv_weight=0.5)
+            thetas=None,  # One initial theta value per filter.
+            k=2,  # Order of the impulse response of the atoms.
+            min_atom_amp=0.25,  # Post-processing removes atoms with an absolute amplitude smaller than this.
+            complex_poles=True,  # Comples poles possible.
+            phase_init=0.0,  # Initial phase of the filters.
+            vuv_loss_weight=1,  # Weight of the VUV RMSE.
+            L1_loss_weight=1,  # Weight of the L1 loss on the spiking inputs.
+            weight_unvoiced=0.5,  # Weight on unvoiced frames.
+            num_questions=None,  # Dimension of the input questions.
+            dist_window_size=51,  # Size of distribution around spikes when training the AtomModel.
+            atom_model_path=None,  # Path to load a pre-trained atom model from.
+            hparams_atom=None,  # Hyper-parameter container used in the AtomModelTrainer
+            flat_model_path=None,  # Path to load a pre-trained atom neural filter model from (without phrase curve).
+            hparams_flat=None,  # Hyper-parameter container used in the AtomNeuralFilterModelTrainer.
+            )
 
         if verbose:
             logging.info('Final parsed hparams: %s', hparams.values())

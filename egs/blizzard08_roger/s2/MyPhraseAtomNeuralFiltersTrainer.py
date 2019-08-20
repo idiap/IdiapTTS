@@ -82,7 +82,7 @@ def main():
 
     hparams_phrase.vuv_loss_weight = 0.3
     hparams_phrase.L1_loss_weight = 0.3
-    hparams_phrase.vuv_weight = 0
+    hparams_phrase.weight_unvoiced = 0
 
     hparams_flat = copy.deepcopy(hparams_phrase)
 

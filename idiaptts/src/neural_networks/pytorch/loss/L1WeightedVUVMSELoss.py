@@ -11,18 +11,30 @@ from idiaptts.src.neural_networks.pytorch.loss.WMSELoss import WMSELoss, weighte
 
 
 class L1WeightedVUVMSELoss(WMSELoss):
-    def __init__(self, weight=0.5, vuv_loss_weight=1, size_average=True, reduce=True, L1_weight=1, vector_loss=False):
-        super().__init__(2, 1, weight, size_average=size_average, reduce=reduce)
+    def __init__(self, weight_unvoiced=0.5, vuv_loss_weight=1, size_average=True, reduce=True, L1_loss_weight=1, vector_loss=False):
+        """
 
-        self.register_buffer('vuv_weight', torch.Tensor([vuv_loss_weight]).squeeze_())
-        self.register_buffer('L1_weight', torch.Tensor([L1_weight]).squeeze_())
+        :param weight_unvoiced:       Weight of loss at unvoiced frames, voiced frames weight is 1.
+        :param vuv_loss_weight:       Weighting of loss on V/UV flag (decision_index_weight).
+        :param size_average:          Return mean over time, only used when reduce=True.
+        :param reduce:                Sum over time.
+        :param L1_loss_weight:        Weighting of L1 loss on spiking inputs.
+        :param vector_loss:           Return the three losses stacked in the first dimension. Reduce and size_average apply as before.
+        """
+        super().__init__(dim_out=2,
+                         weighting_decision_index=1,
+                         weight=weight_unvoiced,
+                         decision_index_weight=vuv_loss_weight,
+                         size_average=size_average,
+                         reduce=reduce)
+
+        self.register_buffer('L1_loss_weight', torch.Tensor([L1_loss_weight]).squeeze_())
         self.vector_loss = vector_loss
 
     def forward(self, input, target):
         lf0_vuv_input = input[..., 0:2]
         amps_input = input[..., 2:]
 
-        # lf0_vuv_loss = weighted_vuv_mse_loss(lf0_vuv_input, target, self.value_indices, self.weight_index, self.vuv_weight, size_average=False, reduce=False)
         lf0_vuv_loss = super().forward(lf0_vuv_input, target)
         lf0_loss = lf0_vuv_loss[..., 0]
         vuv_loss = lf0_vuv_loss[..., 1]
@@ -40,8 +52,7 @@ class L1WeightedVUVMSELoss(WMSELoss):
             else:
                 return torch.cat((lf0_loss.mean(dim=0), vuv_loss.mean(dim=0), L1_constraint.mean(dim=0)))
         else:
-            vuv_loss.mul_(self.vuv_weight)
-            L1_constraint.mul_(self.L1_weight)
+            L1_constraint.mul_(self.L1_loss_weight)
 
             if not self.reduce:
                 return torch.cat((lf0_vuv_loss, L1_constraint.unsqueeze(-1)), dim=-1)

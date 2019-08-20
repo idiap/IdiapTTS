@@ -99,9 +99,9 @@ class AtomNeuralFilterModelTrainer(ModelTrainer):
                                                        hparams_atom)
 
         if self.loss_function is None:
-            self.loss_function = L1WeightedVUVMSELoss(weight=hparams.vuv_weight,
+            self.loss_function = L1WeightedVUVMSELoss(weight_unvoiced=hparams.weight_unvoiced,
                                                       vuv_loss_weight=hparams.vuv_loss_weight,
-                                                      L1_weight=hparams.L1_loss_weight,
+                                                      L1_loss_weight=hparams.L1_loss_weight,
                                                       reduce=False)
         if hparams.scheduler_type == "default":
             hparams.scheduler_type = "None"
@@ -115,12 +115,19 @@ class AtomNeuralFilterModelTrainer(ModelTrainer):
         hparams = ModelTrainer.create_hparams(hparams_string, verbose=False)
 
         hparams.add_hparams(
-            synth_gen_figure=False,
-            complex_poles=True,
-            phase_init=0.0,
-            vuv_loss_weight=1,
-            L1_loss_weight=1,
-            vuv_weight=0.5)
+            thetas=None,  # One initial theta value per filter.
+            k=2,  # Order of the impulse response of the atoms.
+            min_atom_amp=0.25,  # Post-processing removes atoms with an absolute amplitude smaller than this.
+            complex_poles=True,  # Complex poles possible.
+            phase_init=0.0,  # Initial phase of the filters.
+            vuv_loss_weight=1,  # Weight of the VUV RMSE.
+            L1_loss_weight=1,  # Weight of the L1 loss on the spiking inputs.
+            weight_unvoiced=0.5,  # Weight on unvoiced frames.
+            num_questions=None,  # Dimension of the input questions.
+            dist_window_size=51,  # Size of distribution around spikes when training the AtomModel.
+            atom_model_path=None,  # Path to load a pre-trained atom model from.
+            hparams_atom=None  # Hyper-parameter container used in the AtomModelTrainer
+        )
 
         if verbose:
             logging.info('Final parsed hparams: %s', hparams.values())
