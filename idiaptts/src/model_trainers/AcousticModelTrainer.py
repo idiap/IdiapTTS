@@ -29,7 +29,6 @@ from idiaptts.src.data_preparation.questions.QuestionLabelGen import QuestionLab
 from idiaptts.src.data_preparation.world.WorldFeatLabelGen import WorldFeatLabelGen
 from idiaptts.src.data_preparation.world.WorldFeatLabelGen import interpolate_lin
 from idiaptts.src.data_preparation.PyTorchLabelGensDataset import PyTorchLabelGensDataset as LabelGensDataset
-from idiaptts.misc.utils import numpy_first_not_value, numpy_last_not_value
 
 
 class AcousticModelTrainer(ModelTrainer):
