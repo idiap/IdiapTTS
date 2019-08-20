@@ -37,6 +37,7 @@ def main():
 
     hparams = AcousticModelTrainer.create_hparams()
     hparams.voice = "full"
+    hparams.use_gpu = True
 
     if args.egs_dir is None:
         egs_dir = os.path.dirname(__file__)
@@ -47,25 +48,32 @@ def main():
     tools_dir = os.path.join(proj_dir, "tools")
     tts_frontend_dir = os.path.join(proj_dir, "tools", "tts_frontend")
 
-    hparams.work_dir = os.path.join(egs_dir, "experiments", hparams.voice)
-    hparams.synth_dir = os.path.join(hparams.work_dir, "TTSModelDMAM") if args.out_dir is None else os.path.realpath(args.out_dir)
-    hparams.use_gpu = True
+    hparams.work_dir = os.path.join(egs_dir, "pretrained")
+    hparams.synth_dir = os.path.join(egs_dir, "TTSModelDMAM") if args.out_dir is None else os.path.realpath(args.out_dir)
 
+    # Front-end
     hparams.front_end = os.path.join(tts_frontend_dir, "English", "makeLabels.sh")
     hparams.front_end_accent = "AM"
     hparams.festival_dir = os.path.join(tools_dir, "festival")
-    hparams.file_symbol_dict = os.path.join(hparams.work_dir, "labels", "mono_phone.list")
+
+    # Phoneme
+    hparams.file_symbol_dict = os.path.join(hparams.work_dir, "DM_one-hot_ema99-mono_phone.list")
     hparams.min_phoneme_length = 50000
     hparams.num_phoneme_states = 5
     hparams.file_questions = os.path.join(tts_frontend_dir, "questions", "questions-en-radio_dnn_416.hed")
     hparams.num_questions = 425
-    hparams.question_labels_norm_file = os.path.join(hparams.work_dir, "questions", "min-max.bin")
-    hparams.world_features_dir = os.path.join(hparams.work_dir, "WORLD")
+    hparams.question_labels_norm_file = os.path.join(hparams.work_dir, "AM_mgc30-questions-min-max.bin")
+    # Duration
+    hparams.duration_labels_dir = hparams.work_dir
+    hparams.duration_norm_file_name = "DM_one-hot_ema99-dur"
+    # Acoustic features
+    hparams.world_features_dir = hparams.work_dir
     hparams.num_coded_sps = 30
-    hparams.duration_labels_dir = os.path.join(hparams.work_dir, "dur")
-    hparams.duration_model = os.path.join(hparams.work_dir, "DurationModel", "nn", "DM_b64_lr002_ema99_TTS.nn")
-    hparams.acoustic_model = os.path.join(hparams.work_dir, "AcousticModel", "nn", "AM_b16_lr002_TTS.nn")
-    hparams.synth_vocoder_path = os.path.dirname(egs_dir)
+    # Models
+    hparams.duration_model = os.path.join(hparams.work_dir, "DM_one-hot_ema99.nn")
+    hparams.acoustic_model = os.path.join(hparams.work_dir, "AM_mgc30.nn")
+    # Vocoding
+    hparams.synth_vocoder_path = hparams.work_dir
     hparams.synth_vocoder = "WORLD"
     hparams.batch_size_val = 64
 

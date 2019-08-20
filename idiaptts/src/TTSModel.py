@@ -117,7 +117,7 @@ class TTSModel(object):
             QuestionLabelGen.gen_data(dir_label_state_align, hparams.file_questions, dir_out=tmp_dir_name, file_id_list="synth", id_list=id_list, return_dict=False)
 
             # Run acoustic model and synthesise.
-            shutil.copy2(hparams.question_labels_norm_file, tmp_dir_name)  # Get normalisation parameters in same directory.
+            shutil.copy2(hparams.question_labels_norm_file, tmp_dir_name + "/min-max.bin")  # Get normalisation parameters in same directory.
             acoustic_model_trainer = AcousticModelTrainer(hparams.world_features_dir, tmp_dir_name, id_list, hparams.num_questions, hparams)
             hparams.model_path = hparams.acoustic_model
             acoustic_model_trainer.init(hparams)
