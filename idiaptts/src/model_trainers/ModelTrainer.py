@@ -213,6 +213,8 @@ class ModelTrainer(object):
             ################################
             # Data Parameters             #
             ################################
+            input_norm_params_file_prefix=None,
+            output_norm_params_file_prefix=None,
             len_in_out_multiplier=1,
             out_dir=None,
             world_dir=None,  # Full path to directory with WORLD features, required to synthesise with extracted features.

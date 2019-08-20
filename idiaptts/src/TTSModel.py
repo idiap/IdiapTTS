@@ -86,6 +86,7 @@ class TTSModel(object):
             hparams.test_set_perc = 0.0
             hparams.val_set_perc = 0.0
             hparams.phoneme_label_type = "mono_no_align"
+            hparams.output_norm_params_file_prefix = hparams.duration_norm_file_name if hasattr(hparams, "duration_norm_file_name") else None
             duration_model_trainer = DurationModelTrainer(os.path.join(tmp_dir_name, "mono_no_align"),
                                                           hparams.duration_labels_dir, id_list,
                                                           hparams.file_symbol_dict, hparams)
@@ -94,6 +95,7 @@ class TTSModel(object):
             # Predict durations. Durations are already converted to multiples of hparams.min_phoneme_length.
             duration_model_trainer.init(hparams)
             _, output_dict_post = duration_model_trainer.forward(hparams, id_list)
+            hparams.output_norm_params_file_prefix = None  # Reset again.
 
             # Write duration to full labels.
             dir_full = os.path.join(tmp_dir_name, "labels", "full")

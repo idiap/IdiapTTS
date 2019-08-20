@@ -67,10 +67,10 @@ class AcousticModelTrainer(ModelTrainer):
         super(AcousticModelTrainer, self).__init__(id_list, hparams)
 
         self.InputGen = QuestionLabelGen(dir_question_labels, num_questions)
-        self.InputGen.get_normalisation_params(dir_question_labels)
+        self.InputGen.get_normalisation_params(dir_question_labels, hparams.input_norm_params_file_prefix)
 
         self.OutputGen = WorldFeatLabelGen(dir_world_features, add_deltas=hparams.add_deltas, num_coded_sps=hparams.num_coded_sps)
-        self.OutputGen.get_normalisation_params(dir_world_features)
+        self.OutputGen.get_normalisation_params(dir_world_features, hparams.output_norm_params_file_prefix)
 
         self.dataset_train = LabelGensDataset(self.id_list_train, self.InputGen, self.OutputGen, hparams, match_lengths=True)
         self.dataset_val = LabelGensDataset(self.id_list_val, self.InputGen, self.OutputGen, hparams, match_lengths=True)

@@ -95,11 +95,11 @@ class AtomVUVDistPosModelTrainer(AtomModelTrainer):
             self.logger.warning("hparams.dist_window_size should be odd, changed it to " + str(hparams.dist_window_size))
 
         self.InputGen = QuestionLabelGen(dir_question_labels, num_questions)
-        self.InputGen.get_normalisation_params(dir_question_labels)
+        self.InputGen.get_normalisation_params(dir_question_labels, hparams.input_norm_params_file_prefix)
 
         # Overwrite OutputGen by the one with beta distribution.
         self.OutputGen = AtomVUVDistPosLabelGen(wcad_root, dir_atom_labels, dir_lf0_labels, thetas, k, hparams.frame_size_ms, window_size=dist_window_size)
-        self.OutputGen.get_normalisation_params(dir_atom_labels)
+        self.OutputGen.get_normalisation_params(dir_atom_labels, hparams.output_norm_params_file_prefix)
 
         self.dataset_train = PyTorchLabelGensDataset(self.id_list_train, self.InputGen, self.OutputGen, hparams, match_lengths=True)
         self.dataset_val = PyTorchLabelGensDataset(self.id_list_val, self.InputGen, self.OutputGen, hparams, match_lengths=True)
