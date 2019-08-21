@@ -84,31 +84,30 @@ class ModelTrainer(object):
             hparams.optimiser_args["lr"] = hparams.learning_rate
 
         if hparams.seed is not None:
-            torch.manual_seed(hparams.seed)
+            ModelHandlerPyTorch.seed(hparams.seed)  # Seed the backend.
             np.random.seed(hparams.seed)
             random.seed(hparams.seed)
 
-        if not hasattr(self, "id_list_train") or self.id_list_train is None:
-            id_list_shuffled = id_list
-            if hparams.seed is not None:
-                id_list_shuffled = random.sample(id_list, len(id_list))
+        id_list_shuffled = id_list
+        if hparams.seed is not None:
+            id_list_shuffled = random.sample(id_list, len(id_list))
 
-            # Partition randomly sorted ids into [val_set, train_set, test_set].
-            assert (hparams.test_set_perc + hparams.val_set_perc < 1)
-            if hparams.val_set_perc > 0.0:
-                num_valset = max(1, int(len(id_list_shuffled) * hparams.val_set_perc))
-                self.id_list_val = id_list_shuffled[:num_valset]
-            else:
-                num_valset = 0
-                self.id_list_val = None
-            if hparams.test_set_perc > 0.0:
-                num_testset = max(1, int(len(id_list_shuffled) * hparams.test_set_perc))
-                self.id_list_test = id_list_shuffled[-num_testset:]
-            else:
-                num_testset = 0
-                self.id_list_test = None
-            self.id_list_train = id_list_shuffled[num_valset:-num_testset] if num_testset > 0\
-                                                                           else id_list_shuffled[num_valset:]
+        # Partition (randomly sorted) ids into [val_set, train_set, test_set].
+        assert (hparams.test_set_perc + hparams.val_set_perc < 1)
+        if hparams.val_set_perc > 0.0:
+            num_valset = max(1, int(len(id_list_shuffled) * hparams.val_set_perc))
+            self.id_list_val = id_list_shuffled[:num_valset]
+        else:
+            num_valset = 0
+            self.id_list_val = None
+        if hparams.test_set_perc > 0.0:
+            num_testset = max(1, int(len(id_list_shuffled) * hparams.test_set_perc))
+            self.id_list_test = id_list_shuffled[-num_testset:]
+        else:
+            num_testset = 0
+            self.id_list_test = None
+        self.id_list_train = id_list_shuffled[num_valset:-num_testset] if num_testset > 0\
+                                                                       else id_list_shuffled[num_valset:]
         assert(len(self.id_list_train) > 0)
 
         # Create and initialize model.
@@ -127,8 +126,7 @@ class ModelTrainer(object):
                                         # Only the first element of the result is given to the post-processing function
                                         # of the OutputGen when result is a tuple or list.
 
-        if not hasattr(self, "loss_function"):
-            self.loss_function = None  # Has to be defined by subclass.
+        self.loss_function = None  # Has to be defined by subclass.
 
         self.current_epoch = None
 

@@ -65,6 +65,10 @@ class ModelHandlerPyTorch(ModelHandler):
         return torch.cuda.device_count()
 
     @staticmethod
+    def seed(seed):
+        torch.manual_seed(seed)
+
+    @staticmethod
     def prepare_batch(batch, common_divisor=1, batch_first=False):
         """
         Convert a list of (input, target) tuples to a sorted batch.
