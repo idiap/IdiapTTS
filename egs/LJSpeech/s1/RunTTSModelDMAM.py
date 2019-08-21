@@ -73,9 +73,8 @@ def main():
     hparams.duration_model = os.path.join(hparams.work_dir, "DM_one-hot_ema99.nn")
     hparams.acoustic_model = os.path.join(hparams.work_dir, "AM_mgc30.nn")
     # Vocoding
-    hparams.synth_vocoder_path = hparams.work_dir
-    hparams.synth_vocoder = "WORLD"
     hparams.batch_size_val = 64
+    hparams.synth_vocoder = "WORLD"
 
     TTSModel.run_DM_AM(hparams, input_strings)
 

@@ -95,7 +95,7 @@ def main():
     hparams.synth_vocoder = "WORLD"
     # # Use the following two lines to synthesise with a pre-trained WaveNet (will take some time).
     # hparams.synth_vocoder = "r9y9wavenet_mulaw_16k_world_feats_English"
-    # hparams.synth_vocoder_path = os.path.realpath(os.path.join("pretrained", "wn-l12s2k2-16k_WORLD_mgc30.nn"))
+    # hparams.add_hparam("synth_vocoder_path", os.path.realpath(os.path.join("pretrained", "wn-l12s2k2-16k_WORLD_mgc30.nn")))
 
     # with open(os.path.join(hparams.data_dir, "file_id_list_full_eval.txt" + sys.argv[1])) as f:
     #     synth_file_id_list = f.readlines()

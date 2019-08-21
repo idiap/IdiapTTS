@@ -959,10 +959,14 @@ class ModelTrainer(object):
 
             # Default quantization is with mu=255.
             if not hasattr(hparams, "mu") or hparams.mu is None:
-                hparams.mu = 255
+                hparams.add_hparam("mu", 255)
 
-            org_frame_rate_output_Hz = hparams.frame_rate_output_Hz if hasattr(hparams, 'frame_rate_output_Hz') else None
-            hparams.frame_rate_output_Hz = 16000
+            if hasattr(hparams, 'frame_rate_output_Hz'):
+                org_frame_rate_output_Hz = hparams.frame_rate_output_Hz
+                hparams.frame_rate_output_Hz = 16000
+            else:
+                org_frame_rate_output_Hz = None
+                hparams.add_hparam("frame_rate_output_Hz", 16000)
 
             self.run_r9y9wavenet_mulaw_world_feats_synth(synth_output, hparams)
 
