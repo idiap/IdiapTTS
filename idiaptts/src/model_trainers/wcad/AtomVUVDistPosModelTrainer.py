@@ -284,12 +284,15 @@ class AtomVUVDistPosModelTrainer(AtomModelTrainer):
         return f0_rmse, vuv_error_rate
 
     def synthesize(self, id_list, synth_output, hparams):
-        """This method should be overwritten by sub classes."""
+        """
+        Synthesise LF0 from atoms. The run_atom_synth function either loads the original acoustic features or uses an
+        acoustic model to predict them.
+        """
         full_output = self.run_atom_synth(id_list, synth_output, hparams)
 
         for id_name, labels in full_output.items():
             lf0 = labels[:, -3]
-            lf0 = interpolate_lin(lf0)
+            lf0, _ = interpolate_lin(lf0)
             vuv = synth_output[id_name][:, 0, 1]
             len_diff = len(labels) - len(vuv)
             labels = WorldFeatLabelGen.trim_end_sample(labels, int(len_diff / 2), reverse=True)

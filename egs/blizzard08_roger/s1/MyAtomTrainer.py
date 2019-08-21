@@ -75,7 +75,7 @@ def main():
     hparams.data_dir = os.path.realpath("database")
     hparams.out_dir = os.path.join(hparams.work_dir, "AtomModel")
 
-    hparams.synth_acoustic_model = None  # Set an acoustic model here, not tested.
+    hparams.synth_acoustic_model = None  # Set an acoustic model here, not implemented.
     hparams.frame_size_ms = 5
     hparams.seed = 1
     hparams.dist_window_size = 51  # [frames] should be odd.

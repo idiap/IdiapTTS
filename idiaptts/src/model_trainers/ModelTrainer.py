@@ -196,7 +196,7 @@ class ModelTrainer(object):
                                               # TODO: This does not work yet, because cuda async does lazy loading.
 
             ################################
-            # Data Parameters             #
+            # Data Parameters              #
             ################################
             input_norm_params_file_prefix=None,
             output_norm_params_file_prefix=None,
@@ -208,7 +208,6 @@ class ModelTrainer(object):
             ################################
             # Audio Parameters             #
             ################################
-            # sampling_frequency=16000,  # TODO: Unused?
             frame_size_ms=5,
             # max_wav_value=32768.0,
 
@@ -217,7 +216,7 @@ class ModelTrainer(object):
             ################################
             model_type=None,
             model_name=None,
-            model_path=None,  # Explicitly set path with model name where model is loaded from otherwise dir_out/networks_dir/model_name.
+            model_path=None,  # Full path to load model from, otherwise dir_out/networks_dir/model_name.
             ignore_layers=["type dummy"],  # List of layers which are ignored when loading the model from model_path.
                                            # Giving the dummy ensures that hparams expects a list of strings.
             dropout=0.0,
@@ -842,8 +841,8 @@ class ModelTrainer(object):
 
             # Always save as wav file first and convert afterwards if necessary.
             file_path = os.path.join(save_dir, "{}{}{}{}".format(os.path.basename(id_name),
-                                                                     "_" + hparams.model_name if hparams.model_name is not None else "",
-                                                                     hparams.synth_file_suffix, "_WORLD"))
+                                                                 "_" + hparams.model_name if hparams.model_name is not None else "",
+                                                                 hparams.synth_file_suffix, "_WORLD"))
             makedirs_safe(hparams.synth_dir)
             soundfile.write(file_path + ".wav", waveform, hparams.synth_fs)
 

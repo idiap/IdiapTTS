@@ -397,7 +397,7 @@ class ModelHandlerPyTorch(ModelHandler):
     def save_checkpoint(self, file_path, current_epoch):
         """
         Save checkpoint which consists of epoch number, model type, in/out dimensions, model state dict, whole
-        optimiser, etc. Also save the EMA seperately when one exists.
+        optimiser, etc. Also save the EMA separately when one exists.
         """
         self.logger.info("Save checkpoint to " + file_path)
         makedirs_safe(os.path.dirname(file_path))  # Create directory if necessary.
@@ -486,6 +486,7 @@ class ModelHandlerPyTorch(ModelHandler):
 
         :param dataloader:        Dataloader of the train/test set.
         :param hparams:           Hyper-parameter container.
+        :param current_epoch:     Current training epoch. Used to compute the current iteration for some schedulers.
         :param training:          Determines if it runs the training or testing loop.
         :return:                  Tuple of total loss and total loss per output feature.
         """
@@ -741,90 +742,3 @@ class ModelHandlerPyTorch(ModelHandler):
         if self.scheduler is not None:
             # self.logger.info("Call scheduler.")
             self._scheduler_step_fn(loss, current_epoch)
-
-    # def run(self, hparams, loss_function=None):
-    #     """
-    #     Run train followed by test method for the number of times specified in epochs.
-    #
-    #     :param hparams:           Hyper-parameter container. Specifies epochs in hparams.epochs.
-    #     :param loss_function:     Explicit loss function, otherwise self.loss_function is used.
-    #     :return:                  List containing the loss of each epoch.
-    #     """
-    #     if hparams.use_gpu:
-    #         assert(hparams.num_gpus <= torch.cuda.device_count())  # Specified number of GPUs is incorrect.
-    #
-    #     assert(loss_function is not None)  # Please set self.loss_function in the trainer construction.
-    #     self.loss_function = loss_function.cuda() if hparams.use_gpu else loss_function
-    #
-    #     self.set_optimiser(hparams)
-    #     self.set_scheduler(hparams, self.current_epoch)
-    #
-    #     if hparams.ema_decay and not self.ema:
-    #         average_model = self.model_factory.create(self.model_type, self.dim_in, self.dim_out, hparams)
-    #         average_model.load_state_dict(self.model.state_dict())
-    #         self.ema = ExponentialMovingAverage(average_model, hparams.ema_decay)
-    #
-    #     all_loss = list()  # List which is returned, containing all loss so that progress is visible.
-    #     all_loss_train = list()
-    #     best_loss = np.nan
-    #
-    #     # Compute error before first iteration.
-    #     if hparams.start_with_test:
-    #         loss, loss_features = self.process_dataloader(self.dataloader_val, hparams, training=False)
-    #         all_loss_train.append(-1.0)  # Set a placeholder at the train losses.
-    #         all_loss.append(loss)
-    #         best_loss = loss  # Variable to save the current best loss.
-    #
-    #     # For each epoch do...
-    #     for epoch in range(0, hparams.epochs):
-    #         # Increment epoch number.
-    #         self.current_epoch += 1
-    #
-    #         # Train one epoch.
-    #         train_loss = self.process_dataloader(self.dataloader_train, hparams)[0]
-    #         all_loss_train.append(train_loss)
-    #         if np.isnan(train_loss):
-    #             return
-    #
-    #         if hparams.epochs_per_scheduler_step:
-    #             if hparams.epochs_per_test > hparams.epochs_per_scheduler_step:
-    #                 self.logger.warning("Model is validated only every {} epochs, ".format(hparams.epochs_per_test) +
-    #                                     "but scheduler is supposed to run every {} epochs.".format(hparams.epochs_per_scheduler_step))
-    #             if hparams.epochs_per_test % hparams.epochs_per_scheduler_step != 0:
-    #                 self.logger.warning("hparams.epochs_per_test ({}) % hparams.epochs_per_scheduler_step ({}) != 0. "
-    #                                     .format(hparams.epochs_per_test, hparams.epochs_per_scheduler_step) +
-    #                                     "Note that the scheduler is only run when current_epoch % " +
-    #                                     "hparams.epochs_per_scheduler_step == 0. Therefore hparams.epochs_per_scheduler_step " +
-    #                                     "should be a factor of hparams.epochs_per_test.")
-    #
-    #         if self.current_epoch % hparams.epochs_per_test == 0:
-    #             # Compute error on validation set.
-    #             loss, loss_features = self.process_dataloader(self.dataloader_val, hparams, training=False)
-    #
-    #             # Save loss in a list which is returned.
-    #             all_loss.append(loss)
-    #
-    #             # Stop when loss is NaN. Reloading from checkpoint if necessary.
-    #             if np.isnan(loss):
-    #                 return
-    #
-    #             # Save checkpoint if path is given.
-    #             if hparams.out_dir is not None:
-    #                 path_checkpoint = os.path.join(hparams.out_dir, hparams.networks_dir, hparams.checkpoints_dir)
-    #                 # Check when to save a checkpoint.
-    #                 if hparams.epochs_per_checkpoint > 0 and self.current_epoch % hparams.epochs_per_checkpoint == 0:
-    #                     model_name = "{}-e{}-{}".format(hparams.model_name, self.current_epoch, self.loss_function)
-    #                     self.save_checkpoint(os.path.join(path_checkpoint, model_name))
-    #                 # Always save best checkpoint with special name.
-    #                 if loss < best_loss or np.isnan(best_loss):
-    #                     best_loss = loss
-    #                     model_name = hparams.model_name + "-best"
-    #                     self.save_checkpoint(os.path.join(path_checkpoint, model_name))
-    #
-    #             # Run the scheduler_type if one exists.
-    #             if self.scheduler is not None:
-    #                 if hparams.epochs_per_scheduler_step and self.current_epoch % hparams.epochs_per_scheduler_step == 0:
-    #                     # self.logger.info("Call scheduler.")
-    #                     self._scheduler_step_fn(loss, self.current_epoch + 1)
-    #
-    #     return all_loss, all_loss_train
