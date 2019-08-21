@@ -308,10 +308,21 @@ class ModelHandlerPyTorch(ModelHandler):
             model = ModelFactory.create(model_type, dim_in, dim_out, hparams, verbose)
             hparams.model_type = expected_model_type  # Can still be None.
             if verbose:
-                logging.info("Load model state dict from " + file_path)
-            model.load_state_dict(checkpoint['model_state_dict'])
+                logging.info("Load model state dict from {}".format(file_path) +
+                             (" ignoring {}.".format(hparams.ignore_layers) if len(hparams.ignore_layers) > 0 else "."))
+
+            model_dict = checkpoint['model_state_dict']
+            if len(hparams.ignore_layers) > 0:
+                model_dict = {k: v for k, v in model_dict.items()
+                              if k not in hparams.ignore_layers}
+                org_dict = model.state_dict()
+                org_dict.update(model_dict)
+                model_dict = org_dict
+            model.load_state_dict(model_dict)
         except KeyError:  # Ensure backwards compatibility.
             model = checkpoint['model']
+            if len(hparams.ignore_layers) > 0:
+                logging.warning("Model was loaded as a whole. Cannot ignore {}".format(hparams.ignore_layers))
 
         if hparams.use_gpu:
             if hasattr(model, "set_gpu_flag") and callable(model.set_gpu_flag):

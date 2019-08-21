@@ -89,6 +89,7 @@ class AcousticModelTrainer(ModelTrainer):
 
         hparams.add_hparams(
             num_questions=None,
+            question_file=None,  # Used to add labels in plot.
             num_coded_sps=60,
             add_deltas=True,
             synth_load_org_sp=False,

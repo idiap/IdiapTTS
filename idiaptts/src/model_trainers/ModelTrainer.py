@@ -26,17 +26,16 @@ from shutil import copy2
 
 # Third-party imports.
 import torch
-from tensorflow.contrib.training import HParams
 import pydub
 from pydub import AudioSegment
 import pyworld
 import pysptk
 
 # Local source tree imports.
+from idiaptts.src.ExtendedHParams import ExtendedHParams
 from idiaptts.src.data_preparation.world.WorldFeatLabelGen import WorldFeatLabelGen
 # from idiaptts.src.data_preparation.audio.RawWaveformLabelGen import RawWaveformLabelGen
 from idiaptts.src.neural_networks.pytorch.ModelHandlerPyTorch import ModelHandlerPyTorch
-from idiaptts.src.DataPlotter import DataPlotter
 from idiaptts.misc.utils import makedirs_safe, get_gpu_memory_map, sample_linearly
 
 
@@ -135,21 +134,7 @@ class ModelTrainer(object):
 
     @staticmethod
     def create_hparams(hparams_string=None, verbose=False):
-        """Create model hyperparameters. Parse nondefault from given string."""
-
-        class ExtendedHParams(HParams):
-            def add_hparams(self, **kwarg):
-                for key, value in kwarg.items():
-                    try:
-                        self.add_hparam(key, value)
-                    except ValueError:
-                        self.set_hparam(key, value)
-
-            def verify(self):
-                for attr, value in self.__dict__.items():
-                    if attr not in ["_hparam_types", "_model_structure"]:
-                        if attr not in self._hparam_types:
-                            logging.warning("Attribute {} not in types dictionary. Please use add_hparam or add_hparams to add attributes.".format(attr))
+        """Create model hyper-parameters. Parse non-default from given string."""
 
         hparams = ExtendedHParams(
             ################################
@@ -182,7 +167,7 @@ class ModelTrainer(object):
                                  # Ignored when self.id_list_train is already set. Note that self.id_list_test must be set then as well.
             val_set_perc=0.05,   # Percentage of samples taken from the given id_list in __init__ for validation.
                                  # Ignored when self.id_list_train is already set. Note that self.id_list_val should be set then as well.
-            seed=1234,  # Used to initialize torch, numpy, and random. If None, the id_list is not shuffled before taking test and validation set from it.
+            seed=None,  # Used to initialize torch, numpy, and random. If None, the id_list is not shuffled before taking test and validation set from it.
             # fp16_run=False,  # TODO: Not implemented.
             # distributed_run=False,  # TODO: Find out how distributed run works.
             # dist_url="file://distributed.dpt",
@@ -233,6 +218,8 @@ class ModelTrainer(object):
             model_type=None,
             model_name=None,
             model_path=None,  # Explicitly set path with model name where model is loaded from otherwise dir_out/networks_dir/model_name.
+            ignore_layers=["type dummy"],  # List of layers which are ignored when loading the model from model_path.
+                                           # Giving the dummy ensures that hparams expects a list of strings.
             dropout=0.0,
             hidden_init=0.0,  # Hidden state init value
             train_hidden_init=False,  # Is the hidden state init value trainable  # TODO: Unused?
@@ -284,6 +271,7 @@ class ModelTrainer(object):
             # epochs_per_plot=0,  # No plots per epoch with <= 0. # TODO: plot in run method each ... epochs.
             # plot_per_epoch_id_list=None,  # TODO: Id(s) in the dictionary which are plotted.
         )
+        hparams.set_hparam("ignore_layers", list())  # Remove string type dummy.
 
         if hparams_string:
             logging.info('Parsing command line hparams: %s', hparams_string)

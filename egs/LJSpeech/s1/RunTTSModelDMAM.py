@@ -35,7 +35,7 @@ def main():
     input_strings = args.input_strings
     logging.info("Received {} utterance(s) for synthesis.".format(len(input_strings)))
 
-    hparams = AcousticModelTrainer.create_hparams()
+    hparams = TTSModel.create_hparams()
     hparams.voice = "full"
     hparams.use_gpu = True
 
@@ -60,7 +60,7 @@ def main():
     hparams.file_symbol_dict = os.path.join(hparams.work_dir, "DM_one-hot_ema99-mono_phone.list")
     hparams.min_phoneme_length = 50000
     hparams.num_phoneme_states = 5
-    hparams.file_questions = os.path.join(tts_frontend_dir, "questions", "questions-en-radio_dnn_416.hed")
+    hparams.question_file = os.path.join(tts_frontend_dir, "questions", "questions-en-radio_dnn_416.hed")
     hparams.num_questions = 425
     hparams.question_labels_norm_file = os.path.join(hparams.work_dir, "AM_mgc30-questions-min-max.bin")
     # Duration

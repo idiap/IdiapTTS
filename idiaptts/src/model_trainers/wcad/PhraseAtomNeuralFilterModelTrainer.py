@@ -123,8 +123,8 @@ class PhraseAtomNeuralFilterModelTrainer(ModelTrainer):
             min_atom_amp=0.25,  # Post-processing removes atoms with an absolute amplitude smaller than this.
             complex_poles=True,  # Comples poles possible.
             phase_init=0.0,  # Initial phase of the filters.
-            vuv_loss_weight=1,  # Weight of the VUV RMSE.
-            L1_loss_weight=1,  # Weight of the L1 loss on the spiking inputs.
+            vuv_loss_weight=1.0,  # Weight of the VUV RMSE.
+            L1_loss_weight=1.0,  # Weight of the L1 loss on the spiking inputs.
             weight_unvoiced=0.5,  # Weight on unvoiced frames.
             num_questions=None,  # Dimension of the input questions.
             dist_window_size=51,  # Size of distribution around spikes when training the AtomModel.

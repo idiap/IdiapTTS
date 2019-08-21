@@ -77,6 +77,7 @@ class DurationModelTrainer(ModelTrainer):
     def create_hparams(hparams_string=None, verbose=False):
         hparams = ModelTrainer.create_hparams(hparams_string, verbose=False)
         hparams.add_hparams(  # exclude_begin_and_end_silence=False,
+                            min_phoneme_length=50000,
                             phoneme_label_type="HTK full")  # Specifies the format in which the .lab files are stored.
                                                             # Refer to PhonemeLabelGen.load_sample for a list of possible types.
 

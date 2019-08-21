@@ -119,6 +119,7 @@ class AtomVUVDistPosModelTrainer(AtomModelTrainer):
     def create_hparams(hparams_string=None, verbose=False):
         hparams = AtomModelTrainer.create_hparams(hparams_string, verbose=False)
         hparams.add_hparam("dist_window_size", 51)
+        hparams.add_hparam("synth_acoustic_model", None)
 
         if verbose:
             logging.info('Final parsed hparams: %s', hparams.values())
