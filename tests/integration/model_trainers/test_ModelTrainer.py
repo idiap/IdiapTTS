@@ -23,6 +23,7 @@ from idiaptts.src.model_trainers.ModelTrainer import ModelTrainer
 from idiaptts.src.data_preparation.questions.QuestionLabelGen import QuestionLabelGen
 from idiaptts.src.data_preparation.world.WorldFeatLabelGen import WorldFeatLabelGen
 from idiaptts.src.data_preparation.PyTorchLabelGensDataset import PyTorchLabelGensDataset as LabelGensDataset
+from idiaptts.src.neural_networks.pytorch.ModelFactory import ModelFactory
 from idiaptts.src.neural_networks.pytorch.utils import equal_checkpoint
 from idiaptts.misc.utils import makedirs_safe
 
@@ -264,13 +265,13 @@ class TestModelTrainer(unittest.TestCase):
                 hparams.model_type = super().IDENTIFIER + "-1_RELU_32-1_FC_" + str(numpy.prod(dim_out))
                 super().__init__(dim_in, dim_out, hparams)
                 hparams.model_type = self.IDENTIFIER
+        ModelFactory.register_architecture(TestArchitecture)
 
         for seed in [13]:  # itertools.count(0):
             hparams = self._get_hparams()
             hparams.out_dir = os.path.join(hparams.out_dir, "test_train_e4_plus2")  # Add function name to path.
             hparams.seed = seed
             trainer = self._get_trainer(hparams)
-            trainer.model_handler.model_factory.register_architecture(TestArchitecture)
 
             hparams.model_type = "TestArchitecture"
             hparams.epochs = 4
@@ -314,11 +315,11 @@ class TestModelTrainer(unittest.TestCase):
         hparams.model_type = "TestArchitecture"
         hparams.epochs = 0
         trainer = self._get_trainer(hparams)
-        trainer.model_handler.model_factory.register_architecture(TestArchitecture)
         trainer.init(hparams)
         hparams.epochs = 2
         trainer.train(hparams)
 
+        ModelFactory.deregister_architecture(TestArchitecture.IDENTIFIER)
         shutil.rmtree(hparams.out_dir)
 
     def test_train_e4_save_best(self):

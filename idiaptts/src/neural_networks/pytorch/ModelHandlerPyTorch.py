@@ -55,7 +55,6 @@ class ModelHandlerPyTorch(ModelHandler):
 
         self._scheduler_step_fn = None
         self.ema = None  # Exponential moving average object.
-        self.model_factory = ModelFactory()  # Factory object to create different kind of architectures.
 
     @staticmethod
     def cuda_is_available():
@@ -264,7 +263,7 @@ class ModelHandlerPyTorch(ModelHandler):
 
         # Use model factory to create the model.
         self.logger.info("Create network of type: " + hparams.model_type)
-        self.model = self.model_factory.create(hparams.model_type, dim_in, dim_out, hparams)
+        self.model = ModelFactory.create(hparams.model_type, dim_in, dim_out, hparams)
         self.model_type = hparams.model_type
         self.dim_in = dim_in
         self.dim_out = dim_out
@@ -291,7 +290,7 @@ class ModelHandlerPyTorch(ModelHandler):
             logging.info("Save full model to {}.".format(file_path))
 
     @staticmethod
-    def load_model(model_factory, file_path, hparams, verbose=True):
+    def load_model(file_path, hparams, verbose=True):
         dim_in = None
         dim_out = None
         model_type = None
@@ -306,7 +305,7 @@ class ModelHandlerPyTorch(ModelHandler):
             hparams.model_type = model_type  # Use the loaded model type during creation in factory.
             dim_in = checkpoint['dim_in']
             dim_out = checkpoint['dim_out']
-            model = model_factory.create(model_type, dim_in, dim_out, hparams, verbose)
+            model = ModelFactory.create(model_type, dim_in, dim_out, hparams, verbose)
             hparams.model_type = expected_model_type  # Can still be None.
             if verbose:
                 logging.info("Load model state dict from " + file_path)
@@ -333,12 +332,11 @@ class ModelHandlerPyTorch(ModelHandler):
         self.logger.info("Load checkpoint from {}.".format(file_path))
 
         # Load model from checkpoint (and to GPU).
-        self.model, self.model_type, self.dim_in, self.dim_out = self.load_model(self.model_factory, file_path, hparams, verbose=True)
+        self.model, self.model_type, self.dim_in, self.dim_out = self.load_model(file_path, hparams, verbose=True)
 
         if hparams.ema_decay:
             try:
-                average_model, *_ = self.load_model(self.model_factory,
-                                                    file_path + "_ema",
+                average_model, *_ = self.load_model(file_path + "_ema",
                                                     hparams,
                                                     verbose=True)
                 self.ema = ExponentialMovingAverage(average_model, hparams.ema_decay)
@@ -722,7 +720,7 @@ class ModelHandlerPyTorch(ModelHandler):
             assert (hparams.num_gpus <= torch.cuda.device_count())  # Specified number of GPUs is incorrect.
 
         if hparams.ema_decay and not self.ema:
-            average_model = self.model_factory.create(self.model_type, self.dim_in, self.dim_out, hparams)
+            average_model = ModelFactory.create(self.model_type, self.dim_in, self.dim_out, hparams)
             average_model.load_state_dict(self.model.state_dict())
             self.ema = ExponentialMovingAverage(average_model, hparams.ema_decay)
 

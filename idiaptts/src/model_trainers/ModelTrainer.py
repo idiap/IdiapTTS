@@ -891,8 +891,9 @@ class ModelTrainer(object):
             raise
 
         wavenet_model_handler = ModelHandlerPyTorch()
-        wavenet_model_handler.model, *_ = wavenet_model_handler.load_model(wavenet_model_handler.model_factory, hparams.synth_vocoder_path, hparams, verbose=False)
-        # wavenet_model_handler.load_checkpoint(hparams.synth_vocoder_path, hparams.use_gpu)
+        wavenet_model_handler.model, *_ = wavenet_model_handler.load_model(hparams.synth_vocoder_path,
+                                                                           hparams,
+                                                                           verbose=False)
 
         for id_name, output in synth_output.items():
             logging.info("Synthesise {} with {} vocoder.".format(id_name, hparams.synth_vocoder_path))
