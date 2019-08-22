@@ -81,7 +81,7 @@ class WorldFeatLabelGen(LabelGen):
         self.num_coded_sps = num_coded_sps
         self.dir_coded_sps += str(num_coded_sps)
         self.dir_deltas += "_" + self.dir_coded_sps
-        # self.dir_deltas += "_{}sp".format(num_coded_sps)  # TODO: Use this instead.
+        # self.dir_deltas += "_{}{}".format(num_coded_sps, self.dir_coded_sps)  # TODO: Use this instead.
 
     def __getitem__(self, id_name):
         """Return the preprocessed sample with the given id_name."""
@@ -275,6 +275,17 @@ class WorldFeatLabelGen(LabelGen):
         bap = sample[:, -deltas_factor]
 
         return coded_sp, lf0, vuv, bap
+
+    @staticmethod
+    def convert_from_world_features(coded_sp, lf0, vuv, bap):
+        """Convert from world features to a single feature vector with T x (|coded_sp|, |lf0|, |vuv|, |bap|) dim."""
+        if lf0.ndim < 2:
+            lf0 = lf0[:, None]
+        if vuv.ndim < 2:
+            vuv = vuv[:, None]
+        if bap.ndim < 2:
+            bap = bap[:, None]
+        return np.concatenate((coded_sp, lf0, vuv, bap), axis=1)
 
     @staticmethod
     def mgc_to_sp(mgc, synth_fs):

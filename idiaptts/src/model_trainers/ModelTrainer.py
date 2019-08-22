@@ -25,11 +25,11 @@ import platform
 from shutil import copy2
 
 # Third-party imports.
-import torch
 import pydub
 from pydub import AudioSegment
 import pyworld
 import pysptk
+from nnmnkwii.postfilters import merlin_post_filter
 
 # Local source tree imports.
 from idiaptts.src.ExtendedHParams import ExtendedHParams
@@ -262,7 +262,7 @@ class ModelTrainer(object):
             synth_dir=None,
             synth_acoustic_model_path=None,
             synth_file_suffix='',
-            # do_post_filtering = False,  # TODO: Merlin does some filtering before calling its vocoder. Possible implementation: https://github.com/r9y9/nnmnkwii/blob/master/nnmnkwii/postfilters/__init__.py
+            do_post_filtering=False,  # TODO: Merlin does some filtering before calling its vocoder. Possible implementation: https://github.com/r9y9/nnmnkwii/blob/master/nnmnkwii/postfilters/__init__.py
             synth_gen_figure=False,
             gen_figure_ext=".pdf",
             # epochs_per_plot=0,  # No plots per epoch with <= 0. # TODO: plot in run method each ... epochs.
@@ -821,6 +821,10 @@ class ModelTrainer(object):
             logging.info("Synthesise {} with the WORLD vocoder.".format(id_name))
 
             coded_sp, lf0, vuv, bap = WorldFeatLabelGen.convert_to_world_features(output, contains_deltas=False, num_coded_sps=hparams.num_coded_sps)
+
+            if hparams.do_post_filtering:
+                coded_sp = merlin_post_filter(coded_sp, WorldFeatLabelGen.mgc_alpha)
+
             ln_sp = pysptk.mgc2sp(np.ascontiguousarray(coded_sp, dtype=np.float64), alpha=WorldFeatLabelGen.mgc_alpha, gamma=0.0, fftlen=fft_size)
             # sp = np.exp(sp.real * 2.0)
             # sp.imag = sp.imag * 180.0 / np.pi
@@ -883,6 +887,13 @@ class ModelTrainer(object):
         for id_name, output in synth_output.items():
             logging.info("Synthesise {} with {} vocoder.".format(id_name, hparams.synth_vocoder_path))
 
+            if hparams.do_post_filtering:
+                coded_sp, lf0, vuv, bap = input_gen.convert_to_world_features(output,
+                                                                              contains_deltas=input_gen.add_deltas,
+                                                                              num_coded_sps=hparams.num_coded_sps)
+                coded_sp = merlin_post_filter(coded_sp, WorldFeatLabelGen.mgc_alpha)
+                output = input_gen.convert_from_world_features(coded_sp, lf0, vuv, bap)
+
             output = input_gen.preprocess_sample(output)
 
             # output (T x C) --transpose--> (C x T) --unsqueeze(0)--> (B x C x T).
@@ -894,8 +905,12 @@ class ModelTrainer(object):
             output = output.argmax(axis=1)
             synth_output[id_name] = RawWaveformLabelGen.mu_law_companding_reversed(output, hparams.mu)
 
-        org_bit_depth = hparams.bit_depth if hasattr(hparams, 'bit_depth') else None
-        hparams.bit_depth = 16
+        if hasattr(hparams, 'bit_depth'):
+            org_bit_depth = hparams.bit_depth
+            hparams.bit_depth = 16
+        else:
+            org_bit_depth = None
+            hparams.add_hparam("bit_depth", 16)
 
         # Add identifier to suffix.
         old_synth_file_suffix = hparams.synth_file_suffix

@@ -460,6 +460,7 @@ class TestModelTrainer(unittest.TestCase):
         hparams.synth_fs = 16000
         hparams.frame_size_ms = 5
         hparams.synth_ext = "wav"
+        hparams.do_post_filtering = True
 
         trainer = self._get_trainer(hparams)
         trainer.init(hparams)
