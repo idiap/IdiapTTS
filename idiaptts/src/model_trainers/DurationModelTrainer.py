@@ -61,7 +61,7 @@ class DurationModelTrainer(ModelTrainer):
 
         self.InputGen = PhonemeLabelGen(dir_phoneme_labels, file_symbol_dict, hparams.phoneme_label_type, one_hot=True)
         self.OutputGen = PhonemeDurationLabelGen(dir_durations)
-        self.OutputGen.get_normalisation_params(dir_durations)
+        self.OutputGen.get_normalisation_params(dir_durations, hparams.output_norm_params_file_prefix)
 
         self.dataset_train = PyTorchLabelGensDataset(self.id_list_train, self.InputGen, self.OutputGen, hparams, match_lengths=False)
         self.dataset_val = PyTorchLabelGensDataset(self.id_list_val, self.InputGen, self.OutputGen, hparams, match_lengths=False)
@@ -77,6 +77,7 @@ class DurationModelTrainer(ModelTrainer):
     def create_hparams(hparams_string=None, verbose=False):
         hparams = ModelTrainer.create_hparams(hparams_string, verbose=False)
         hparams.add_hparams(  # exclude_begin_and_end_silence=False,
+                            min_phoneme_length=50000,
                             phoneme_label_type="HTK full")  # Specifies the format in which the .lab files are stored.
                                                             # Refer to PhonemeLabelGen.load_sample for a list of possible types.
 

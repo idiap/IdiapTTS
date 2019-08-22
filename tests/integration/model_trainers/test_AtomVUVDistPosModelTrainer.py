@@ -150,10 +150,6 @@ class TestAtomVUVDistPosModelTrainer(unittest.TestCase):
         hparams.synth_fs = 16000
         hparams.frame_size_ms = 5
         hparams.synth_ext = "wav"
-        hparams.synth_load_org_sp = True
-        hparams.synth_load_org_lf0 = True
-        hparams.synth_load_org_vuv = True
-        hparams.synth_load_org_bap = True
 
         trainer = self._get_trainer(hparams)
         trainer.init(hparams)

@@ -95,11 +95,11 @@ class AtomVUVDistPosModelTrainer(AtomModelTrainer):
             self.logger.warning("hparams.dist_window_size should be odd, changed it to " + str(hparams.dist_window_size))
 
         self.InputGen = QuestionLabelGen(dir_question_labels, num_questions)
-        self.InputGen.get_normalisation_params(dir_question_labels)
+        self.InputGen.get_normalisation_params(dir_question_labels, hparams.input_norm_params_file_prefix)
 
         # Overwrite OutputGen by the one with beta distribution.
         self.OutputGen = AtomVUVDistPosLabelGen(wcad_root, dir_atom_labels, dir_lf0_labels, thetas, k, hparams.frame_size_ms, window_size=dist_window_size)
-        self.OutputGen.get_normalisation_params(dir_atom_labels)
+        self.OutputGen.get_normalisation_params(dir_atom_labels, hparams.output_norm_params_file_prefix)
 
         self.dataset_train = PyTorchLabelGensDataset(self.id_list_train, self.InputGen, self.OutputGen, hparams, match_lengths=True)
         self.dataset_val = PyTorchLabelGensDataset(self.id_list_val, self.InputGen, self.OutputGen, hparams, match_lengths=True)
@@ -119,6 +119,7 @@ class AtomVUVDistPosModelTrainer(AtomModelTrainer):
     def create_hparams(hparams_string=None, verbose=False):
         hparams = AtomModelTrainer.create_hparams(hparams_string, verbose=False)
         hparams.add_hparam("dist_window_size", 51)
+        hparams.add_hparam("synth_acoustic_model", None)
 
         if verbose:
             logging.info('Final parsed hparams: %s', hparams.values())
@@ -283,12 +284,15 @@ class AtomVUVDistPosModelTrainer(AtomModelTrainer):
         return f0_rmse, vuv_error_rate
 
     def synthesize(self, id_list, synth_output, hparams):
-        """This method should be overwritten by sub classes."""
+        """
+        Synthesise LF0 from atoms. The run_atom_synth function either loads the original acoustic features or uses an
+        acoustic model to predict them.
+        """
         full_output = self.run_atom_synth(id_list, synth_output, hparams)
 
         for id_name, labels in full_output.items():
             lf0 = labels[:, -3]
-            lf0 = interpolate_lin(lf0)
+            lf0, _ = interpolate_lin(lf0)
             vuv = synth_output[id_name][:, 0, 1]
             len_diff = len(labels) - len(vuv)
             labels = WorldFeatLabelGen.trim_end_sample(labels, int(len_diff / 2), reverse=True)

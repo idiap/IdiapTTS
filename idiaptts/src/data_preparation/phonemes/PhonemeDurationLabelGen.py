@@ -33,7 +33,7 @@ class PhonemeDurationLabelGen(LabelGen):
     ext_phonemes = ".lab"  # Extension of HTK labels files.
     ext_durations = ".dur"  # Extension of created duration labels.
     num_states = 5  # Number of states per phoneme in HTK labels.
-    min_phoneme_length = 50000  # Divisor for phoneme timings in HTK labels.
+    min_phoneme_length = 50000  # Divisor for phoneme timings in HTK labels. Only used in gen_data.
     logger = logging.getLogger(__name__)
 
     def __init__(self, dir_labels):

@@ -41,7 +41,7 @@ def interpolate_lin(data):
     :return:  interpolated_f0, vuv_vector
     """
 
-    data = np.reshape(data, (data.size, 1))
+    data = np.reshape(np.copy(data), (data.size, 1))
 
     vuv_vector = np.zeros((data.size, 1))
     vuv_vector[data > 0.0] = 1.0

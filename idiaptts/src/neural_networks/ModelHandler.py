@@ -65,7 +65,7 @@ class ModelHandler(object):
         """
         raise NotImplementedError("Class %s doesn't implement load_checkpoint()" % self.__class__.__name__)
 
-    def save_checkpoint(self, file_path):
+    def save_checkpoint(self, file_path, current_epoch):
         """Save a CPU version of the model combined with optimiser and other parameters."""
         raise NotImplementedError("Class %s doesn't implement save_checkpoint()" % self.__class__.__name__)
 
@@ -79,18 +79,15 @@ class ModelHandler(object):
         """
         raise NotImplementedError("Class %s doesn't implement forward()" % self.__class__.__name__)
 
-    def process_dataloader(self, dataloader, hparams, training=True):
+    def process_dataloader(self, dataloader, hparams, current_epoch, training=True):
         """
         Process data in dataloader by loading batches from it.
         Perform training if training parameter is True, otherwise test run is assumed.
 
         :param dataloader:        Dataloader of the train set.
         :param hparams:           Hyper-parameter container.
+        :param current_epoch:     Current training epoch. Used to compute the current iteration for some schedulers.
         :param training:          Enables gradients, dropout, batch norm, etc.
         :return:                  Nothing.
         """
         raise NotImplementedError("Class %s doesn't implement train()" % self.__class__.__name__)
-
-    def run(self, hparams, loss_function=None):
-        """Run train and test method for the number of times specified in hparams.epochs."""
-        raise NotImplementedError("Class %s doesn't implement run()" % self.__class__.__name__)

@@ -96,7 +96,7 @@ class TestTTSModel(unittest.TestCase):
         acoustic_trainer.init(hparams_acoustic)
 
         # Run TTS synthesis.
-        hparams = AcousticModelTrainer.create_hparams()
+        hparams = TTSModel.create_hparams()
         hparams.data_dir = os.path.realpath(os.path.join("integration", "fixtures", "database"))
         hparams.work_dir = os.path.realpath(os.path.join("integration", "fixtures"))
         hparams.synth_dir = hparams_duration.out_dir
@@ -110,7 +110,7 @@ class TestTTSModel(unittest.TestCase):
         hparams.file_symbol_dict = os.path.join(hparams.work_dir, "labels", "mono_phone.list")
         hparams.min_phoneme_length = 10000
         hparams.num_phoneme_states = 5
-        hparams.file_questions = os.path.join(hparams.work_dir, "questions-en-radio_dnn_400.hed")
+        hparams.question_file = os.path.join(hparams.work_dir, "questions-en-radio_dnn_400.hed")
         hparams.num_questions = 409
         hparams.question_labels_norm_file = os.path.join(hparams.work_dir, "questions", "min-max.bin")
         hparams.world_features_dir = os.path.join(hparams.work_dir, "WORLD")

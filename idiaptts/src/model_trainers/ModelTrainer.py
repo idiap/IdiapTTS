@@ -26,17 +26,16 @@ from shutil import copy2
 
 # Third-party imports.
 import torch
-from tensorflow.contrib.training import HParams
 import pydub
 from pydub import AudioSegment
 import pyworld
 import pysptk
 
 # Local source tree imports.
+from idiaptts.src.ExtendedHParams import ExtendedHParams
 from idiaptts.src.data_preparation.world.WorldFeatLabelGen import WorldFeatLabelGen
 # from idiaptts.src.data_preparation.audio.RawWaveformLabelGen import RawWaveformLabelGen
 from idiaptts.src.neural_networks.pytorch.ModelHandlerPyTorch import ModelHandlerPyTorch
-from idiaptts.src.DataPlotter import DataPlotter
 from idiaptts.misc.utils import makedirs_safe, get_gpu_memory_map, sample_linearly
 
 
@@ -85,31 +84,30 @@ class ModelTrainer(object):
             hparams.optimiser_args["lr"] = hparams.learning_rate
 
         if hparams.seed is not None:
-            torch.manual_seed(hparams.seed)
+            ModelHandlerPyTorch.seed(hparams.seed)  # Seed the backend.
             np.random.seed(hparams.seed)
             random.seed(hparams.seed)
 
-        if not hasattr(self, "id_list_train") or self.id_list_train is None:
-            id_list_shuffled = id_list
-            if hparams.seed is not None:
-                id_list_shuffled = random.sample(id_list, len(id_list))
+        id_list_shuffled = id_list
+        if hparams.seed is not None:
+            id_list_shuffled = random.sample(id_list, len(id_list))
 
-            # Partition randomly sorted ids into [val_set, train_set, test_set].
-            assert (hparams.test_set_perc + hparams.val_set_perc < 1)
-            if hparams.val_set_perc > 0.0:
-                num_valset = max(1, int(len(id_list_shuffled) * hparams.val_set_perc))
-                self.id_list_val = id_list_shuffled[:num_valset]
-            else:
-                num_valset = 0
-                self.id_list_val = None
-            if hparams.test_set_perc > 0.0:
-                num_testset = max(1, int(len(id_list_shuffled) * hparams.test_set_perc))
-                self.id_list_test = id_list_shuffled[-num_testset:]
-            else:
-                num_testset = 0
-                self.id_list_test = None
-            self.id_list_train = id_list_shuffled[num_valset:-num_testset] if num_testset > 0\
-                                                                           else id_list_shuffled[num_valset:]
+        # Partition (randomly sorted) ids into [val_set, train_set, test_set].
+        assert (hparams.test_set_perc + hparams.val_set_perc < 1)
+        if hparams.val_set_perc > 0.0:
+            num_valset = max(1, int(len(id_list_shuffled) * hparams.val_set_perc))
+            self.id_list_val = id_list_shuffled[:num_valset]
+        else:
+            num_valset = 0
+            self.id_list_val = None
+        if hparams.test_set_perc > 0.0:
+            num_testset = max(1, int(len(id_list_shuffled) * hparams.test_set_perc))
+            self.id_list_test = id_list_shuffled[-num_testset:]
+        else:
+            num_testset = 0
+            self.id_list_test = None
+        self.id_list_train = id_list_shuffled[num_valset:-num_testset] if num_testset > 0\
+                                                                       else id_list_shuffled[num_valset:]
         assert(len(self.id_list_train) > 0)
 
         # Create and initialize model.
@@ -128,28 +126,13 @@ class ModelTrainer(object):
                                         # Only the first element of the result is given to the post-processing function
                                         # of the OutputGen when result is a tuple or list.
 
-        if not hasattr(self, "loss_function"):
-            self.loss_function = None  # Has to be defined by subclass.
+        self.loss_function = None  # Has to be defined by subclass.
 
         self.current_epoch = None
 
     @staticmethod
     def create_hparams(hparams_string=None, verbose=False):
-        """Create model hyperparameters. Parse nondefault from given string."""
-
-        class ExtendedHParams(HParams):
-            def add_hparams(self, **kwarg):
-                for key, value in kwarg.items():
-                    try:
-                        self.add_hparam(key, value)
-                    except ValueError:
-                        self.set_hparam(key, value)
-
-            def verify(self):
-                for attr, value in self.__dict__.items():
-                    if attr not in ["_hparam_types", "_model_structure"]:
-                        if attr not in self._hparam_types:
-                            logging.warning("Attribute {} not in types dictionary. Please use add_hparam or add_hparams to add attributes.".format(attr))
+        """Create model hyper-parameters. Parse non-default from given string."""
 
         hparams = ExtendedHParams(
             ################################
@@ -182,7 +165,7 @@ class ModelTrainer(object):
                                  # Ignored when self.id_list_train is already set. Note that self.id_list_test must be set then as well.
             val_set_perc=0.05,   # Percentage of samples taken from the given id_list in __init__ for validation.
                                  # Ignored when self.id_list_train is already set. Note that self.id_list_val should be set then as well.
-            seed=1234,  # Used to initialize torch, numpy, and random. If None, the id_list is not shuffled before taking test and validation set from it.
+            seed=None,  # Used to initialize torch, numpy, and random. If None, the id_list is not shuffled before taking test and validation set from it.
             # fp16_run=False,  # TODO: Not implemented.
             # distributed_run=False,  # TODO: Find out how distributed run works.
             # dist_url="file://distributed.dpt",
@@ -211,8 +194,10 @@ class ModelTrainer(object):
                                               # TODO: This does not work yet, because cuda async does lazy loading.
 
             ################################
-            # Data Parameters             #
+            # Data Parameters              #
             ################################
+            input_norm_params_file_prefix=None,
+            output_norm_params_file_prefix=None,
             len_in_out_multiplier=1,
             out_dir=None,
             world_dir=None,  # Full path to directory with WORLD features, required to synthesise with extracted features.
@@ -221,7 +206,6 @@ class ModelTrainer(object):
             ################################
             # Audio Parameters             #
             ################################
-            # sampling_frequency=16000,  # TODO: Unused?
             frame_size_ms=5,
             # max_wav_value=32768.0,
 
@@ -230,7 +214,9 @@ class ModelTrainer(object):
             ################################
             model_type=None,
             model_name=None,
-            model_path=None,  # Explicitly set path with model name where model is loaded from otherwise dir_out/networks_dir/model_name.
+            model_path=None,  # Full path to load model from, otherwise dir_out/networks_dir/model_name.
+            ignore_layers=["type dummy"],  # List of layers which are ignored when loading the model from model_path.
+                                           # Giving the dummy ensures that hparams expects a list of strings.
             dropout=0.0,
             hidden_init=0.0,  # Hidden state init value
             train_hidden_init=False,  # Is the hidden state init value trainable  # TODO: Unused?
@@ -282,6 +268,7 @@ class ModelTrainer(object):
             # epochs_per_plot=0,  # No plots per epoch with <= 0. # TODO: plot in run method each ... epochs.
             # plot_per_epoch_id_list=None,  # TODO: Id(s) in the dictionary which are plotted.
         )
+        hparams.set_hparam("ignore_layers", list())  # Remove string type dummy.
 
         if hparams_string:
             logging.info('Parsing command line hparams: %s', hparams_string)
@@ -852,8 +839,8 @@ class ModelTrainer(object):
 
             # Always save as wav file first and convert afterwards if necessary.
             file_path = os.path.join(save_dir, "{}{}{}{}".format(os.path.basename(id_name),
-                                                                     "_" + hparams.model_name if hparams.model_name is not None else "",
-                                                                     hparams.synth_file_suffix, "_WORLD"))
+                                                                 "_" + hparams.model_name if hparams.model_name is not None else "",
+                                                                 hparams.synth_file_suffix, "_WORLD"))
             makedirs_safe(hparams.synth_dir)
             soundfile.write(file_path + ".wav", waveform, hparams.synth_fs)
 
@@ -889,8 +876,9 @@ class ModelTrainer(object):
             raise
 
         wavenet_model_handler = ModelHandlerPyTorch()
-        wavenet_model_handler.model, *_ = wavenet_model_handler.load_model(wavenet_model_handler.model_factory, hparams.synth_vocoder_path, hparams, verbose=False)
-        # wavenet_model_handler.load_checkpoint(hparams.synth_vocoder_path, hparams.use_gpu)
+        wavenet_model_handler.model, *_ = wavenet_model_handler.load_model(hparams.synth_vocoder_path,
+                                                                           hparams,
+                                                                           verbose=False)
 
         for id_name, output in synth_output.items():
             logging.info("Synthesise {} with {} vocoder.".format(id_name, hparams.synth_vocoder_path))
@@ -969,10 +957,14 @@ class ModelTrainer(object):
 
             # Default quantization is with mu=255.
             if not hasattr(hparams, "mu") or hparams.mu is None:
-                hparams.mu = 255
+                hparams.add_hparam("mu", 255)
 
-            org_frame_rate_output_Hz = hparams.frame_rate_output_Hz if hasattr(hparams, 'frame_rate_output_Hz') else None
-            hparams.frame_rate_output_Hz = 16000
+            if hasattr(hparams, 'frame_rate_output_Hz'):
+                org_frame_rate_output_Hz = hparams.frame_rate_output_Hz
+                hparams.frame_rate_output_Hz = 16000
+            else:
+                org_frame_rate_output_Hz = None
+                hparams.add_hparam("frame_rate_output_Hz", 16000)
 
             self.run_r9y9wavenet_mulaw_world_feats_synth(synth_output, hparams)
 

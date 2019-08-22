@@ -41,7 +41,7 @@ class TestDurationModelTrainer(unittest.TestCase):
         hparams.model_type = "RNNDYN-1_RELU_32-1_FC_5"
         hparams.batch_size_train = 64
         hparams.batch_size_val = 64
-        hparams.learning_rate = 0.001
+        hparams.add_hparam("learning_rate", 0.001)  # Test backwards compatibility.
         hparams.model_name = "test_model.nn"
         hparams.epochs_per_checkpoint = 2
 

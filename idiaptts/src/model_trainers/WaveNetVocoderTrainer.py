@@ -59,7 +59,7 @@ class WaveNetVocoderTrainer(ModelTrainer):
         max_frames_input_testset = int(1000.0 / hparams.frame_size_ms * hparams.max_input_test_sec) * in_to_out_multiplier  # Ensure that test takes all frames. NOTE: Had to limit it because of memory constraints.
 
         self.InputGen = WorldFeatLabelGen(dir_world_features, add_deltas=False, sampling_fn=partial(sample_linearly, in_to_out_multiplier=in_to_out_multiplier, dtype=np.float32), num_coded_sps=hparams.num_coded_sps)
-        self.InputGen.get_normalisation_params(dir_world_features)
+        self.InputGen.get_normalisation_params(dir_world_features, hparams.input_norm_params_file_prefix)
 
         self.OutputGen = RawWaveformLabelGen(frame_rate_output_Hz=hparams.frame_rate_output_Hz,
                                              frame_size_ms=hparams.frame_size_ms,

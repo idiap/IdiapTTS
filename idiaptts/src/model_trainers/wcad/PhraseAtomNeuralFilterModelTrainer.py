@@ -90,10 +90,10 @@ class PhraseAtomNeuralFilterModelTrainer(ModelTrainer):
         super().__init__(id_list, hparams_phrase)
 
         self.InputGen = QuestionLabelGen(dir_question_labels, num_questions)
-        self.InputGen.get_normalisation_params(dir_question_labels)
+        self.InputGen.get_normalisation_params(dir_question_labels, hparams_phrase.input_norm_params_file_prefix)
 
         self.OutputGen = FlatLF0LabelGen(dir_lf0_labels, dir_atom_labels, remove_phrase=False)
-        self.OutputGen.get_normalisation_params(dir_atom_labels)
+        self.OutputGen.get_normalisation_params(dir_atom_labels, hparams_phrase.output_norm_params_file_prefix)
 
         self.dataset_train = PyTorchLabelGensDataset(self.id_list_train, self.InputGen, self.OutputGen, hparams_phrase, match_lengths=True)
         self.dataset_val = PyTorchLabelGensDataset(self.id_list_val, self.InputGen, self.OutputGen, hparams_phrase, match_lengths=True)
@@ -123,8 +123,8 @@ class PhraseAtomNeuralFilterModelTrainer(ModelTrainer):
             min_atom_amp=0.25,  # Post-processing removes atoms with an absolute amplitude smaller than this.
             complex_poles=True,  # Comples poles possible.
             phase_init=0.0,  # Initial phase of the filters.
-            vuv_loss_weight=1,  # Weight of the VUV RMSE.
-            L1_loss_weight=1,  # Weight of the L1 loss on the spiking inputs.
+            vuv_loss_weight=1.0,  # Weight of the VUV RMSE.
+            L1_loss_weight=1.0,  # Weight of the L1 loss on the spiking inputs.
             weight_unvoiced=0.5,  # Weight on unvoiced frames.
             num_questions=None,  # Dimension of the input questions.
             dist_window_size=51,  # Size of distribution around spikes when training the AtomModel.

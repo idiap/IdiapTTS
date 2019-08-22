@@ -16,7 +16,6 @@ from torch.nn.utils.rnn import pack_padded_sequence
 # Third-party imports.
 
 # Local source tree imports.
-from idiaptts.src.neural_networks.pytorch.ModelHandlerPyTorch import ModelHandlerPyTorch
 from idiaptts.src.neural_networks.pytorch.models.IntonationFilters import ComplexModel, CriticalModel, modulus_to_theta
 
 
@@ -34,6 +33,7 @@ class NeuralFilters(nn.Module):
 
         assert(not hparams.batch_first)  # This implementation doesn't work with batch_first.
 
+        from idiaptts.src.neural_networks.pytorch.ModelHandlerPyTorch import ModelHandlerPyTorch
         self.model_handler_atoms = ModelHandlerPyTorch()
         self.model_handler_atoms.load_checkpoint(hparams.atom_model_path,
                                                  hparams.hparams_atom,
