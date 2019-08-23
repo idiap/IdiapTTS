@@ -235,20 +235,32 @@ class ModelHandlerPyTorch(ModelHandler):
                     hparams.epochs_per_scheduler_step = 1
                 return
 
-            elif hparams.scheduler_type == "Exponential":
-                self.scheduler = ExponentialLR(self.optimiser, last_epoch=current_epoch - 1, **hparams.scheduler_args)
+            current_iteration = max((current_epoch - 1) * len(self.dataloader_train), -1)
+            if hparams.scheduler_type == "Exponential":
+                if hparams.epochs_per_scheduler_step is None:
+                    if hparams.iterations_per_scheduler_step is None:
+                        hparams.iterations_per_scheduler_step = 1
+                    self.scheduler = ExponentialLR(self.optimiser, last_epoch=current_iteration, **hparams.scheduler_args)
+                else:
+                    self.scheduler = ExponentialLR(self.optimiser, last_epoch=current_epoch - 1, **hparams.scheduler_args)
                 self._scheduler_step_fn = self._scheduler_step
-                if hparams.epochs_per_scheduler_step is None and hparams.iterations_per_scheduler_step is None:
-                    hparams.iterations_per_scheduler_step = 1
                 return
 
             elif hparams.scheduler_type == "Noam":
-                if "wormup_steps" not in hparams.scheduler_args:
-                    self.logger.error("Please define wormup_steps in hparams.scheduler_args.")
-                self.scheduler = LambdaLR(self.optimiser, lambda iteration: float(hparams.scheduler_args['wormup_steps'])**0.5 * np.minimum((iteration + 1) * float(hparams.scheduler_args['wormup_steps'])**-1.5, (iteration + 1)**-0.5))
+                assert hasattr(hparams.scheduler_args, "wormup_steps"), "Please define wormup_steps in hparams.scheduler_args."
+
+                def noam_decay(iteration):
+                    wormup_steps = float(hparams.scheduler_args['wormup_steps'])
+                    return wormup_steps**0.5 * np.minimum((iteration + 1) * wormup_steps**-1.5,
+                                                          (iteration + 1)**-0.5)
+
+                if hparams.epochs_per_scheduler_step is None:
+                    if hparams.iterations_per_scheduler_step is None:
+                        hparams.iterations_per_scheduler_step = 1
+                    self.scheduler = LambdaLR(self.optimiser, noam_decay, last_epoch=current_iteration)
+                else:
+                    self.scheduler = LambdaLR(self.optimiser, noam_decay, last_epoch=current_epoch - 1)
                 self._scheduler_step_fn = self._scheduler_step
-                if hparams.epochs_per_scheduler_step is None and hparams.iterations_per_scheduler_step is None:
-                    hparams.iterations_per_scheduler_step = 1
                 return
 
             # TODO: Implement the others here.
@@ -398,14 +410,14 @@ class ModelHandlerPyTorch(ModelHandler):
 
         return checkpoint['epoch']
 
-    def save_checkpoint(self, file_path, current_epoch):
+    def save_checkpoint(self, file_path, total_epoch):
         """
         Save checkpoint which consists of epoch number, model type, in/out dimensions, model state dict, whole
         optimiser, etc. Also save the EMA separately when one exists.
         """
         self.logger.info("Save checkpoint to " + file_path)
         makedirs_safe(os.path.dirname(file_path))  # Create directory if necessary.
-        checkpoint_dict = {'epoch': current_epoch,
+        checkpoint_dict = {'epoch': total_epoch,
                            'model_name': self.model_name,
                            'optimiser': self.optimiser
                            # 'loss_function': loss_function
@@ -484,13 +496,17 @@ class ModelHandlerPyTorch(ModelHandler):
         else:
             return return_values.detach().numpy()
 
-    def process_dataloader(self, dataloader, hparams, current_epoch, training=True):
+    def process_dataloader(self, dataloader, loss_function, hparams, total_epoch, current_epoch=None, training=True):
         """
         Train or test the model by loading batches from the dataloader.
 
         :param dataloader:        Dataloader of the train/test set.
+        :param loss_function:     PyTorch function/class to compute loss.
         :param hparams:           Hyper-parameter container.
-        :param current_epoch:     Current training epoch. Used to compute the current iteration for some schedulers.
+        :param total_epoch:       Total number of training epochs. Used to compute the iteration for some schedulers
+                                  when the learning rate is not reset in beginning of current train loop.
+        :param current_epoch:     Number of epoch in current training loop. Used to compute the iteration for some
+                                  schedulers when the learning rate was reset in beginning of current train loop
         :param training:          Determines if it runs the training or testing loop.
         :return:                  Tuple of total loss and total loss per output feature.
         """
@@ -594,7 +610,7 @@ class ModelHandlerPyTorch(ModelHandler):
                                                seq_lengths_target)
 
             # Compute loss of the output.
-            loss_full = self.loss_function(output, target)
+            loss_full = loss_function(output, target)
             assert(loss_full.nelement() > 1)  # Don't reduce the loss, so that the mask can be applied. Use reduction='none' in loss function.
             if mask is not None:
                 loss_full = loss_full * mask  # Don't do inplace multiplication because both tensors could be expanded.
@@ -666,10 +682,15 @@ class ModelHandlerPyTorch(ModelHandler):
                     self.ema.update_params(model)
 
                 # Run the scheduler_type if one exists and should be called after some iterations.
-                if self.scheduler is not None:
-                    if hparams.iterations_per_scheduler_step is not None and (current_batch_index + 1) % hparams.iterations_per_scheduler_step == 0:
-                        self._scheduler_step_fn(loss.detach(), (current_epoch - 1) * len(dataloader) + current_batch_index + 1)
-                        # self.logger.info(str(self.optimiser))
+                if self.scheduler:
+                    if hparams.iterations_per_scheduler_step:
+                        if hparams.use_saved_learning_rate:
+                            current_iteration = (total_epoch - 1) * len(dataloader) + current_batch_index + 1
+                        else:
+                            current_iteration = (current_epoch - 1) * len(dataloader) + current_batch_index + 1
+                        if current_iteration % hparams.iterations_per_scheduler_step == 0:
+                            self._scheduler_step_fn(loss.detach(), current_iteration)
+                            # self.logger.info(str(self.optimiser))
 
             # Logging current error.
             if current_batch_index % logging_batch_index == 0:
@@ -725,13 +746,18 @@ class ModelHandlerPyTorch(ModelHandler):
 
         return np_total_loss, np_loss_features
 
-    def test(self, hparams, current_epoch):
+    def test(self, hparams, total_epoch, current_epoch, loss_function):
         if hparams.use_gpu:
             assert (hparams.num_gpus <= torch.cuda.device_count())  # Specified number of GPUs is incorrect.
 
-        return self.process_dataloader(self.dataloader_val, hparams, current_epoch, training=False)
+        return self.process_dataloader(self.dataloader_val,
+                                       loss_function,
+                                       hparams,
+                                       total_epoch,
+                                       current_epoch,
+                                       training=False)
 
-    def train(self, hparams, current_epoch, loss_function):
+    def train(self, hparams, total_epoch, current_epoch, loss_function):
         if hparams.use_gpu:
             assert (hparams.num_gpus <= torch.cuda.device_count())  # Specified number of GPUs is incorrect.
 
@@ -740,7 +766,12 @@ class ModelHandlerPyTorch(ModelHandler):
             average_model.load_state_dict(self.model.state_dict())
             self.ema = ExponentialMovingAverage(average_model, hparams.ema_decay)
 
-        return self.process_dataloader(self.dataloader_train, hparams, current_epoch)[0]
+        return self.process_dataloader(self.dataloader_train,
+                                       loss_function,
+                                       hparams,
+                                       total_epoch,
+                                       current_epoch,
+                                       training=True)[0]
 
     def run_scheduler(self, loss, current_epoch):
         if self.scheduler is not None:
