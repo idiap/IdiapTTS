@@ -49,6 +49,7 @@ class TestPhraseAtomNeuralFilterModelTrainer(unittest.TestCase):
         hparams.num_coded_sps = 20
         hparams.seed = 1
         hparams.complex_poles = False
+        hparams.phrase_bias_init = 4.5
 
         # Training parameters.
         hparams.epochs = 3

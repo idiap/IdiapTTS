@@ -414,8 +414,6 @@ class ModelTrainer(object):
         #         nn_model.run(epochs_this_iter, e * epochs_per_iter)
         #         outputs.append(nn_model.forward(dict_input_labels[self.plot_per_epoch_id_name]))
         #     self.plot_outputs(epochs, self.plot_per_epoch_id_name, outputs, dict_output_labels[self.plot_per_epoch_id_name])
-        # else:
-        # assert(self.loss_function)    # Please set self.loss_function in the trainer construction.
 
         # Some sanity checks.
         if hparams.epochs_per_scheduler_step:
@@ -921,8 +919,8 @@ class ModelTrainer(object):
 
         # Restore identifier.
         hparams.model_type = org_model_type
-        hparams.synth_file_suffix = old_synth_file_suffix
-        hparams.bit_depth = org_bit_depth
+        hparams.setattr_no_type_check("synth_file_suffix", old_synth_file_suffix)  # Can be None, thus no type check.
+        hparams.setattr_no_type_check("bit_depth", org_bit_depth)  # Can be None, thus no type check.
 
     def run_raw_synth(self, synth_output, hparams):
         """Use Pydub to synthesis audio from raw data given in the synth_output dictionary."""
@@ -984,5 +982,5 @@ class ModelTrainer(object):
 
             self.run_r9y9wavenet_mulaw_world_feats_synth(synth_output, hparams)
 
-            hparams.frame_rate_output_Hz = org_frame_rate_output_Hz
-            # TODO: Convert to requested frame rate.
+            # TODO: Convert to requested frame rate. if org_frame_rate_output_Hz != 16000:
+            hparams.setattr_no_type_check("frame_rate_output_Hz", org_frame_rate_output_Hz)  # Can be None.

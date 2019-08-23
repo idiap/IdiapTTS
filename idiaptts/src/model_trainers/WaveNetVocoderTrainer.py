@@ -87,8 +87,8 @@ class WaveNetVocoderTrainer(ModelTrainer):
 
     @staticmethod
     def create_hparams(hparams_string=None, verbose=False):
-        """Create model hyperparameters. Parse nondefault from given string."""
-        hparams=ModelTrainer.create_hparams(hparams_string, verbose=False)
+        """Create model hyper-parameters. Parse non-default from given string."""
+        hparams = ModelTrainer.create_hparams(hparams_string, verbose=False)
 
         hparams.add_hparams(
             batch_first=True,
@@ -97,8 +97,7 @@ class WaveNetVocoderTrainer(ModelTrainer):
             bit_depth=16,
             silence_threshold_quantized=None,  # Beginning and end of audio below the threshold are trimmed.
             teacher_forcing_in_test=True,
-            exponential_moving_average=False,  # TODO: Reactivate and make work.
-            exponential_moving_average_decay=0.9999,
+            ema_decay=0.9999,
 
             # Model parameters.
             input_type="mulaw-quantize",

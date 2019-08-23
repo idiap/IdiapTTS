@@ -226,7 +226,7 @@ class ModelHandlerPyTorch(ModelHandler):
         if hparams.scheduler is None:
             if hparams.scheduler_type == "None":
                 return
-            assert(hparams.scheduler_type != "default")  # Please define a default scheduler type in the main trainer class.
+            assert hparams.scheduler_type != "default", "Please define a default scheduler type in the trainer class."
 
             if hparams.scheduler_type == "Plateau":
                 self.scheduler = ReduceLROnPlateau(self.optimiser, **hparams.scheduler_args)
@@ -376,7 +376,6 @@ class ModelHandlerPyTorch(ModelHandler):
         checkpoint = torch.load(file_path, map_location=lambda storage, loc: storage)
 
         # Load remaining checkpoint information.
-        # self.start_epoch = self.current_epoch = checkpoint['epoch']
         self.model_name = checkpoint['model_name']
         self.optimiser = checkpoint['optimiser']
         # Initial learning rate is required by some optimisers to compute the learning rate of the current epoch.

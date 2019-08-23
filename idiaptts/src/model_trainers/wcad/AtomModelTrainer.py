@@ -69,9 +69,12 @@ class AtomModelTrainer(ModelTrainer):
             hparams.synth_dir = os.path.join(hparams.out_dir, "synth")
 
         # If the weight for unvoiced frames is not given, compute it to get equal weights.
-        if not hasattr(hparams, "weight_zero") or hparams.weight_zero is None:
-            non_zero_occurrence = min(0.99, 0.02 / len(thetas))
-            zero_occurrence = 1 - non_zero_occurrence
+        non_zero_occurrence = min(0.99, 0.02 / len(thetas))
+        zero_occurrence = 1 - non_zero_occurrence
+        if not hasattr(hparams, "weight_zero"):
+            hparams.add_hparam("weight_non_zero", 1 / non_zero_occurrence)
+            hparams.add_hparam("weight_zero", 1 / zero_occurrence)
+        elif hparams.weight_zero is None:
             hparams.weight_non_zero = 1 / non_zero_occurrence
             hparams.weight_zero = 1 / zero_occurrence
 
