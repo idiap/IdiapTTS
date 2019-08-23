@@ -54,12 +54,12 @@ class TestPhraseAtomNeuralFilterModelTrainer(unittest.TestCase):
         # Training parameters.
         hparams.epochs = 3
         hparams.use_gpu = False
-        hparams.model_type = "NeuralFilters"
+        hparams.model_type = "PhraseNeuralFilters"
         hparams.batch_size_train = 2
         hparams.batch_size_val = 2
         hparams.use_saved_learning_rate = True
         hparams.optimiser_args["lr"] = 0.0006
-        hparams.model_path = os.path.join("integration", "fixtures", "neural_filters_model_in409_out2.nn")
+        hparams.model_path = os.path.join("integration", "fixtures", "phrase_neural_filters_model_in409_out2.nn")
         hparams.model_name = "test_model.nn"
         hparams.epochs_per_checkpoint = 2
         hparams.use_best_as_final_model = False
@@ -74,9 +74,10 @@ class TestPhraseAtomNeuralFilterModelTrainer(unittest.TestCase):
         hparams_flat.model_type = "NeuralFilters"
         # hparams_flat.model_type = None
         hparams_flat.model_name = hparams.model_name + "_flat"
+        hparams_flat.model_path = os.path.join("integration", "fixtures", "neural_filters_model_in409_out2.nn")
         hparams_flat.batch_size_train = 5
         hparams_flat.optimiser_args["lr"] = 0.001
-        hparams_flat.complex_poles = True
+        hparams_flat.complex_poles = False
 
         hparams_atom = copy.deepcopy(hparams)
         hparams_atom.synth_gen_figure = False
@@ -152,6 +153,7 @@ class TestPhraseAtomNeuralFilterModelTrainer(unittest.TestCase):
         self.assertEqual(0, len(all_loss))
         self.assertEqual(0, len(all_loss_train))
 
+        hparams.hparams_flat.complex_poles = True
         trainer.init_flat(hparams)
         self.assertFalse(os.path.isfile(os.path.join(hparams.out_dir, hparams.networks_dir, hparams.hparams_flat.model_name)))
 
@@ -224,7 +226,7 @@ class TestPhraseAtomNeuralFilterModelTrainer(unittest.TestCase):
         hparams.epochs = 0  # Load model.
         trainer.init(hparams)
         scores = trainer.benchmark(hparams)
-        numpy.testing.assert_almost_equal((240.091, 0.604), scores, 3)
+        numpy.testing.assert_almost_equal((148.609, 0.604), scores, 3)
 
         shutil.rmtree(hparams.out_dir)
 
