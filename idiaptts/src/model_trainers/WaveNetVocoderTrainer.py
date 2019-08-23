@@ -2,8 +2,7 @@
 # -*- coding: utf-8 -*-
 #
 # Copyright (c) 2019 Idiap Research Institute, http://www.idiap.ch/
-# Written by Bastian Schnell <bastian.schnell@idiap.ch>,
-# François Marelli <francois.marelli@idiap.ch>
+# Written by Bastian Schnell <bastian.schnell@idiap.ch>
 #
 
 """Module description:
@@ -162,12 +161,6 @@ class WaveNetVocoderTrainer(ModelTrainer):
 
         if mask is not None:
             mask = mask[:, 1:].contiguous()
-
-        # targets_per = targets.transpose_(0, 2).contiguous()#.transpose(0, 2) # .permute(1, 2, 0).contiguous()
-
-        #targets_1 = targets_per[:-1, :, :]
-        #targets_1c = targets_1.contiguous()
-        #logging.info(targets_1 is targets_1c)
 
         return inputs if use_cond else None, targets, seq_lengths_input, seq_lengths_output, mask, permutation
 
