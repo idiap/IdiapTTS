@@ -153,7 +153,6 @@ class TestPhraseAtomNeuralFilterModelTrainer(unittest.TestCase):
         self.assertEqual(0, len(all_loss))
         self.assertEqual(0, len(all_loss_train))
 
-        hparams.hparams_flat.complex_poles = True
         trainer.init_flat(hparams)
         self.assertFalse(os.path.isfile(os.path.join(hparams.out_dir, hparams.networks_dir, hparams.hparams_flat.model_name)))
 
@@ -221,7 +220,7 @@ class TestPhraseAtomNeuralFilterModelTrainer(unittest.TestCase):
         numpy.testing.assert_almost_equal((87.312, 0.624), scores, 3)
 
         scores = trainer.flat_trainer.benchmark(hparams)
-        numpy.testing.assert_almost_equal((228.954, 0.624), scores, 3)
+        numpy.testing.assert_almost_equal((201.288, 0.624), scores, 3)
 
         hparams.epochs = 0  # Load model.
         trainer.init(hparams)
