@@ -25,11 +25,11 @@ import platform
 from shutil import copy2
 
 # Third-party imports.
-import torch
 import pydub
 from pydub import AudioSegment
 import pyworld
 import pysptk
+from nnmnkwii.postfilters import merlin_post_filter
 
 # Local source tree imports.
 from idiaptts.src.ExtendedHParams import ExtendedHParams
@@ -128,7 +128,7 @@ class ModelTrainer(object):
 
         self.loss_function = None  # Has to be defined by subclass.
 
-        self.current_epoch = None
+        self.total_epoch = None  # Total number of epochs the current model was trained.
 
     @staticmethod
     def create_hparams(hparams_string=None, verbose=False):
@@ -262,7 +262,7 @@ class ModelTrainer(object):
             synth_dir=None,
             synth_acoustic_model_path=None,
             synth_file_suffix='',
-            # do_post_filtering = False,  # TODO: Merlin does some filtering before calling its vocoder. Possible implementation: https://github.com/r9y9/nnmnkwii/blob/master/nnmnkwii/postfilters/__init__.py
+            do_post_filtering=False,  # TODO: Merlin does some filtering before calling its vocoder. Possible implementation: https://github.com/r9y9/nnmnkwii/blob/master/nnmnkwii/postfilters/__init__.py
             synth_gen_figure=False,
             gen_figure_ext=".pdf",
             # epochs_per_plot=0,  # No plots per epoch with <= 0. # TODO: plot in run method each ... epochs.
@@ -334,9 +334,9 @@ class ModelTrainer(object):
             # Try to load the model. If it doesn't exist, create a new one and save it.
             # Return the loaded/created model, because no training was requested.
             try:
-                self.current_epoch = self.model_handler.load_checkpoint(hparams.model_path,
-                                                                        hparams,
-                                                                        hparams.optimiser_args["lr"] if hasattr(hparams, "optimiser_args")
+                self.total_epoch = self.model_handler.load_checkpoint(hparams.model_path,
+                                                                      hparams,
+                                                                      hparams.optimiser_args["lr"] if hasattr(hparams, "optimiser_args")
                                                                                                      and "lr" in hparams.optimiser_args
                                                                                                      else 0.0)
             except FileNotFoundError:
@@ -347,22 +347,22 @@ class ModelTrainer(object):
                     self.logger.warning('Model does not exist at {}. Creating a new one instead and saving it.'.format(hparams.model_path))
                     dim_in, dim_out = self.dataset_train.get_dims()
                     self.model_handler.create_model(hparams, dim_in, dim_out)
-                    self.current_epoch = 0
-                    self.model_handler.save_checkpoint(model_path_out, self.current_epoch)
+                    self.total_epoch = 0
+                    self.model_handler.save_checkpoint(model_path_out, self.total_epoch)
 
             self.logger.info("Model ready.")
             return
 
         if hparams.model_type is None:
-            self.current_epoch = self.model_handler.load_checkpoint(hparams.model_path,
-                                                                    hparams,
-                                                                    hparams.optimiser_args["lr"] if hasattr(hparams, "optimiser_args")
+            self.total_epoch = self.model_handler.load_checkpoint(hparams.model_path,
+                                                                  hparams,
+                                                                  hparams.optimiser_args["lr"] if hasattr(hparams, "optimiser_args")
                                                                                                  and "lr" in hparams.optimiser_args
                                                                                                  else 0.0)
         else:
             dim_in, dim_out = self.dataset_train.get_dims()
             self.model_handler.create_model(hparams, dim_in, dim_out)
-            self.current_epoch = 0
+            self.total_epoch = 0
 
         self.logger.info("Model ready.")
 
@@ -414,8 +414,6 @@ class ModelTrainer(object):
         #         nn_model.run(epochs_this_iter, e * epochs_per_iter)
         #         outputs.append(nn_model.forward(dict_input_labels[self.plot_per_epoch_id_name]))
         #     self.plot_outputs(epochs, self.plot_per_epoch_id_name, outputs, dict_output_labels[self.plot_per_epoch_id_name])
-        # else:
-        # assert(self.loss_function)    # Please set self.loss_function in the trainer construction.
 
         # Some sanity checks.
         if hparams.epochs_per_scheduler_step:
@@ -431,43 +429,42 @@ class ModelTrainer(object):
 
         t_start = timer()
         self.logger.info('Start training: ' + str(datetime.now()))
-        # all_loss, all_loss_train = self.model_handler.run(hparams, self.loss_function)
 
         self.model_handler.set_optimiser(hparams)
-        self.model_handler.set_scheduler(hparams, self.current_epoch)
+        self.model_handler.set_scheduler(hparams, self.total_epoch if hparams.use_saved_learning_rate else 0)
 
         assert(self.loss_function)  # Please set self.loss_function in the trainer construction.
-        self.model_handler.loss_function = self.loss_function.cuda() if hparams.use_gpu else self.loss_function
+        loss_function = self.loss_function.cuda() if hparams.use_gpu else self.loss_function
 
         all_loss = list()  # List which is returned, containing all loss so that progress is visible.
         all_loss_train = list()
         best_loss = np.nan
-        start_epoch = self.current_epoch
+        start_epoch = self.total_epoch
 
         # Compute error before first iteration.
         if hparams.start_with_test:
-            self.logger.info('Test epoch [{}/{}]:'.format(self.current_epoch, start_epoch + hparams.epochs))
-            loss, loss_features = self.model_handler.test(hparams, self.current_epoch)
+            self.logger.info('Test epoch [{}/{}]:'.format(start_epoch, start_epoch + hparams.epochs))
+            loss, loss_features = self.model_handler.test(hparams, start_epoch, start_epoch, loss_function)
             all_loss_train.append(-1.0)  # Set a placeholder at the train losses.
             all_loss.append(loss)
             best_loss = loss  # Variable to save the current best loss.
 
-        for _ in range(hparams.epochs):
+        for current_epoch in range(1, hparams.epochs + 1):
             # Increment epoch number.
-            self.current_epoch += 1
+            self.total_epoch += 1
 
             # Train one epoch.
-            self.logger.info('Train epoch [{}/{}]:'.format(self.current_epoch, start_epoch + hparams.epochs))
-            train_loss = self.model_handler.train(hparams, self.current_epoch, self.loss_function)
+            self.logger.info('Train epoch [{}/{}]:'.format(self.total_epoch, start_epoch + hparams.epochs))
+            train_loss = self.model_handler.train(hparams, self.total_epoch, current_epoch, loss_function)
             all_loss_train.append(train_loss)
             if np.isnan(train_loss):
                 break
 
             # Test if requested.
-            if self.current_epoch % hparams.epochs_per_test == 0:
-                self.logger.info('Test epoch [{}/{}]:'.format(self.current_epoch, start_epoch + hparams.epochs))
+            if self.total_epoch % hparams.epochs_per_test == 0:
+                self.logger.info('Test epoch [{}/{}]:'.format(self.total_epoch, start_epoch + hparams.epochs))
                 # Compute error on validation set.
-                loss, loss_features = self.model_handler.test(hparams, self.current_epoch)
+                loss, loss_features = self.model_handler.test(hparams, self.total_epoch, current_epoch, loss_function)
 
                 # Save loss in a list which is returned.
                 all_loss.append(loss)
@@ -480,18 +477,20 @@ class ModelTrainer(object):
                 if hparams.out_dir is not None:
                     path_checkpoint = os.path.join(hparams.out_dir, hparams.networks_dir, hparams.checkpoints_dir)
                     # Check when to save a checkpoint.
-                    if hparams.epochs_per_checkpoint > 0 and self.current_epoch % hparams.epochs_per_checkpoint == 0:
-                        model_name = "{}-e{}-{}".format(hparams.model_name, self.current_epoch, self.loss_function)
-                        self.model_handler.save_checkpoint(os.path.join(path_checkpoint, model_name), self.current_epoch)
+                    if hparams.epochs_per_checkpoint > 0 and self.total_epoch % hparams.epochs_per_checkpoint == 0:
+                        model_name = "{}-e{}-{}".format(hparams.model_name, self.total_epoch, loss_function)
+                        self.model_handler.save_checkpoint(os.path.join(path_checkpoint, model_name), self.total_epoch)
                     # Always save best checkpoint with special name.
                     if loss < best_loss or np.isnan(best_loss):
                         best_loss = loss
                         model_name = hparams.model_name + "-best"
-                        self.model_handler.save_checkpoint(os.path.join(path_checkpoint, model_name), self.current_epoch)
+                        self.model_handler.save_checkpoint(os.path.join(path_checkpoint, model_name), self.total_epoch)
 
                 # Run the scheduler if requested.
-                if hparams.epochs_per_scheduler_step and self.current_epoch % hparams.epochs_per_scheduler_step == 0:
-                    self.model_handler.run_scheduler(loss, self.current_epoch + 1)
+                if hparams.epochs_per_scheduler_step:
+                    if (self.total_epoch if hparams.use_saved_learning_rate else current_epoch)\
+                            % hparams.epochs_per_scheduler_step == 0:
+                        self.model_handler.run_scheduler(loss, self.total_epoch + 1)
 
         t_training = timer() - t_start
         self.logger.info('Training time: ' + str(timedelta(seconds=t_training)))
@@ -503,22 +502,22 @@ class ModelTrainer(object):
             if hparams.use_best_as_final_model:
                 best_model_path = os.path.join(hparams.out_dir, hparams.networks_dir, hparams.checkpoints_dir, hparams.model_name + "-best")
                 try:
-                    self.current_epoch = self.model_handler.load_checkpoint(best_model_path,
-                                                                            hparams,
-                                                                            hparams.optimiser_args["lr"] if hparams.optimiser_args["lr"]
+                    self.total_epoch = self.model_handler.load_checkpoint(best_model_path,
+                                                                          hparams,
+                                                                          hparams.optimiser_args["lr"] if hparams.optimiser_args["lr"]
                                                                                                          else hparams.learning_rate)
                     if self.model_handler.ema:  # EMA model should be used as best model.
                         self.model_handler.model = self.model_handler.ema.model
                         self.model_handler.ema = None  # Reset this one so that a new one is created for further training.
-                        self.logger.info("Using best EMA model (epoch {}) as final model.".format(self.current_epoch))
+                        self.logger.info("Using best EMA model (epoch {}) as final model.".format(self.total_epoch))
                     else:
-                        self.logger.info("Using best (epoch {}) as final model.".format(self.current_epoch))
+                        self.logger.info("Using best (epoch {}) as final model.".format(self.total_epoch))
                 except FileNotFoundError:
                     self.logger.warning("No best model exists yet. Continue with the current one.")
 
             # Save the model if requested.
             if hparams.save_final_model:
-                self.model_handler.save_checkpoint(os.path.join(hparams.out_dir, hparams.networks_dir, hparams.model_name), self.current_epoch)
+                self.model_handler.save_checkpoint(os.path.join(hparams.out_dir, hparams.networks_dir, hparams.model_name), self.total_epoch)
 
         return all_loss, all_loss_train, self.model_handler
 
@@ -821,6 +820,10 @@ class ModelTrainer(object):
             logging.info("Synthesise {} with the WORLD vocoder.".format(id_name))
 
             coded_sp, lf0, vuv, bap = WorldFeatLabelGen.convert_to_world_features(output, contains_deltas=False, num_coded_sps=hparams.num_coded_sps)
+
+            if hparams.do_post_filtering:
+                coded_sp = merlin_post_filter(coded_sp, WorldFeatLabelGen.mgc_alpha)
+
             ln_sp = pysptk.mgc2sp(np.ascontiguousarray(coded_sp, dtype=np.float64), alpha=WorldFeatLabelGen.mgc_alpha, gamma=0.0, fftlen=fft_size)
             # sp = np.exp(sp.real * 2.0)
             # sp.imag = sp.imag * 180.0 / np.pi
@@ -883,6 +886,13 @@ class ModelTrainer(object):
         for id_name, output in synth_output.items():
             logging.info("Synthesise {} with {} vocoder.".format(id_name, hparams.synth_vocoder_path))
 
+            if hparams.do_post_filtering:
+                coded_sp, lf0, vuv, bap = input_gen.convert_to_world_features(output,
+                                                                              contains_deltas=input_gen.add_deltas,
+                                                                              num_coded_sps=hparams.num_coded_sps)
+                coded_sp = merlin_post_filter(coded_sp, WorldFeatLabelGen.mgc_alpha)
+                output = input_gen.convert_from_world_features(coded_sp, lf0, vuv, bap)
+
             output = input_gen.preprocess_sample(output)
 
             # output (T x C) --transpose--> (C x T) --unsqueeze(0)--> (B x C x T).
@@ -894,8 +904,12 @@ class ModelTrainer(object):
             output = output.argmax(axis=1)
             synth_output[id_name] = RawWaveformLabelGen.mu_law_companding_reversed(output, hparams.mu)
 
-        org_bit_depth = hparams.bit_depth if hasattr(hparams, 'bit_depth') else None
-        hparams.bit_depth = 16
+        if hasattr(hparams, 'bit_depth'):
+            org_bit_depth = hparams.bit_depth
+            hparams.bit_depth = 16
+        else:
+            org_bit_depth = None
+            hparams.add_hparam("bit_depth", 16)
 
         # Add identifier to suffix.
         old_synth_file_suffix = hparams.synth_file_suffix
@@ -905,8 +919,8 @@ class ModelTrainer(object):
 
         # Restore identifier.
         hparams.model_type = org_model_type
-        hparams.synth_file_suffix = old_synth_file_suffix
-        hparams.bit_depth = org_bit_depth
+        hparams.setattr_no_type_check("synth_file_suffix", old_synth_file_suffix)  # Can be None, thus no type check.
+        hparams.setattr_no_type_check("bit_depth", org_bit_depth)  # Can be None, thus no type check.
 
     def run_raw_synth(self, synth_output, hparams):
         """Use Pydub to synthesis audio from raw data given in the synth_output dictionary."""
@@ -968,5 +982,5 @@ class ModelTrainer(object):
 
             self.run_r9y9wavenet_mulaw_world_feats_synth(synth_output, hparams)
 
-            hparams.frame_rate_output_Hz = org_frame_rate_output_Hz
-            # TODO: Convert to requested frame rate.
+            # TODO: Convert to requested frame rate. if org_frame_rate_output_Hz != 16000:
+            hparams.setattr_no_type_check("frame_rate_output_Hz", org_frame_rate_output_Hz)  # Can be None.

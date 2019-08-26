@@ -73,7 +73,7 @@ def main():
     hparams.batch_size_train = 32
     hparams.batch_size_val = 64
     hparams.batch_size_test = 64
-    hparams.use_saved_learning_rate = True  # Don't override learning rate if loaded from checkpoint.
+    hparams.use_saved_learning_rate = False  # Don't override learning rate if loaded from checkpoint.
     hparams.optimiser_args["lr"] = 0.002
     hparams.grad_clip_norm_type = 2
     hparams.grad_clip_max_norm = 1.0
@@ -82,6 +82,8 @@ def main():
                                                  ("_ema" + str(hparams.ema_decay).split('.')[1]) if hparams.ema_decay else "")
     hparams.scheduler_args["patience"] = 5
     hparams.use_best_as_final_model = True
+    hparams.do_post_filtering = True
+    hparams.synth_file_suffix = "_postfiltered" if hparams.do_post_filtering else ""
 
     # Training.
     trainer = MyAcousticModelTrainer(hparams)

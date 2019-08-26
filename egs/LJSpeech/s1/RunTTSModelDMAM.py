@@ -74,6 +74,7 @@ def main():
     hparams.acoustic_model = os.path.join(hparams.work_dir, "AM_mgc30.nn")
     # Vocoding
     hparams.batch_size_val = 64
+    hparams.do_post_filtering = True
     hparams.synth_vocoder = "WORLD"
 
     TTSModel.run_DM_AM(hparams, input_strings)

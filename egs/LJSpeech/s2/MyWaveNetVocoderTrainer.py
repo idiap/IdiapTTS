@@ -76,7 +76,7 @@ def main():
     hparams.test_set_perc = 0.01
     hparams.val_set_perc = 0.01
     hparams.use_saved_learning_rate = False
-    hparams.learning_rate = 0.001
+    hparams.optimiser_args["lr"] = 0.001
     hparams.seed = 1234
     hparams.epochs_per_test = 4
     hparams.epochs_per_checkpoint = hparams.epochs_per_test

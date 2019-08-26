@@ -49,16 +49,17 @@ class TestPhraseAtomNeuralFilterModelTrainer(unittest.TestCase):
         hparams.num_coded_sps = 20
         hparams.seed = 1
         hparams.complex_poles = False
+        hparams.phrase_bias_init = 4.5
 
         # Training parameters.
         hparams.epochs = 3
         hparams.use_gpu = False
-        hparams.model_type = "NeuralFilters"
+        hparams.model_type = "PhraseNeuralFilters"
         hparams.batch_size_train = 2
         hparams.batch_size_val = 2
         hparams.use_saved_learning_rate = True
         hparams.optimiser_args["lr"] = 0.0006
-        hparams.model_path = os.path.join("integration", "fixtures", "neural_filters_model_in409_out2.nn")
+        hparams.model_path = os.path.join("integration", "fixtures", "phrase_neural_filters_model_in409_out2.nn")
         hparams.model_name = "test_model.nn"
         hparams.epochs_per_checkpoint = 2
         hparams.use_best_as_final_model = False
@@ -73,9 +74,10 @@ class TestPhraseAtomNeuralFilterModelTrainer(unittest.TestCase):
         hparams_flat.model_type = "NeuralFilters"
         # hparams_flat.model_type = None
         hparams_flat.model_name = hparams.model_name + "_flat"
+        hparams_flat.model_path = os.path.join("integration", "fixtures", "neural_filters_model_in409_out2.nn")
         hparams_flat.batch_size_train = 5
         hparams_flat.optimiser_args["lr"] = 0.001
-        hparams_flat.complex_poles = True
+        hparams_flat.complex_poles = False
 
         hparams_atom = copy.deepcopy(hparams)
         hparams_atom.synth_gen_figure = False
@@ -218,12 +220,12 @@ class TestPhraseAtomNeuralFilterModelTrainer(unittest.TestCase):
         numpy.testing.assert_almost_equal((87.312, 0.624), scores, 3)
 
         scores = trainer.flat_trainer.benchmark(hparams)
-        numpy.testing.assert_almost_equal((228.954, 0.624), scores, 3)
+        numpy.testing.assert_almost_equal((201.288, 0.624), scores, 3)
 
         hparams.epochs = 0  # Load model.
         trainer.init(hparams)
         scores = trainer.benchmark(hparams)
-        numpy.testing.assert_almost_equal((240.091, 0.604), scores, 3)
+        numpy.testing.assert_almost_equal((148.609, 0.604), scores, 3)
 
         shutil.rmtree(hparams.out_dir)
 

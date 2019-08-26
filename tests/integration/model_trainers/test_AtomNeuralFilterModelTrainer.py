@@ -188,7 +188,7 @@ class TestAtomNeuralFilterModelTrainer(unittest.TestCase):
         hparams.epochs = 0  # Load model.
         trainer.init(hparams)
         scores = trainer.benchmark(hparams)
-        numpy.testing.assert_almost_equal((230.833, 0.604), scores, 3)
+        numpy.testing.assert_almost_equal((201.415, 0.604), scores, 3)
 
         shutil.rmtree(hparams.out_dir)
 
@@ -243,6 +243,5 @@ class TestAtomNeuralFilterModelTrainer(unittest.TestCase):
 
         shutil.rmtree(hparams.out_dir)
 
-    def test_complex_poles(self):
-        # TODO:
-        pass
+    # def test_complex_poles(self):  # TODO
+    #     pass

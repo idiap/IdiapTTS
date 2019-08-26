@@ -78,7 +78,7 @@ def main():
     hparams_phrase.model_name = "neural_filters_phrase.nn"
     hparams_phrase.batch_size_train = 5
     hparams_phrase.batch_size_val = 50
-    hparams_phrase.learning_rate = 0.0006
+    hparams_phrase.optimiser_args["lr"] = 0.0006
 
     hparams_phrase.vuv_loss_weight = 0.3
     hparams_phrase.L1_loss_weight = 0.3

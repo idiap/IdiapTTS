@@ -450,6 +450,50 @@ class TestModelTrainer(unittest.TestCase):
 
         shutil.rmtree(hparams.out_dir)
 
+    def test_train_exponential_decay(self):
+        # logging.basicConfig(level=logging.INFO)
+
+        hparams = self._get_hparams()
+        hparams.out_dir = os.path.join(hparams.out_dir, "test_train_exponential_decay")  # Add function name to path.
+        hparams.epochs = 1
+        hparams.model_type = None
+        target_dir = os.path.join(hparams.out_dir, hparams.networks_dir)
+        makedirs_safe(target_dir)
+        shutil.copyfile(os.path.join("integration", "fixtures", "test_model_in409_out67.nn"), os.path.join(target_dir, hparams.model_name))
+        # hparams.model_type = "RNNDYN-1_RELU_32-1_FC_{}".format(3 * hparams.num_coded_sps + 7)
+        hparams.seed = 1234
+        hparams.optimiser_args["lr"] = 0.001
+        hparams.scheduler_type = "Exponential"
+        hparams.scheduler_args["gamma"] = 0.9
+        trainer = self._get_trainer(hparams)
+
+        trainer.init(hparams)
+        for group in trainer.model_handler.optimiser.param_groups:
+            group.setdefault('initial_lr', hparams.optimiser_args["lr"])  # Add missing initial_lr to all groups.
+        trainer.total_epoch = 10  # Artificially set the total number higher to compute the decay.
+        trainer.train(hparams)
+
+        expected_lr = hparams.optimiser_args["lr"] * hparams.scheduler_args["gamma"]**(11 * len(trainer.id_list_train))
+        self.assertEqual(expected_lr, trainer.model_handler.optimiser.param_groups[0]["lr"],
+                         "Exponential decay was not computed based on total number of epochs. "
+                         "Which should be the case when hparams.use_saved_learning_rate=True.")
+
+        # Try again with reset learning rate.
+        trainer = self._get_trainer(hparams)
+        hparams.use_saved_learning_rate = False
+        trainer.init(hparams)
+        for group in trainer.model_handler.optimiser.param_groups:
+            group.setdefault('initial_lr', hparams.optimiser_args["lr"])  # Add missing initial_lr to all groups.
+        trainer.total_epoch = 10  # Artificially set the total number higher to compute the decay.
+        trainer.train(hparams)
+
+        expected_lr = hparams.optimiser_args["lr"] * hparams.scheduler_args["gamma"] ** len(trainer.id_list_train)
+        self.assertEqual(expected_lr, trainer.model_handler.optimiser.param_groups[0]["lr"],
+                         "Exponential decay was not reset for this training loop, "
+                         "which should be the case when hparam.use_saved_learning_rate=False.")
+
+        shutil.rmtree(hparams.out_dir)
+
     def test_synth_wav(self):
         num_test_files = 2
 
@@ -460,6 +504,7 @@ class TestModelTrainer(unittest.TestCase):
         hparams.synth_fs = 16000
         hparams.frame_size_ms = 5
         hparams.synth_ext = "wav"
+        hparams.do_post_filtering = True
 
         trainer = self._get_trainer(hparams)
         trainer.init(hparams)
