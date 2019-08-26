@@ -73,7 +73,10 @@ class WaveNetVocoderTrainer(ModelTrainer):
             if hparams.input_type == "mulaw-quantize":
                 self.loss_function = OneHotCrossEntropyLoss(reduction='none', shift=1)
             else:
-                self.loss_function = DiscretizedMixturelogisticLoss(hparams.quantize_channels, hparams.log_scale_min, reduction='none')
+                self.loss_function = DiscretizedMixturelogisticLoss(hparams.quantize_channels,
+                                                                    hparams.log_scale_min,
+                                                                    reduction='none',
+                                                                    hinge_loss=hparams.hinge_regularizer)
 
         if hparams.scheduler_type == "default":
             hparams.scheduler_type = "Noam"
