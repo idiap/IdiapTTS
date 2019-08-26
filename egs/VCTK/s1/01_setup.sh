@@ -40,7 +40,7 @@ readonly PROGDIR=$(readlink -m $(dirname $0))
 readonly ARGS="$@"
 
 # Fixed paths.
-dir_src=$(realpath "../../../src/")
+dir_src=$(realpath "../../../idiaptts/src/")
 
 # Magic variables.
 demo_set_size=300
@@ -242,7 +242,8 @@ if [ "$silence_removal" = true ]; then
                 --dir_wav ${dir_data}/wav_org_silence/ \
                 --dir_out ${dir_data}/wav/ \
                 --file_id_list ${dir_data}/${name_file_id_list}_blockJOB \
-                --silence_db -30
+                --silence_db -30 \
+                --min_silence_ms 10
 
     # Copy files not touched in this remove silence step.
     cp -R -u -p "${dir_data}/wav_org_silence/*" "${dir_data}/wav"  # -u copy only when source is newer than destination file or if is missing, -p preserve mode, ownership, timestamps etc.

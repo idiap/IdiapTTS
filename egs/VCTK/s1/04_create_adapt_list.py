@@ -20,7 +20,6 @@ import multiprocessing
 # Third-party imports.
 
 # Local source tree imports.
-# sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.getcwd()))))  # Adds the ITTS folder to the path.
 
 create_utterance_splits = False  # If True, creates *_train, *_test, and *_val sets where utterance ids are disjoint.
 
