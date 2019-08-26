@@ -37,7 +37,7 @@ class SilenceRemover(object):
         # logging.getLogger("pydub.converter").setLevel(level=logging.INFO)
 
         for file_id in id_list:
-            self.process_file(file_id + format, dir_audio, dir_out, format, silence_threshold_db, chunk_size_ms)
+            self.process_file(file_id + "." + format, dir_audio, dir_out, format, silence_threshold_db, chunk_size_ms)
 
     @staticmethod
     def _detect_leading_silence(sound, silence_threshold_db=-50.0, chunk_size_ms=10):

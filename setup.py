@@ -69,7 +69,7 @@ def setup_package():
             "Programming Language :: Python :: 3.6",
             # "Programming Language :: Python :: 3.7",
         ],
-        packages=["idiaptts"], # find_packages(exclude=["egs", "tools", "tests"]),
+        packages=find_packages(exclude=["egs", "tools", "tests"]),
         install_requires=get_install_requirements(),
         ext_modules=get_extensions()
     )
