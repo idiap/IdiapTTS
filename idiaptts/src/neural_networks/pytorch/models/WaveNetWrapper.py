@@ -57,6 +57,7 @@ class WaveNetWrapper(nn.Module):
         else:  # During inference.
             with torch.no_grad():
                 self.model.make_generation_fast_()
+                assert(len(seq_lengths_inputs) == 1), "Batch synthesis is not supported yet."
                 num_frames_to_gen = seq_lengths_inputs[0] * self.len_in_out_multiplier
                 output = self.model.incremental_forward(c=inputs, T=num_frames_to_gen, softmax=True, quantize=True)
                 # Output shape is B x C x T.

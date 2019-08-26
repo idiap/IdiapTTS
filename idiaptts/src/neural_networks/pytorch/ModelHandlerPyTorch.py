@@ -247,7 +247,7 @@ class ModelHandlerPyTorch(ModelHandler):
                 return
 
             elif hparams.scheduler_type == "Noam":
-                assert hasattr(hparams.scheduler_args, "wormup_steps"), "Please define wormup_steps in hparams.scheduler_args."
+                assert "wormup_steps" in hparams.scheduler_args, "Please define wormup_steps in hparams.scheduler_args."
 
                 def noam_decay(iteration):
                     wormup_steps = float(hparams.scheduler_args['wormup_steps'])
