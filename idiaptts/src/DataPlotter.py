@@ -20,10 +20,10 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 import matplotlib.ticker as ticker
+from matplotlib.cm import get_cmap
 from itertools import cycle
 
 # Third-party imports.
-import librosa.display
 
 # Local source tree imports.
 from idiaptts.misc.utils import makedirs_safe
@@ -289,7 +289,14 @@ class DataPlotter(object):
                         legend_plots.append(zone)
 
             if grid.spec is not None:
-                librosa.display.specshow(grid.spec.T)
+                if np.issubdtype(grid.spec.dtype, np.complexfloating):
+                    logging.warning('Trying to display complex-valued input. Showing magnitude instead.')
+                    grid.spec = np.absolute(grid.spec)
+                grid.ax.yaxis.set_major_locator(plt.NullLocator())
+                grid.ax.xaxis.set_minor_locator(plt.NullLocator())
+                plt.pcolormesh(grid.spec.T, cmap=cmap(grid.spec.T), rasterized=True, edgecolor='None', shading='flat')
+                # import librosa.display
+                # librosa.display.specshow(grid.spec.T)
                 # plt.colorbar(format='%+2.0f DB')
 
             if grid.xlabel is not None:
@@ -335,3 +342,30 @@ class DataPlotter(object):
         if have_display:
             plt.show()
         self.plt = plt
+
+
+def cmap(data, robust=True, cmap_seq='magma', cmap_bool='gray_r', cmap_div='coolwarm'):
+    """
+    Copyright (c) 2013--2017, librosa development team.
+    Librosa cmap.
+    """
+
+    data = np.atleast_1d(data)
+
+    if data.dtype == 'bool':
+        return get_cmap(cmap_bool)
+
+    data = data[np.isfinite(data)]
+
+    if robust:
+        min_p, max_p = 2, 98
+    else:
+        min_p, max_p = 0, 100
+
+    max_val = np.percentile(data, max_p)
+    min_val = np.percentile(data, min_p)
+
+    if min_val >= 0 or max_val <= 0:
+        return get_cmap(cmap_seq)
+
+    return get_cmap(cmap_div)
