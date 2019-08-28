@@ -13,7 +13,6 @@ Audio files are specified through the file_id_list parameter.
 
 # System imports.
 import os
-import sys
 import logging
 import argparse
 
@@ -127,7 +126,7 @@ def main():
     parser.add_argument("--chunk_size", help="Size of the chunk (frame size) in ms on which db is computed.", type=int,
                         dest="chunk_size_ms", required=False, default=10)
     parser.add_argument("--min_silence_ms", help="Milliseconds of silence which are always kept in front and back of audio file.", type=int,
-                        dest="min_silence_ms", required=False)
+                        dest="min_silence_ms", required=False, default=200)
 
     # Parse arguments
     args = parser.parse_args()
