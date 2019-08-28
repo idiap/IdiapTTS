@@ -32,7 +32,7 @@ HMMDEFS = 'hmmdefs'
 VFLOORS = 'vFloors'
 
 ##
-HTKDIR = os.path.abspath("../../../tools/bin/htk/")
+HTKDIR = os.path.abspath(os.path.join(os.path.dirname(os.environ['IDIAPTTS_ROOT']), "tools", "bin", "htk"))
 HCompV = os.path.join(HTKDIR, 'HCompV')
 HCopy  = os.path.join(HTKDIR, 'HCopy' )
 HERest = os.path.join(HTKDIR, 'HERest')

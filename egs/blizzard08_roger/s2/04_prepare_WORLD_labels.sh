@@ -1,1 +1,0 @@
-../s1/04_prepare_WORLD_labels.sh

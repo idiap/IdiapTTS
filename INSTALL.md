@@ -13,7 +13,5 @@ To install IdiapTTS, `cd IdiapTTS` and run the below steps:
  
 - Activate conda environment  
   - Install [PyTorch 0.4.1](https://pytorch.org/) with the appropriate cuda version. Example for CUDA8.0: ``conda install pytorch=0.4.1 cuda80 -c pytorch``
-  - Install [Librosa](https://librosa.github.io/librosa/index.html)  
-  ``conda install -c conda-forge librosa``
   - If you use conda make sure you got ``pip`` installed in your environment, then install IdiapTTS by running  
   ``pip install .``
