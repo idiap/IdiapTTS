@@ -48,7 +48,7 @@ import tempfile
 # Third-party imports.
 
 # Local source tree imports.
-HTKDIR = "../../../tools/bin/htk/"
+HTKDIR = os.path.join(os.path.dirname(os.environ['IDIAPTTS_ROOT']), "tools", "bin", "htk")
 HCopy  = os.path.join(HTKDIR, 'HCopy' )
 
 

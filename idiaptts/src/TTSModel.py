@@ -165,15 +165,15 @@ class TTSModel(object):
 #     hparams.synth_dir = os.path.join(hparams.work_dir, "TTSModel")
 #     hparams.use_gpu = True
 #
-#     hparams.front_end = "../../../tools/tts_frontend/English/makeLabels.sh"
+#     hparams.front_end = os.path.dirname(os.environ['IDIAPTTS_ROOT']) + "/tools/tts_frontend/English/makeLabels.sh"
 #     hparams.front_end_accent = "AM"
-#     hparams.festival_dir = "../../../tools/festival/"
+#     hparams.festival_dir = os.path.dirname(os.environ['IDIAPTTS_ROOT']) + "/tools/festival/"
 #     hparams.duration_labels_dir = os.path.join(hparams.work_dir, "dur")
 #     hparams.duration_model = os.path.join(hparams.work_dir, "DurationModel", "nn", "DM-1-b64.nn")
 #     hparams.file_symbol_dict = os.path.join(hparams.work_dir, "labels", "mono_phone.list")
 #     hparams.min_phoneme_length = 50000
 #     hparams.num_phoneme_states = 5
-#     hparams.question_file = "../../../tools/tts_frontend/questions/questions-en-radio_dnn_416.hed"
+#     hparams.question_file = os.path.dirname(os.environ['IDIAPTTS_ROOT']) + "/tools/tts_frontend/questions/questions-en-radio_dnn_416.hed"
 #     hparams.num_questions = 425
 #     hparams.question_labels_norm_file = os.path.join(hparams.work_dir, "questions", "min-max.bin")
 #     hparams.world_features_dir = os.path.join(hparams.work_dir, "WORLD")
