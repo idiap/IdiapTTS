@@ -62,7 +62,7 @@ class TTSModel(object):
         A function for TTS with a pre-trained duration and acoustic model.
 
         :param hparams:            Hyper-parameter container. The following parameters are used:
-                                   front_end:                    Full path to the makeLabels.sh script in tools/tts_frontend, depends on the language.
+                                   front_end:                    Full path to the makeLabels.sh script in scripts/tts_frontend, depends on the language.
                                    festival_dir:                 Full path to the directory with the festival bin/ folder.
                                    front_end_accent (optional):  Give an accent to the front_end, used in tts_frontend.
                                    duration_labels_dir:          Full path to the folder containing the normalisation parameters used to train the duration model.
@@ -165,7 +165,7 @@ class TTSModel(object):
 #     hparams.synth_dir = os.path.join(hparams.work_dir, "TTSModel")
 #     hparams.use_gpu = True
 #
-#     hparams.front_end = os.path.dirname(os.environ['IDIAPTTS_ROOT']) + "/tools/tts_frontend/English/makeLabels.sh"
+#     hparams.front_end = os.path.join(os.environ['IDIAPTTS_ROOT'], "scripts", "tts_frontend", "English", "makeLabels.sh")
 #     hparams.front_end_accent = "AM"
 #     hparams.festival_dir = os.path.dirname(os.environ['IDIAPTTS_ROOT']) + "/tools/festival/"
 #     hparams.duration_labels_dir = os.path.join(hparams.work_dir, "dur")

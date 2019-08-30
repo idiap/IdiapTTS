@@ -7,8 +7,10 @@
 """Setup idiaptts"""
 
 from itertools import dropwhile
+import os
 from os import path
 from setuptools import find_packages, setup
+import glob
 
 
 def collect_docstring(lines):
@@ -47,6 +49,14 @@ def get_install_requirements():
     return requirements
 
 
+def get_package_files(directory):
+    paths = []
+    for (path, directories, filenames) in os.walk(directory):
+        for filename in filenames:
+            paths.append(os.path.join('..', path, filename))
+    return paths
+
+
 def setup_package():
     with open("README.md") as f:
         long_description = f.read()
@@ -69,9 +79,17 @@ def setup_package():
             "Programming Language :: Python :: 3.6",
             # "Programming Language :: Python :: 3.7",
         ],
-        packages=find_packages(exclude=["egs", "tools", "tests"]),
+        packages=find_packages(exclude=["tools", "tests"]),
         install_requires=get_install_requirements(),
-        ext_modules=get_extensions()
+        ext_modules=get_extensions(),
+        # scripts=["idiaptts/misc/get_audio_length.sh"],  # Installs scripts for command line usage.
+
+        package_data={
+            '': ['*.sh'] + get_package_files('idiaptts/scripts')  # All shell scripts and everything in scripts/.
+        },
+        # data_files=[
+        #     ('', []),
+        # ]
     )
 
 
