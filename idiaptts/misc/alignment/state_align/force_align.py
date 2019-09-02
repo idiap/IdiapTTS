@@ -32,7 +32,7 @@ HMMDEFS = 'hmmdefs'
 VFLOORS = 'vFloors'
 
 ##
-HTKDIR = os.path.abspath("../../../tools/bin/htk/")
+HTKDIR = os.path.abspath(os.path.join(os.path.dirname(os.environ['IDIAPTTS_ROOT']), "tools", "bin", "htk"))
 HCompV = os.path.join(HTKDIR, 'HCompV')
 HCopy  = os.path.join(HTKDIR, 'HCopy' )
 HERest = os.path.join(HTKDIR, 'HERest')
@@ -434,6 +434,7 @@ def main():
     aligner.train_hmm(7, 32)
     aligner.align(args.dir_work, args.dir_lab_align)
     print('---done!')
+
 
 if __name__ == '__main__':
     main()

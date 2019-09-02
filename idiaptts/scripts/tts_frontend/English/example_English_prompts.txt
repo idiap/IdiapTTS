@@ -1,0 +1,10 @@
+sentence01.txt	Biometrics authentication is used in computer science as a form of identification and access control.
+sentence02.txt	Biometric identifiers are the distinctive, measurable characteristics used to label and describe individuals.
+sentence03.txt	Biometric identifiers are often categorized as physiological versus behavioral characteristics.
+sentence04.txt	More traditional means of access control include token-based identification systems, such as a driver's license or passport.
+sentence05.txt	In computer science, speech recognition is the translation of spoken words into text.
+sentence06.txt	It is also known as automatic speech recognition, computer speech recognition, or just speech to text.
+sentence07.txt	These systems analyze the person's specific voice and use it for the recognition of that person's speech.
+sentence08.txt	A facial recognition system is a computer application for automatically identifying a person from a digital image.
+sentence09.txt	One of the ways to do this is by comparing selected facial features from the image and a facial database.
+sentence10.txt	It is typically used in security systems and can be compared to other biometrics recognition systems.

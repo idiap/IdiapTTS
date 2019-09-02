@@ -9,6 +9,7 @@ import unittest
 import os
 import shutil
 
+import idiaptts
 from idiaptts.src.model_trainers.DurationModelTrainer import DurationModelTrainer
 from idiaptts.src.model_trainers.AcousticModelTrainer import AcousticModelTrainer
 from idiaptts.src.TTSModel import TTSModel
@@ -101,9 +102,10 @@ class TestTTSModel(unittest.TestCase):
         hparams.work_dir = os.path.realpath(os.path.join("integration", "fixtures"))
         hparams.synth_dir = hparams_duration.out_dir
         hparams.use_gpu = False
-        tools_dir = os.path.join(os.path.dirname(os.path.realpath(".")), "tools")
-        hparams.front_end = os.path.join(tools_dir, "tts_frontend", "English", "makeLabels.sh")
+        scripts_dir = os.path.join(os.path.dirname(idiaptts.__file__), "scripts")
+        hparams.front_end = os.path.join(scripts_dir, "tts_frontend", "English", "makeLabels.sh")
         hparams.front_end_accent = "AM"
+        tools_dir = os.path.join(os.path.dirname(os.path.realpath(".")), "tools")
         hparams.festival_dir = os.path.join(tools_dir, "festival")
         hparams.duration_labels_dir = os.path.join(hparams.work_dir, "dur")
         hparams.duration_model = hparams_duration.model_path

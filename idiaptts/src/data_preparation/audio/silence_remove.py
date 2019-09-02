@@ -13,7 +13,6 @@ Audio files are specified through the file_id_list parameter.
 
 # System imports.
 import os
-import sys
 import logging
 import argparse
 
@@ -37,7 +36,7 @@ class SilenceRemover(object):
         # logging.getLogger("pydub.converter").setLevel(level=logging.INFO)
 
         for file_id in id_list:
-            self.process_file(file_id + format, dir_audio, dir_out, format, silence_threshold_db, chunk_size_ms)
+            self.process_file(file_id + "." + format, dir_audio, dir_out, format, silence_threshold_db, chunk_size_ms)
 
     @staticmethod
     def _detect_leading_silence(sound, silence_threshold_db=-50.0, chunk_size_ms=10):
@@ -127,7 +126,7 @@ def main():
     parser.add_argument("--chunk_size", help="Size of the chunk (frame size) in ms on which db is computed.", type=int,
                         dest="chunk_size_ms", required=False, default=10)
     parser.add_argument("--min_silence_ms", help="Milliseconds of silence which are always kept in front and back of audio file.", type=int,
-                        dest="min_silence_ms", required=False)
+                        dest="min_silence_ms", required=False, default=200)
 
     # Parse arguments
     args = parser.parse_args()

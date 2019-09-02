@@ -517,8 +517,13 @@ class AtomLabelGen(LabelGen):
                 # np.savetxt(os.path.join(dir_out, id_name + self.ext_atoms + ".txt"), np_atom_labels)
 
         # Manually set mean of atoms to 0, otherwise frames without atom will have an amplitude.
-        mean_std_ext_atom.sum_frames[:] = 0.0
+        if mean_std_ext_atom.sum_length > 0:  # Make sure at least one atom was added.
+            mean_std_ext_atom.sum_frames[:] = 0.0
+        else:
+            mean_std_ext_atom.sum_frames = np.zeros(np_atom_amps.shape[1:])
+            mean_std_ext_atom.sum_squared_frames = np.zeros(np_atom_amps.shape[1:])
         mean_std_ext_atom.sum_squared_frames[1] = mean_std_ext_atom.sum_length * self.theta_interval[-1]
+
         mean_std_ext_atom.save(os.path.join(dir_out, file_id_list_name))
         min_max_ext_atom.save(os.path.join(dir_out, file_id_list_name))
         # mean_std_ext_phrase.save(os.path.join(dir_out, file_id_list_name + '-phrase'))
@@ -579,6 +584,8 @@ def main():
     args = parser.parse_args()
 
     wcad_root = os.path.abspath(args.wcad_root)
+    assert os.path.isfile(os.path.join(wcad_root, "wcad.py")),\
+        "Cannot find wcad.py at {}. Did you specify the correct WCAD root directory?".format(wcad_root)
     dir_audio = os.path.abspath(args.dir_audio)
     frame_size_ms = args.frame_size_ms
     dir_out = os.path.abspath(args.dir_out)
