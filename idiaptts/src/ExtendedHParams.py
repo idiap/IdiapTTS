@@ -7,6 +7,7 @@
 
 # System imports.
 import logging
+import types
 
 # Third-party imports.
 from tensorflow.contrib.training import HParams
@@ -30,11 +31,22 @@ class ExtendedHParams(HParams):
         if isinstance(value, list):
             if not is_list:
                 raise ValueError('Must not pass a list for single-valued parameter: %s' % name)
-            super().__setattr__(name, [_cast_to_type_if_compatible(name, param_type, v) for v in value])
+            super().__setattr__(name, [self._cast_to_type_if_compatible(name, param_type, v) for v in value])
         else:
             if is_list:
                 raise ValueError('Must pass a list for multi-valued parameter: %s.' % name)
-            super().__setattr__(name, _cast_to_type_if_compatible(name, param_type, value))
+            super().__setattr__(name, self._cast_to_type_if_compatible(name, param_type, value))
+
+    @staticmethod
+    def _cast_to_type_if_compatible(name, param_type, value):
+        """Adding extra check for function type."""
+        if param_type is types.FunctionType:
+            if callable(value):
+                return value
+            else:
+                raise ValueError('Must pass a callable object for function parameter: %s' % name)
+        else:
+            return _cast_to_type_if_compatible(name, param_type, value)
 
     def setattr_no_type_check(self, name, value):
         """Function to explicitly set an attribute without checking its previous type."""
