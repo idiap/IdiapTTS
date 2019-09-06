@@ -42,16 +42,18 @@ class TestModelHandlerPyTorch(unittest.TestCase):
 
         # Create a new model and save it.
         dim_in, dim_out = 10, 4
-        model_handler = ModelHandlerPyTorch(hparams)
+        total_epochs = 10
+        model_handler = ModelHandlerPyTorch()
         model_handler.model = torch.nn.Sequential(torch.nn.Linear(dim_in, dim_out))
-        model_handler.save_checkpoint(model_path)
+        model_handler.save_checkpoint(model_path, total_epochs)
 
         # Create a new model handler and test load save.
         hparams.model_type = None
-        model_handler = ModelHandlerPyTorch(hparams)
-        model_handler.load_checkpoint(model_path, hparams)
+        model_handler = ModelHandlerPyTorch()
+        saved_total_epochs = model_handler.load_checkpoint(model_path, hparams)
+        self.assertEqual(total_epochs, saved_total_epochs, msg="Saved and loaded total epochs do not match")
         model_copy_path = os.path.join(hparams.out_dir, "test_model_copy.nn")
-        model_handler.save_checkpoint(model_copy_path)
+        model_handler.save_checkpoint(model_copy_path, total_epochs)
 
         # self.assertTrue(filecmp.cmp(model_path, model_copy_path, False))  # This does not work.
         self.assertTrue(equal_checkpoint(model_path, model_copy_path), "Loaded and saved models are not the same.")
