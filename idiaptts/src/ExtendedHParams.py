@@ -8,6 +8,7 @@
 # System imports.
 import logging
 import types
+import numpy as np
 
 # Third-party imports.
 from tensorflow.contrib.training import HParams
@@ -45,6 +46,11 @@ class ExtendedHParams(HParams):
                 return value
             else:
                 raise ValueError('Must pass a callable object for function parameter: %s' % name)
+        elif param_type is np.ndarray:
+            if isinstance(value, np.ndarray):
+                return value
+            else:
+                raise ValueError('Must pass a numpy.ndarray object for function parameter: %s' % name)
         else:
             return _cast_to_type_if_compatible(name, param_type, value)
 
