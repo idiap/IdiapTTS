@@ -774,7 +774,8 @@ class ModelTrainer(object):
         return dict_outputs, dict_outputs_post
 
     def gen_figure_from_output(self, id_name, output, hidden, hparams):
-        raise NotImplementedError("Class %s doesn't implement gen_figure_from_output(id_name, output, hidden, hparams)" % self.__class__.__name__)
+        raise NotImplementedError("Class {} doesn't implement gen_figure_from_output(id_name, output, hidden, hparams)"
+                                  .format(self.__class__.__name__))
 
     def synth_ref(self, hparams, file_id_list):
         # Create reference audio files containing only the vocoder degradation.
