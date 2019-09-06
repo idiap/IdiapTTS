@@ -111,10 +111,11 @@ if [ "$install_festival" = true ]; then  # TODO: Update to speech-tools 2.5 and 
 
     if [ "$install_tts_frontend" = true ]; then
 
+        festival_dir=$(realpath "../festival/")
         echo "install tts_frontend..."
         (
-            cd tts_frontend;
-            ./install ../festival/
+            cd idiaptts/scripts/tts_frontend;
+            ./install "${festival_dir}"
         )        
     fi
 fi
@@ -164,9 +165,6 @@ elif [ "$install_festival" == true ] && [[ ! -f ${FESTDIR}/bin/festival ]]; then
     exit 1
 elif [ "$install_festvox" == true ] && [[ ! -f ${FESTVOXDIR}/src/vc/build_transform ]]; then
     echo "Error installing Festvox"
-    exit 1
-elif [ "$install_tts_frontend" == true ] && [ ! -d tts_frontend ]; then
-    echo "Error installing tts_frontend."
     exit 1
 elif [ "$install_wcad" == true ] && [ ! -d wcad ]; then
     echo "Error installing wcad."

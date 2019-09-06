@@ -154,6 +154,8 @@ class TTSModel(object):
             hparams.model_name = ""  # No suffix in synthesised files.
             _, output_dict_post = acoustic_model_trainer.synth(hparams, id_list)
 
+            logging.info("Synthesized files are in {}.".format(hparams.synth_dir))
+
         return 0
 
 
@@ -173,7 +175,7 @@ class TTSModel(object):
 #     hparams.file_symbol_dict = os.path.join(hparams.work_dir, "labels", "mono_phone.list")
 #     hparams.min_phoneme_length = 50000
 #     hparams.num_phoneme_states = 5
-#     hparams.question_file = os.path.dirname(os.environ['IDIAPTTS_ROOT']) + "/tools/tts_frontend/questions/questions-en-radio_dnn_416.hed"
+#     hparams.question_file = s.path.join(os.environ['IDIAPTTS_ROOT'], "scripts", "tts_frontend", "questions", "questions-en-radio_dnn_416.hed")
 #     hparams.num_questions = 425
 #     hparams.question_labels_norm_file = os.path.join(hparams.work_dir, "questions", "min-max.bin")
 #     hparams.world_features_dir = os.path.join(hparams.work_dir, "WORLD")

@@ -205,7 +205,8 @@ class RNNDyn(nn.Module):
 
             if group.is_rnn:
                 output, group.hidden = group[0](output, group.hidden)  # If group.hidden is not set here, init_hidden was not called.
-                last_hidden = group.hidden
+                if group.hidden:  # Keep last not None hidden state.
+                    last_hidden = group.hidden
 
                 output = self.drop(output)  # Dropout is by default not applied to last rnn layer.
             else:
