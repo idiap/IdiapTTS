@@ -277,7 +277,7 @@ class ModelTrainer(object):
             hparams.parse(hparams_string)
 
         if verbose:
-            logging.info('Final parsed hparams: %s', hparams.values())
+            logging.info(hparams.get_debug_string())
 
         return hparams
 
@@ -378,7 +378,7 @@ class ModelTrainer(object):
         """
 
         hparams.verify()  # Verify that attributes were added correctly, print warning for wrongly initialized ones.
-        self.logger.info('Final parsed hparams: %s', hparams.values())
+        self.logger.info(hparams.get_debug_string())
 
         assert(self.model_handler)  # The init function has be called before training.
 

@@ -122,7 +122,7 @@ class AtomVUVDistPosModelTrainer(AtomModelTrainer):
         hparams.add_hparam("synth_acoustic_model", None)
 
         if verbose:
-            logging.info('Final parsed hparams: %s', hparams.values())
+            logging.info(hparams.get_debug_string())
 
         return hparams
 

@@ -57,7 +57,7 @@ class VTLNSpeakerAdaptionModelTrainer(AcousticModelTrainer):
             speaker_emb_dim=128)
 
         if verbose:
-            logging.info('Final parsed hparams: %s', hparams.values())
+            logging.info(hparams.get_debug_string())
 
         return hparams
 
