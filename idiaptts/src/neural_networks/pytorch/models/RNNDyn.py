@@ -138,7 +138,7 @@ class RNNDyn(nn.Module):
                     layer_group.append(getattr(nn, layer_type)(in_dim, out_dim, n_layers, dropout=self.dropout))
                 elif layer_type in ['BiLSTM', 'BiGRU']:
                     layer_group.append(getattr(nn, layer_type[2:])(in_dim, out_dim, n_layers, dropout=self.dropout,
-                                                               bidirectional=True))
+                                                                   bidirectional=True))
                 elif layer_type in ['LSTMP']:
                     layer_group.append(getattr(nn, 'LSTM')(in_dim, out_dim, n_layers, dropout=self.dropout,
                                                            peepholes=True))
@@ -205,7 +205,7 @@ class RNNDyn(nn.Module):
 
             if group.is_rnn:
                 output, group.hidden = group[0](output, group.hidden)  # If group.hidden is not set here, init_hidden was not called.
-                if group.hidden:  # Keep last not None hidden state.
+                if group.hidden is not None:  # Keep last not None hidden state.
                     last_hidden = group.hidden
 
                 output = self.drop(output)  # Dropout is by default not applied to last rnn layer.
@@ -247,7 +247,8 @@ class RNNDyn(nn.Module):
                 output = pack_padded_sequence(output, seq_lengths_input)  # TODO: batch first
 
                 output, group.hidden = group[0](output, group.hidden)  # If group.hidden is not set here, init_hidden was not called.
-                last_hidden = group.hidden
+                if group.hidden is not None:  # Keep last not None hidden state.
+                    last_hidden = group.hidden
 
                 # Reverse pack_padded_sequence operation to work with dropout.
                 output, _ = pad_packed_sequence(output, total_length=max_length_inputs)

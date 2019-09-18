@@ -38,8 +38,8 @@ class WarpingLayer(nn.Module):
         self.dim_in = dim_in
         self.dim_out = dim_out
         norm_params_dim = hparams.num_coded_sps * (3 if hparams.add_deltas else 1)
-        self.mean = nn.Parameter(torch.zeros(norm_params_dim))
-        self.std_dev = nn.Parameter(torch.ones(norm_params_dim))
+        self.mean = nn.Parameter(torch.zeros(norm_params_dim), requires_grad=False)  # TODO: Should not appear in state_dict.
+        self.std_dev = nn.Parameter(torch.ones(norm_params_dim), requires_grad=False)
         # self.dropout = hparams.dropout
         self.batch_first = hparams.batch_first
         self.batch_dim = 0 if hparams.batch_first else 1
@@ -85,7 +85,7 @@ class WarpingLayer(nn.Module):
                 for param in self.model_handler_prenet.model.parameters():
                     param.requires_grad = False
 
-        self.prenet_group_index_of_alpha = -1
+        self.prenet_group_index_of_alpha = -2
         self.embedding_dim = hparams.speaker_emb_dim
         if hparams.num_speakers is None:
             self.logger.warning("Number of speaker is not defined. Assume only one speaker for embedding.")
@@ -152,8 +152,8 @@ class WarpingLayer(nn.Module):
             mean = mean.cuda()
             std_dev = std_dev.cuda()
 
-        self.mean = torch.nn.Parameter(mean)
-        self.std_dev = torch.nn.Parameter(std_dev)
+        self.mean = torch.nn.Parameter(mean, requires_grad=False)
+        self.std_dev = torch.nn.Parameter(std_dev, requires_grad=False)
 
     def init_hidden(self, batch_size=1):
         return self.model_handler_prenet.model.init_hidden(batch_size)

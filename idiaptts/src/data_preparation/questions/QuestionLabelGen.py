@@ -206,7 +206,7 @@ class QuestionLabelGen(LabelGen):
         return [int(label[0]) / 1000, int(label[1]) / 1000]
 
     @staticmethod
-    def questions_to_phoneme_indices(questions, np_phoneme_indices_in_question, default_index=-1):
+    def questions_to_phoneme_indices(questions, np_phoneme_indices_in_question, default_index=0):
         """
         Convert questions to indices of phonemes.
 
@@ -216,11 +216,16 @@ class QuestionLabelGen(LabelGen):
                                                    This should only happen at the beginning and end of the sample.
         :return:                                   Numpy array with indices of phonemes per frame.
         """
+
         max_values = questions[:, np_phoneme_indices_in_question].max(axis=1)
         indices = questions[:, np_phoneme_indices_in_question].argmax(axis=1)
         no_phoneme_flag = max_values == 0
+        if no_phoneme_flag.sum() > 0:
+            logging.warning("Using default phoneme index {} for frames without phoneme information which are {}"
+                            .format(default_index, np.arange(len(no_phoneme_flag))[no_phoneme_flag]))
         indices[no_phoneme_flag] = default_index
         return indices
+        # return questions[:, np_phoneme_indices_in_question].argmax(axis=1)
 
     @staticmethod
     def questions_to_phoneme_per_frame(questions, np_phoneme_indices_in_question_file, question_file):

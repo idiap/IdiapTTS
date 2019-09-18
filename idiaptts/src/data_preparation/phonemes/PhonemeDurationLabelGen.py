@@ -113,6 +113,7 @@ class PhonemeDurationLabelGen(LabelGen):
         """
         logging.debug("Load duration for " + id_name)
 
+        id_name = os.path.splitext(os.path.basename(id_name))[0]  # Features should be stored in same directory, no speaker dependent subdirs.
         with open(os.path.join(dir_out, id_name + PhonemeDurationLabelGen.ext_durations), 'r') as f:
             dur = np.fromfile(f, dtype=np.float32)
             dur = np.reshape(dur, [-1, PhonemeDurationLabelGen.num_states])
@@ -162,6 +163,7 @@ class PhonemeDurationLabelGen(LabelGen):
             file_id_list_name = "all"
         else:
             file_id_list_name = os.path.splitext(os.path.basename(file_id_list))[0]
+            id_list = ['{}'.format(os.path.basename(element)) for element in id_list]  # Ignore full path.
 
         # Create directories in dir_out if it is given.
         if dir_out is not None:
