@@ -435,5 +435,6 @@ def main():
     aligner.align(args.dir_work, args.dir_lab_align)
     print('---done!')
 
+
 if __name__ == '__main__':
     main()

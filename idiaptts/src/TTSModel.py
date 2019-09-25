@@ -62,7 +62,7 @@ class TTSModel(object):
         A function for TTS with a pre-trained duration and acoustic model.
 
         :param hparams:            Hyper-parameter container. The following parameters are used:
-                                   front_end:                    Full path to the makeLabels.sh script in tools/tts_frontend, depends on the language.
+                                   front_end:                    Full path to the makeLabels.sh script in scripts/tts_frontend, depends on the language.
                                    festival_dir:                 Full path to the directory with the festival bin/ folder.
                                    front_end_accent (optional):  Give an accent to the front_end, used in tts_frontend.
                                    duration_labels_dir:          Full path to the folder containing the normalisation parameters used to train the duration model.
@@ -154,6 +154,8 @@ class TTSModel(object):
             hparams.model_name = ""  # No suffix in synthesised files.
             _, output_dict_post = acoustic_model_trainer.synth(hparams, id_list)
 
+            logging.info("Synthesized files are in {}.".format(hparams.synth_dir))
+
         return 0
 
 
@@ -165,7 +167,7 @@ class TTSModel(object):
 #     hparams.synth_dir = os.path.join(hparams.work_dir, "TTSModel")
 #     hparams.use_gpu = True
 #
-#     hparams.front_end = os.path.dirname(os.environ['IDIAPTTS_ROOT']) + "/tools/tts_frontend/English/makeLabels.sh"
+#     hparams.front_end = os.path.join(os.environ['IDIAPTTS_ROOT'], "scripts", "tts_frontend", "English", "makeLabels.sh")
 #     hparams.front_end_accent = "AM"
 #     hparams.festival_dir = os.path.dirname(os.environ['IDIAPTTS_ROOT']) + "/tools/festival/"
 #     hparams.duration_labels_dir = os.path.join(hparams.work_dir, "dur")
@@ -173,7 +175,7 @@ class TTSModel(object):
 #     hparams.file_symbol_dict = os.path.join(hparams.work_dir, "labels", "mono_phone.list")
 #     hparams.min_phoneme_length = 50000
 #     hparams.num_phoneme_states = 5
-#     hparams.question_file = os.path.dirname(os.environ['IDIAPTTS_ROOT']) + "/tools/tts_frontend/questions/questions-en-radio_dnn_416.hed"
+#     hparams.question_file = s.path.join(os.environ['IDIAPTTS_ROOT'], "scripts", "tts_frontend", "questions", "questions-en-radio_dnn_416.hed")
 #     hparams.num_questions = 425
 #     hparams.question_labels_norm_file = os.path.join(hparams.work_dir, "questions", "min-max.bin")
 #     hparams.world_features_dir = os.path.join(hparams.work_dir, "WORLD")

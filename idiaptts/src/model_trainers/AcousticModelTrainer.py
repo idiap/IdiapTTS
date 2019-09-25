@@ -13,7 +13,6 @@
 # System imports.
 import logging
 import math
-import sys
 import numpy as np
 import os
 
@@ -69,11 +68,21 @@ class AcousticModelTrainer(ModelTrainer):
         self.InputGen = QuestionLabelGen(dir_question_labels, num_questions)
         self.InputGen.get_normalisation_params(dir_question_labels, hparams.input_norm_params_file_prefix)
 
-        self.OutputGen = WorldFeatLabelGen(dir_world_features, add_deltas=hparams.add_deltas, num_coded_sps=hparams.num_coded_sps)
+        self.OutputGen = WorldFeatLabelGen(dir_world_features,
+                                           add_deltas=hparams.add_deltas,
+                                           num_coded_sps=hparams.num_coded_sps)
         self.OutputGen.get_normalisation_params(dir_world_features, hparams.output_norm_params_file_prefix)
 
-        self.dataset_train = LabelGensDataset(self.id_list_train, self.InputGen, self.OutputGen, hparams, match_lengths=True)
-        self.dataset_val = LabelGensDataset(self.id_list_val, self.InputGen, self.OutputGen, hparams, match_lengths=True)
+        self.dataset_train = LabelGensDataset(self.id_list_train,
+                                              self.InputGen,
+                                              self.OutputGen,
+                                              hparams,
+                                              match_lengths=True)
+        self.dataset_val = LabelGensDataset(self.id_list_val,
+                                            self.InputGen,
+                                            self.OutputGen,
+                                            hparams,
+                                            match_lengths=True)
 
         if self.loss_function is None:
             self.loss_function = torch.nn.MSELoss(reduction='none')
@@ -105,12 +114,20 @@ class AcousticModelTrainer(ModelTrainer):
     def gen_figure_from_output(self, id_name, label, hidden, hparams):
 
         labels_post = self.OutputGen.postprocess_sample(label)
-        coded_sp, lf0, vuv, bap = WorldFeatLabelGen.convert_to_world_features(labels_post, contains_deltas=False, num_coded_sps=hparams.num_coded_sps)
+        coded_sp, lf0, vuv, bap = WorldFeatLabelGen.convert_to_world_features(labels_post,
+                                                                              contains_deltas=False,
+                                                                              num_coded_sps=hparams.num_coded_sps)
         lf0, _ = interpolate_lin(lf0)
 
         # Load original lf0.
-        org_labels_post = WorldFeatLabelGen.load_sample(id_name, self.OutputGen.dir_labels, add_deltas=self.OutputGen.add_deltas, num_coded_sps=hparams.num_coded_sps)
-        original_mgc, original_lf0, original_vuv, *_ = WorldFeatLabelGen.convert_to_world_features(org_labels_post, contains_deltas=self.OutputGen.add_deltas, num_coded_sps=hparams.num_coded_sps)
+        org_labels_post = WorldFeatLabelGen.load_sample(id_name,
+                                                        self.OutputGen.dir_labels,
+                                                        add_deltas=self.OutputGen.add_deltas,
+                                                        num_coded_sps=hparams.num_coded_sps)
+        original_mgc, original_lf0, original_vuv, *_ = WorldFeatLabelGen.convert_to_world_features(
+                                                                            org_labels_post,
+                                                                            contains_deltas=self.OutputGen.add_deltas,
+                                                                            num_coded_sps=hparams.num_coded_sps)
         original_lf0, _ = interpolate_lin(original_lf0)
 
         # Get a data plotter.
@@ -127,22 +144,32 @@ class AcousticModelTrainer(ModelTrainer):
         graphs.append((original_lf0, 'Original lf0'))
         graphs.append((lf0, 'PyTorch lf0'))
         plotter.set_data_list(grid_idx=grid_idx, data_list=graphs)
-        plotter.set_area_list(grid_idx=grid_idx, area_list=[(np.invert(vuv.astype(bool)), '0.8', 1.0),(np.invert(original_vuv.astype(bool)), 'red', 0.2)])
+        plotter.set_area_list(grid_idx=grid_idx,
+                              area_list=[(np.invert(vuv.astype(bool)), '0.8', 1.0),
+                                         (np.invert(original_vuv.astype(bool)), 'red', 0.2)])
 
         grid_idx += 1
-        plotter.set_label(grid_idx=grid_idx, xlabel='frames [' + str(hparams.frame_size_ms) + ' ms]', ylabel='Original spectrogram')
-        plotter.set_specshow(grid_idx=grid_idx, spec=np.absolute(WorldFeatLabelGen.mgc_to_sp(original_mgc, hparams.synth_fs)))
+        plotter.set_label(grid_idx=grid_idx,
+                          xlabel='frames [' + str(hparams.frame_size_ms) + ' ms]',
+                          ylabel='Original spectrogram')
+        plotter.set_specshow(grid_idx=grid_idx,
+                             spec=np.absolute(WorldFeatLabelGen.mgc_to_sp(original_mgc, hparams.synth_fs)))
 
         grid_idx += 1
-        plotter.set_label(grid_idx=grid_idx, xlabel='frames [' + str(hparams.frame_size_ms) + ' ms]', ylabel='NN spectrogram')
-        plotter.set_specshow(grid_idx=grid_idx, spec=np.absolute(WorldFeatLabelGen.mgc_to_sp(coded_sp, hparams.synth_fs)))
+        plotter.set_label(grid_idx=grid_idx,
+                          xlabel='frames [' + str(hparams.frame_size_ms) + ' ms]',
+                          ylabel='NN spectrogram')
+        plotter.set_specshow(grid_idx=grid_idx,
+                             spec=np.absolute(WorldFeatLabelGen.mgc_to_sp(coded_sp, hparams.synth_fs)))
 
         if hasattr(hparams, "phoneme_indices") and hparams.phoneme_indices is not None \
            and hasattr(hparams, "question_file") and hparams.question_file is not None:
             questions = QuestionLabelGen.load_sample(id_name,
                                                      "experiments/" + hparams.voice + "/questions/",
                                                      num_questions=hparams.num_questions)[:len(lf0)]
-            np_phonemes = QuestionLabelGen.questions_to_phonemes(questions, hparams.phoneme_indices, hparams.question_file)
+            np_phonemes = QuestionLabelGen.questions_to_phonemes(questions,
+                                                                 hparams.phoneme_indices,
+                                                                 hparams.question_file)
             plotter.set_annotations(grid_idx, np_phonemes)
 
         plotter.gen_plot()
@@ -153,7 +180,10 @@ class AcousticModelTrainer(ModelTrainer):
         # Get data for comparision.
         dict_original_post = dict()
         for id_name in dict_outputs_post.keys():
-            dict_original_post[id_name] = WorldFeatLabelGen.load_sample(id_name, self.OutputGen.dir_labels, True, num_coded_sps=hparams.num_coded_sps)
+            dict_original_post[id_name] = WorldFeatLabelGen.load_sample(id_name,
+                                                                        dir_out=self.OutputGen.dir_labels,
+                                                                        add_deltas=True,
+                                                                        num_coded_sps=hparams.num_coded_sps)
 
         f0_rmse = 0.0
         f0_rmse_max_id = "None"
@@ -173,13 +203,17 @@ class AcousticModelTrainer(ModelTrainer):
         all_bap_error = []
 
         for id_name, labels in dict_outputs_post.items():
-            output_coded_sp, output_lf0, output_vuv, output_bap = self.OutputGen.convert_to_world_features(labels, False, num_coded_sps=hparams.num_coded_sps)
+            output_coded_sp, output_lf0, output_vuv, output_bap = self.OutputGen.convert_to_world_features(
+                                                                                    sample=labels,
+                                                                                    contains_deltas=False,
+                                                                                    num_coded_sps=hparams.num_coded_sps)
             output_vuv = output_vuv.astype(bool)
 
             # Get data for comparision.
-            org_coded_sp, org_lf0, org_vuv, org_bap = self.OutputGen.convert_to_world_features(dict_original_post[id_name],
-                                                                                               self.OutputGen.add_deltas,
-                                                                                               num_coded_sps=hparams.num_coded_sps)
+            org_coded_sp, org_lf0, org_vuv, org_bap = self.OutputGen.convert_to_world_features(
+                                                                        sample=dict_original_post[id_name],
+                                                                        contains_deltas=self.OutputGen.add_deltas,
+                                                                        num_coded_sps=hparams.num_coded_sps)
 
             # Compute f0 from lf0.
             org_f0 = np.exp(org_lf0.squeeze())[:len(output_lf0)]  # Fix minor negligible length mismatch.
@@ -236,7 +270,8 @@ class AcousticModelTrainer(ModelTrainer):
         self.logger.info("Worst F0 RMSE: {} {:4.2f}Hz".format(f0_rmse_max_id, f0_rmse_max))
         self.logger.info("Worst VUV error: {} {:2.2f}%".format(vuv_error_max_id, vuv_error_max * 100))
         self.logger.info("Worst BAP error: {} {:4.2f}db".format(bap_error_max_id, bap_error_max))
-        self.logger.info("Benchmark score: MCD {:4.2f}dB, F0 RMSE {:4.2f}Hz, VUV {:2.2f}%, BAP error {:4.2f}db".format(mcd, f0_rmse, vuv_error_rate * 100, bap_error))
+        self.logger.info("Benchmark score: MCD {:4.2f}dB, F0 RMSE {:4.2f}Hz, VUV {:2.2f}%, BAP error {:4.2f}db"
+                         .format(mcd, f0_rmse, vuv_error_rate * 100, bap_error))
 
         return mcd, f0_rmse, vuv_error_rate, bap_error
 
@@ -246,11 +281,15 @@ class AcousticModelTrainer(ModelTrainer):
         then continue with normal synthesis pipeline.
         """
 
-        if hparams.synth_load_org_sp or hparams.synth_load_org_lf0 or hparams.synth_load_org_vuv or hparams.synth_load_org_bap:
+        if hparams.synth_load_org_sp\
+                or hparams.synth_load_org_lf0\
+                or hparams.synth_load_org_vuv\
+                or hparams.synth_load_org_bap:
             for id_name in id_list:
 
                 world_dir = hparams.world_dir if hasattr(hparams, "world_dir") and hparams.world_dir is not None\
-                                              else os.path.join(self.OutputGen.dir_labels, self.dir_extracted_acoustic_features)
+                                              else os.path.join(self.OutputGen.dir_labels,
+                                                                self.dir_extracted_acoustic_features)
                 labels = WorldFeatLabelGen.load_sample(id_name, world_dir, num_coded_sps=hparams.num_coded_sps)
                 len_diff = len(labels) - len(synth_output[id_name])
                 if len_diff > 0:

@@ -126,7 +126,8 @@ class ModelTrainer(object):
                                         # Only the first element of the result is given to the post-processing function
                                         # of the OutputGen when result is a tuple or list.
 
-        self.loss_function = None  # Has to be defined by subclass.
+        if not hasattr(self, "loss_function"):  # Could have been set already in constructor of child class.
+            self.loss_function = None  # Has to be defined by subclass.
 
         self.total_epoch = None  # Total number of epochs the current model was trained.
 
@@ -565,18 +566,26 @@ class ModelTrainer(object):
 
         # Special case for bidirectional layers where the hidden state is a tuple.
         if isinstance(input_values, tuple):
+            # If hidden is a tuple of None, return it directly.
+            if all(v is None for v in input_values):
+                return input_values
+
             # Split hidden states in their batch dimension.
             tuple_splitted = tuple(
                 map(lambda x: cls._split_return_values(x, seq_length_output, permutation, batch_first),
                     input_values))
 
             # Now sort into each batch.
-            batch_size = len(tuple_splitted[0])
             return_values = list()
+            batch_size = len([t for t in tuple_splitted if t is not None][0])  # Get batch size from not None element.
+
             for index in range(batch_size):
                 batch = list()
                 for element in tuple_splitted:
-                    batch.append(element[index])
+                    if element is None or (isinstance(element, tuple) and all(v is None for v in element)):
+                        batch.append(element)  # Handles None and tuples of None.
+                    else:
+                        batch.append(element[index])
                 return_values.append(tuple(batch))
 
             return tuple(return_values)
@@ -688,20 +697,28 @@ class ModelTrainer(object):
         # Select test or validation set when ids are not given explicitly.
         if ids_input is None:
             if self.id_list_test is not None and len(self.id_list_test) > 0:
-                id_list = self.id_list_test
-                self.logger.info("Start benchmark on test set ({}): [{}]".format(len(id_list), ", ".join(str(i) for i in id_list)))
+                id_list = sorted(self.id_list_test)
+                self.logger.info("Start benchmark on test set ({}): [{}]"
+                                 .format(len(id_list), ", ".join(str(i) for i in id_list)))
             elif self.id_list_val is not None and len(self.id_list_val) > 0:
-                id_list = self.id_list_val
-                self.logger.info("Start benchmark on validation set ({}): [{}]".format(len(id_list), ", ".join(str(i) for i in id_list)))
+                id_list = sorted(self.id_list_val)
+                self.logger.info("Start benchmark on validation set ({}): [{}]"
+                                 .format(len(id_list), ", ".join(str(i) for i in id_list)))
             else:
                 raise ValueError("No id list can be selected for benchmark, because non was given as parameter "
                                  "and test and validation set are empty.")
         else:
             id_list = ModelTrainer._input_to_str_list(ids_input)
-            self.logger.info("Start benchmark on given input ({}): [{}]".format(len(id_list), ", ".join(str(i) for i in id_list)))
+            self.logger.info("Start benchmark on given input ({}): [{}]"
+                             .format(len(id_list), ", ".join(str(i) for i in id_list)))
 
         t_start = timer()
-        model_scores = self._forward_batched(hparams, id_list, hparams.batch_size_benchmark, synth=False, benchmark=True, gen_figure=False)
+        model_scores = self._forward_batched(hparams,
+                                             id_list,
+                                             hparams.batch_size_benchmark,
+                                             synth=False,
+                                             benchmark=True,
+                                             gen_figure=False)
         t_training = timer() - t_start
         self.logger.info('Benchmark time for {} sample(s): {}'.format(len(id_list), timedelta(seconds=t_training)))
 
@@ -774,7 +791,8 @@ class ModelTrainer(object):
         return dict_outputs, dict_outputs_post
 
     def gen_figure_from_output(self, id_name, output, hidden, hparams):
-        raise NotImplementedError("Class %s doesn't implement gen_figure_from_output(id_name, output, hidden, hparams)" % self.__class__.__name__)
+        raise NotImplementedError("Class {} doesn't implement gen_figure_from_output(id_name, output, hidden, hparams)"
+                                  .format(self.__class__.__name__))
 
     def synth_ref(self, hparams, file_id_list):
         # Create reference audio files containing only the vocoder degradation.

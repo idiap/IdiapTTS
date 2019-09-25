@@ -131,7 +131,6 @@ def main():
     config_file = args.config_file if hasattr(args, 'config_file') else None
     
     # Main functionality.
-    print("Force align labels")
     gen_mfcc = GenMFCC(args.dir_wav, args.dir_mfcc, id_list)
     gen_mfcc._HCopy(config_file)
 

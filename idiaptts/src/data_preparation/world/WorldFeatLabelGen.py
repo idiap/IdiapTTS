@@ -203,7 +203,11 @@ class WorldFeatLabelGen(LabelGen):
         dim_bap = 1 * deltas_factor
 
         if add_deltas:
-            path = os.path.join(dir_out, WorldFeatLabelGen.dir_deltas + "_{}{}".format(WorldFeatLabelGen.dir_coded_sps, num_coded_sps), id_name + WorldFeatLabelGen.ext_deltas)
+            path = os.path.join(dir_out,
+                                "{}_{}{}".format(WorldFeatLabelGen.dir_deltas,
+                                                 WorldFeatLabelGen.dir_coded_sps,
+                                                 num_coded_sps),
+                                id_name + WorldFeatLabelGen.ext_deltas)
             with open(path, 'rb') as f:
                 try:
                     cmp = np.fromfile(f, dtype=np.float32)
