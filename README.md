@@ -25,3 +25,6 @@ Instructions to produce results similar to those reported in the paper can be fo
 
 #### Icassp'19: An End-to-End Network to Synthesize Intonation using a Generalized Command Response Model
 Instructions to reproduce the results of the paper can be found in *egs/blizzard08_roger/s2/*.
+
+#### SSW'10: Neural VTLN for Speaker Adaptation in TTS
+About to come, we are in the process of releasing the code.
