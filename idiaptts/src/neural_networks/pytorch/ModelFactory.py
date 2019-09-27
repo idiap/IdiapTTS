@@ -17,6 +17,7 @@ import logging
 
 # Local source tree imports.
 from idiaptts.src.neural_networks.pytorch.models.RNNDyn import *
+from idiaptts.src.neural_networks.pytorch.models.WarpingLayer import WarpingLayer
 
 
 class ModelFactory(object):
@@ -64,13 +65,9 @@ class ModelFactory(object):
     __register_architecture.__func__(registered_architectures, Interspeech18baseline)
     __register_architecture.__func__(registered_architectures, BaselineRNN_Yamagishi)
     __register_architecture.__func__(registered_architectures, Icassp19baseline)
+    __register_architecture.__func__(registered_architectures, WarpingLayer)
 
     # Register optional architectures.
-    requirement_warping_layer = importlib.util.find_spec("WarpingLayer")
-    if requirement_warping_layer:
-        from idiaptts.src.neural_networks.pytorch.models.WarpingLayer import WarpingLayer
-        __register_architecture.__func__(registered_architectures, WarpingLayer)
-
     requirement_neuralfilters = importlib.util.find_spec("neural_filters")
     if requirement_neuralfilters:
         from idiaptts.src.neural_networks.pytorch.models.NeuralFilters import NeuralFilters

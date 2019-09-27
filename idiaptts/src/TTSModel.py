@@ -52,7 +52,7 @@ class TTSModel(object):
             synth_load_org_bap=False)
 
         if verbose:
-            logging.info('Final parsed hparams: %s', hparams.values())
+            logging.info(hparams.get_debug_string())
 
         return hparams
 

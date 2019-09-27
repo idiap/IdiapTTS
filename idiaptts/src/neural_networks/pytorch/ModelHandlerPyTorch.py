@@ -377,7 +377,20 @@ class ModelHandlerPyTorch(ModelHandler):
 
         # Load remaining checkpoint information.
         self.model_name = checkpoint['model_name']
-        self.optimiser = checkpoint['optimiser']
+        try:
+            self.optimiser = checkpoint['optimiser']
+            self.logger.warning("Loaded a fully saved optimiser instead of its state dict", DeprecationWarning)
+        except KeyError:
+            optimiser_state_dict = checkpoint['optimiser_state_dict']
+            if optimiser_state_dict is not None:
+                self.set_optimiser(hparams)
+                try:
+                    self.optimiser.load_state_dict(optimiser_state_dict)
+                except ValueError as e:
+                    self.logger.warning("State dict for optimiser {} miss matches checkpoint's optimiser state dict: {}"
+                                        .format(hparams.optimiser_type, e)
+                                        + "\nContinuing without loading optimiser instead.")
+
         # Initial learning rate is required by some optimisers to compute the learning rate of the current epoch.
         if self.optimiser is not None:
             for group in self.optimiser.param_groups:
@@ -418,7 +431,7 @@ class ModelHandlerPyTorch(ModelHandler):
         makedirs_safe(os.path.dirname(file_path))  # Create directory if necessary.
         checkpoint_dict = {'epoch': total_epoch,
                            'model_name': self.model_name,
-                           'optimiser': self.optimiser
+                           'optimiser_state_dict': self.optimiser.state_dict() if self.optimiser is not None else None,
                            # 'loss_function': loss_function
                            }
         if self.model_type:
