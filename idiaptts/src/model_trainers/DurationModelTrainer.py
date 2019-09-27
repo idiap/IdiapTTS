@@ -82,7 +82,7 @@ class DurationModelTrainer(ModelTrainer):
                                                             # Refer to PhonemeLabelGen.load_sample for a list of possible types.
 
         if verbose:
-            logging.info('Final parsed hparams: %s', hparams.values())
+            logging.info(hparams.get_debug_string())
 
         return hparams
 

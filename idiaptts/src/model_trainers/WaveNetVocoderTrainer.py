@@ -140,7 +140,7 @@ class WaveNetVocoderTrainer(ModelTrainer):
             use_speaker_embedding=False)
 
         if verbose:
-            logging.info('Final parsed hparams: %s', hparams.values())
+            logging.info(hparams.get_debug_string())
 
         return hparams
 

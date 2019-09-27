@@ -88,27 +88,28 @@ class ModelTrainer(object):
             np.random.seed(hparams.seed)
             random.seed(hparams.seed)
 
-        id_list_shuffled = id_list
-        if hparams.seed is not None:
-            id_list_shuffled = random.sample(id_list, len(id_list))
+        if not hasattr(self, "id_list_train") or self.id_list_train is None:
+            id_list_shuffled = id_list
+            if hparams.seed is not None:
+                id_list_shuffled = random.sample(id_list, len(id_list))
 
-        # Partition (randomly sorted) ids into [val_set, train_set, test_set].
-        assert (hparams.test_set_perc + hparams.val_set_perc < 1)
-        if hparams.val_set_perc > 0.0:
-            num_valset = max(1, int(len(id_list_shuffled) * hparams.val_set_perc))
-            self.id_list_val = id_list_shuffled[:num_valset]
-        else:
-            num_valset = 0
-            self.id_list_val = None
-        if hparams.test_set_perc > 0.0:
-            num_testset = max(1, int(len(id_list_shuffled) * hparams.test_set_perc))
-            self.id_list_test = id_list_shuffled[-num_testset:]
-        else:
-            num_testset = 0
-            self.id_list_test = None
-        self.id_list_train = id_list_shuffled[num_valset:-num_testset] if num_testset > 0\
-                                                                       else id_list_shuffled[num_valset:]
-        assert(len(self.id_list_train) > 0)
+            # Partition (randomly sorted) ids into [val_set, train_set, test_set].
+            assert (hparams.test_set_perc + hparams.val_set_perc < 1)
+            if hparams.val_set_perc > 0.0:
+                num_valset = max(1, int(len(id_list_shuffled) * hparams.val_set_perc))
+                self.id_list_val = id_list_shuffled[:num_valset]
+            else:
+                num_valset = 0
+                self.id_list_val = None
+            if hparams.test_set_perc > 0.0:
+                num_testset = max(1, int(len(id_list_shuffled) * hparams.test_set_perc))
+                self.id_list_test = id_list_shuffled[-num_testset:]
+            else:
+                num_testset = 0
+                self.id_list_test = None
+            self.id_list_train = id_list_shuffled[num_valset:-num_testset] if num_testset > 0\
+                                                                           else id_list_shuffled[num_valset:]
+            assert(len(self.id_list_train) > 0)
 
         # Create and initialize model.
         self.logger.info("Create ModelHandler.")
@@ -276,7 +277,7 @@ class ModelTrainer(object):
             hparams.parse(hparams_string)
 
         if verbose:
-            logging.info('Final parsed hparams: %s', hparams.values())
+            logging.info(hparams.get_debug_string())
 
         return hparams
 
@@ -377,7 +378,7 @@ class ModelTrainer(object):
         """
 
         hparams.verify()  # Verify that attributes were added correctly, print warning for wrongly initialized ones.
-        self.logger.info('Final parsed hparams: %s', hparams.values())
+        self.logger.info(hparams.get_debug_string())
 
         assert(self.model_handler)  # The init function has be called before training.
 

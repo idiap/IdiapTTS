@@ -89,12 +89,19 @@ def equal_checkpoint(model1_path, model2_path):
             if not (state_dict2[key] == value).all():
                 return False
 
-    optimiser1 = checkpoint1["optimiser"]
-    optimiser2 = checkpoint2["optimiser"]
+    # Backwards compatibility for fully saved optimisers.
+    try:
+        optimiser1_state_dict = checkpoint1["optimiser"].state_dict()
+    except KeyError:
+        optimiser1_state_dict = checkpoint1["optimiser_state_dict"]
+    try:
+        optimiser2_state_dict = checkpoint2["optimiser"].state_dict()
+    except KeyError:
+        optimiser2_state_dict = checkpoint2["optimiser_state_dict"]
 
-    if optimiser1 is not None:
-        if optimiser2 is not None:
-            return equal_iterable(optimiser1.param_groups, optimiser2.param_groups)
+    if optimiser1_state_dict is not None:
+        if optimiser2_state_dict is not None:
+            return equal_iterable(optimiser1_state_dict, optimiser2_state_dict)
         else:
             return False
     return True

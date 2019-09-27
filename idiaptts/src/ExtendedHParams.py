@@ -80,3 +80,8 @@ class ExtendedHParams(HParams):
                 if attr not in self._hparam_types:
                     logging.warning("Attribute {} not in types dictionary."
                                     "Please use add_hparam or add_hparams to add attributes.".format(attr))
+
+    def get_debug_string(self):
+        values = self.values()
+        hp = ['  %s: %s' % (name, values[name]) for name in sorted(values)]
+        return 'Hyperparameters:\n' + '\n'.join(hp)
