@@ -526,7 +526,7 @@ class ModelHandlerPyTorch(ModelHandler):
         model = self.model
         if training:
             model.train()
-            self.logger.info("{}: Train with {} on {}".format(datetime.now(),
+            self.logger.info("{}: Train with {} on {}".format(datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                                                               self.optimiser,
                                                               str(torch.cuda.device_count()) + " GPU(s)." if hparams.use_gpu else "1 CPU."))
         else:
@@ -534,7 +534,7 @@ class ModelHandlerPyTorch(ModelHandler):
                 self.logger.info("Using averaged model for validation.")
                 model = self.ema.model
             model.eval()
-            self.logger.info(str(datetime.now()) + ": Compute loss of validation set.")
+            self.logger.info("{}: Compute loss of validation set.".format(datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
 
         if hparams.log_memory_consumption:
             self.logger.info('CPU: {:.0f} MB, GPU: {} MB'
