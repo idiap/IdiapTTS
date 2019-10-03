@@ -70,7 +70,8 @@ class AcousticModelTrainer(ModelTrainer):
 
         self.OutputGen = WorldFeatLabelGen(dir_world_features,
                                            add_deltas=hparams.add_deltas,
-                                           num_coded_sps=hparams.num_coded_sps)
+                                           num_coded_sps=hparams.num_coded_sps,
+                                           sp_type=hparams.sp_type)
         self.OutputGen.get_normalisation_params(dir_world_features, hparams.output_norm_params_file_prefix)
 
         self.dataset_train = LabelGensDataset(self.id_list_train,
@@ -100,6 +101,7 @@ class AcousticModelTrainer(ModelTrainer):
             num_questions=None,
             question_file=None,  # Used to add labels in plot.
             num_coded_sps=60,
+            sp_type="mcep",
             add_deltas=True,
             synth_load_org_sp=False,
             synth_load_org_lf0=False,

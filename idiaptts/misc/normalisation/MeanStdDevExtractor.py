@@ -187,7 +187,16 @@ class MeanStdDevExtractor(object):
         sum_frames, sum_squared_frames = np.split(stats, stats.shape[0], axis=0)
 
         mean = sum_frames / length
-        std_dev = np.sqrt(sum_squared_frames / length - mean ** 2)
+        variance = sum_squared_frames / length - mean ** 2
+        negative_entries = (variance < 0)[0]
+        if negative_entries.any():
+            logging.warning("Encountered negative variance for indices {} ({}) when combining statistics of {}."
+                            " Setting those elements to 0 instead."
+                            .format(np.arange(variance.shape[1])[negative_entries],
+                                    variance[:, negative_entries],
+                                    file_list))
+            variance[:, negative_entries] = 0.0
+        std_dev = np.sqrt(variance)
 
         if dir_out is not None:
             with open(os.path.join(dir_out, MeanStdDevExtractor.file_name_appendix + ".bin"), 'wb') as file:
