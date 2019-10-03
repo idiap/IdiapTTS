@@ -430,7 +430,7 @@ class ModelTrainer(object):
                                     "should be a factor of hparams.epochs_per_test.")
 
         t_start = timer()
-        self.logger.info('Start training: ' + str(datetime.now()))
+        self.logger.info('Start training: {}'.format(datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
 
         self.model_handler.set_optimiser(hparams)
         self.model_handler.set_scheduler(hparams, self.total_epoch if hparams.use_saved_learning_rate else 0)
