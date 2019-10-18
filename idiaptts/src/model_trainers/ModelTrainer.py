@@ -74,13 +74,16 @@ class ModelTrainer(object):
             if ModelHandlerPyTorch.cuda_is_available():
                 device_count = ModelHandlerPyTorch.device_count()
                 if not device_count == hparams.num_gpus:
-                    self.logger.error("Specified GPU count in hparams.num_gpus ({}) doesn't match hardware ({}).".format(hparams.num_gpus, device_count))
+                    self.logger.error("Specified GPU count in hparams.num_gpus ({}) doesn't match hardware ({})."
+                                      .format(hparams.num_gpus, device_count))
                 assert(device_count == hparams.num_gpus)  # Specified GPU count doesn't match hardware.
             else:
                 self.logger.warning("No CUDA device available, use CPU mode instead.")
                 hparams.use_gpu = False
 
-        if "lr" not in hparams.optimiser_args and hasattr(hparams, "learning_rate") and hparams.learning_rate is not None:  # Backwards compatibility.
+        if "lr" not in hparams.optimiser_args\
+                and hasattr(hparams, "learning_rate")\
+                and hparams.learning_rate is not None:  # Backwards compatibility.
             hparams.optimiser_args["lr"] = hparams.learning_rate
 
         if hparams.seed is not None:
@@ -144,30 +147,35 @@ class ModelTrainer(object):
             voice=None,  # Specifies a part of the dataset used.
             work_dir=None,  # Directory from where the script is running.
             data_dir=None,  # Database directory.
-            logging_batch_index_perc=10,  # Percentage of samples used from the full dataset between logging the loss for training and testing.
+            logging_batch_index_perc=10,  # Percentage used from the full dataset between logging the train/test loss.
             start_with_test=True,  # Determines if the model is tested first before any training loops.
                                    # The computed loss is also used to identify the best model so far.
                                    # Therefore, if this is False and use_best_as_final_model is True
                                    # the best model of the current training will be saved, which possibly
                                    # overrides an older better model.
             log_memory_consumption=True,
-            epochs_per_test=1,  # Number of training epochs before testing (NOTE that this includes the scheduler_type with epoch scheduling).
+            epochs_per_test=1,  # Number of training epochs before testing
+                                # NOTE that this includes the scheduler_type with epoch scheduling.
 
             networks_dir="nn",
-            checkpoints_dir="checkpoints", # Subdirectory within the networks_dir to save checkpoints.
+            checkpoints_dir="checkpoints",  # Subdirectory within the networks_dir to save checkpoints.
             epochs_per_checkpoint=1,  # Number of epochs between checkpoints, 0 for no checkpoints at all.
             save_final_model=True,  # Determines if the model is saved after training.
             use_best_as_final_model=True,  # Substitutes the saved final model with the best of the current run.
+            gen_figure_ext=".pdf",
 
             ################################
             # Experiment Parameters        #
             ################################
             epochs=0,
             test_set_perc=0.05,  # Percentage of samples taken from the given id_list in __init__ for testing.
-                                 # Ignored when self.id_list_train is already set. Note that self.id_list_test must be set then as well.
+                                 # Ignored when self.id_list_train is already set.
+                                 # Note that self.id_list_test must be set then as well.
             val_set_perc=0.05,   # Percentage of samples taken from the given id_list in __init__ for validation.
-                                 # Ignored when self.id_list_train is already set. Note that self.id_list_val should be set then as well.
-            seed=None,  # Used to initialize torch, numpy, and random. If None, the id_list is not shuffled before taking test and validation set from it.
+                                 # Ignored when self.id_list_train is already set.
+                                 # Note that self.id_list_val should be set then as well.
+            seed=None,  # Used to initialize torch, numpy, and random.
+                        # If None, the id_list is not shuffled before taking test and validation set from it.
             # fp16_run=False,  # TODO: Not implemented.
             # distributed_run=False,  # TODO: Find out how distributed run works.
             # dist_url="file://distributed.dpt",
@@ -190,9 +198,10 @@ class ModelTrainer(object):
             dataset_num_workers_cpu=0,  # Number of workers used in dataset when running on CPU(s).
             dataset_pin_memory=True,
             dataset_load_async=True,
-            teacher_forcing_in_test=False,  # If True, the targets are also given to the model when running the test (needed for WaveNet).
+            teacher_forcing_in_test=False,  # If True, the targets are also given to the model when running the test
+                                            # (needed for WaveNet).
             preload_next_batch_to_gpu=False,  # If True loads the next batch to GPU while processing the current one.
-                                              # This enhances GPU usage for the cost of memory, because two batches are loaded to the GPU.
+                                              # This enhances GPU usage for the cost of memory (two batches are loaded).
                                               # TODO: This does not work yet, because cuda async does lazy loading.
 
             ################################
@@ -202,14 +211,13 @@ class ModelTrainer(object):
             output_norm_params_file_prefix=None,
             len_in_out_multiplier=1,
             out_dir=None,
-            world_dir=None,  # Full path to directory with WORLD features, required to synthesise with extracted features.
+            world_dir=None,  # Full path to directory with WORLD features, required for copy synthesis.
                              # If None, hparams.out_dir/../WORLD is used.
 
             ################################
             # Audio Parameters             #
             ################################
             frame_size_ms=5,
-            # max_wav_value=32768.0,
 
             ################################
             # Model Parameters             #
@@ -231,7 +239,7 @@ class ModelTrainer(object):
             backward_retain_graph=False,  # Determines if the gradient computation should do aggressive memory freeing.
                                           # Only needed when gradient computational graph is reused.
             optimiser_type="Adam",  # "Adam", "SGD"  TODO: more
-            optimiser_args=dict(),  # Set optimiser arguments. Preferred way to set learning rate: optimiser_args["lr"]=...
+            optimiser_args=dict(),  # Set optimiser arguments. Preferred way to set learning rate: optimiser_args["lr"]=
             use_saved_learning_rate=True,  # Use the learning rate saved with a model after loading it.
             replace_inf_grads_by_zero=False,  # Automatically substitute +/- inf gradients with zero during training.
             # dynamic_loss_scaling=True,
@@ -240,19 +248,22 @@ class ModelTrainer(object):
             scheduler_type="default",  # "None", "Plateau", "Exponential","Noam",  TODO: "Step", "Cyclic_cosine"
             scheduler_args=dict(),
             iterations_per_scheduler_step=None,  # Number of training iterations after which the scheduler step function
-                                                 # is called with the current loss and total number of iterations as parameter.
-                                                 # If None the scheduler is not called.
+                                                 # is called with the current loss and total number of iterations as
+                                                 # parameter. If None the scheduler is not called.
             epochs_per_scheduler_step=None,  # Number of training epochs after which the scheduler step function is
                                              # called with the current validation loss and total number of epochs.
-                                             # When a model is loaded the epoch number continues from the epoch number stored in the model.
+                                             # When a model is loaded the epoch number continues from the epoch number
+                                             # stored in the model.
 
             grad_clip_norm_type=None,  # If None no gradient clipping otherwise uses grad_clip_max_norm (small bias).
             grad_clip_max_norm=None,  # Ignored if grad_clip_norm_type is None.
             grad_clip_thresh=None,  # Clip absolute value of gradient (big bias).
 
             # Set optimiser or scheduler_type to ignore type configuration above. Used to try new implementations.
-            optimiser=None,  # Will be called with model parameters only. Set other parameters with partial. Example: partial(torch.optim.Adam, **args)).
-            scheduler=None,  # Will be called with optimiser only. Set other parameters with partial. Example: partial(ReduceLROnPlateau, **args)).
+            optimiser=None,  # Will be called with model parameters only. Set other parameters with partial.
+                             # Example: partial(torch.optim.Adam, **args)).
+            scheduler=None,  # Will be called with optimiser only. Set other parameters with partial.
+                             # Example: partial(ReduceLROnPlateau, **args)).
 
             ################################
             # Synthesis Parameters         #
@@ -260,13 +271,14 @@ class ModelTrainer(object):
             synth_vocoder="WORLD",  # "WORLD", "r9y9wavenet_quantized_16k_world_feats"
             synth_ext="wav",  # Extension of the output audio.
             synth_fs=16000,
-            num_coded_sps=60,  # Number of spectral features, currently always MGC.
-            synth_dir=None,
+            sp_type="mcep",
+            num_coded_sps=60,  # Number of coded spectral features.
+            synth_dir=None,  # Output directory to save the synthesised audio.
             synth_acoustic_model_path=None,
-            synth_file_suffix='',
-            do_post_filtering=False,  # TODO: Merlin does some filtering before calling its vocoder. Possible implementation: https://github.com/r9y9/nnmnkwii/blob/master/nnmnkwii/postfilters/__init__.py
-            synth_gen_figure=False,
-            gen_figure_ext=".pdf",
+            synth_file_suffix='',  # Suffix of synthesised files name.
+            do_post_filtering=False,  # Merlin post-filtering of cepstrum.
+            synth_gen_figure=False,  # Saves a plot when synthesising.
+
             # epochs_per_plot=0,  # No plots per epoch with <= 0. # TODO: plot in run method each ... epochs.
             # plot_per_epoch_id_list=None,  # TODO: Id(s) in the dictionary which are plotted.
         )
@@ -830,6 +842,52 @@ class ModelTrainer(object):
         # Restore identifier.
         hparams.synth_file_suffix = old_synth_file_suffix
 
+    def _coded_sp_to_pow_sp(self, coded_sp, fs, sp_type, cep_post_filtering):
+        """
+        Convert a coded spectrum back to its power spectrum representation.
+
+        :param coded_sp:
+        :param fs:
+        :param sp_type:
+        :param cep_post_filtering:
+        :return:
+        """
+        if cep_post_filtering:
+            if sp_type in ["mcep", "mgc"]:
+                coded_sp = merlin_post_filter(coded_sp, WorldFeatLabelGen.fs_to_mgc_alpha(fs))
+            else:
+                self.logger.warning("Post-filtering only implemented for cepstrum features.")
+
+        fft_size = pyworld.get_cheaptrick_fft_size(fs)
+        if sp_type == "mcep":
+            ln_sp = pysptk.mgc2sp(np.ascontiguousarray(coded_sp, dtype=np.float64),
+                                  alpha=WorldFeatLabelGen.fs_to_mgc_alpha(fs),
+                                  gamma=0.0,
+                                  fftlen=fft_size)
+            # ln_sp = np.exp(ln_sp.real * 2.0)
+            # ln_sp.imag = ln_sp.imag * 180.0 / np.pi
+            ln_sp = np.exp(ln_sp.real)
+            ln_sp = np.power(ln_sp.real / 32768.0, 2)
+        elif sp_type == "mgc":
+            ln_sp = pysptk.mgc2sp(np.ascontiguousarray(coded_sp, dtype=np.float64),
+                                  alpha=WorldFeatLabelGen.fs_to_mgc_alpha(fs),
+                                  gamma=WorldFeatLabelGen.mgc_gamma,
+                                  fftlen=fft_size)
+            # ln_sp = np.exp(ln_sp.real * 2.0)
+            # ln_sp.imag = ln_sp.imag * 180.0 / np.pi
+            ln_sp = np.exp(ln_sp.real)
+            ln_sp = np.power(ln_sp.real / 32768.0, 2)
+        elif sp_type == "mfcc":
+            return pyworld.decode_spectral_envelope(np.ascontiguousarray(coded_sp, np.float64),
+                                                    fs,
+                                                    fft_size)
+        elif sp_type == "mfbanks":
+            raise NotImplementedError()  # TODO
+        else:
+            raise NotImplementedError("Unknown sp_type {}, cannot convert it to power spectrum".format(sp_type))
+
+        return ln_sp
+
     def run_world_synth(self, synth_output, hparams):
         """Run the WORLD synthesize method."""
         fft_size = pyworld.get_cheaptrick_fft_size(hparams.synth_fs)
@@ -838,19 +896,11 @@ class ModelTrainer(object):
         for id_name, output in synth_output.items():
             logging.info("Synthesise {} with the WORLD vocoder.".format(id_name))
 
-            coded_sp, lf0, vuv, bap = WorldFeatLabelGen.convert_to_world_features(output, contains_deltas=False, num_coded_sps=hparams.num_coded_sps)
+            coded_sp, lf0, vuv, bap = WorldFeatLabelGen.convert_to_world_features(output,
+                                                                                  contains_deltas=False,
+                                                                                  num_coded_sps=hparams.num_coded_sps)
+            sp = self._coded_sp_to_pow_sp(coded_sp, hparams.synth_fs, hparams.sp_type, hparams.do_post_filtering)
 
-            if hparams.do_post_filtering:
-                coded_sp = merlin_post_filter(coded_sp, WorldFeatLabelGen.mgc_alpha)
-
-            ln_sp = pysptk.mgc2sp(np.ascontiguousarray(coded_sp, dtype=np.float64), alpha=WorldFeatLabelGen.mgc_alpha, gamma=0.0, fftlen=fft_size)
-            # sp = np.exp(sp.real * 2.0)
-            # sp.imag = sp.imag * 180.0 / np.pi
-            sp = np.exp(ln_sp.real)
-            sp = np.power(sp.real / 32768.0, 2)
-            # sp = np.power(sp.real / 32768.0, 2)
-            # sp = np.exp(np.power(sp.real, 2))
-            # sp = pyworld.decode_spectral_envelope(np.ascontiguousarray(coded_sp, np.float64), self.synth_fs, fft_size)  # Cepstral version.
             f0 = np.exp(lf0, dtype=np.float64)
             vuv[f0 < WorldFeatLabelGen.f0_silence_threshold] = 0  # WORLD throws an error for too small f0 values.
             f0[vuv == 0] = 0.0
@@ -858,6 +908,7 @@ class ModelTrainer(object):
 
             waveform = pyworld.synthesize(f0, sp, ap, hparams.synth_fs)
             waveform = waveform.astype(np.float32, copy=False)  # Does inplace conversion, if possible.
+            # TODO: waveform = WorldFeatLabelGen.world_features_to_raw(amp_sp, lf0, vuv, bap, hparams.synth_fs)
 
             # Always save as wav file first and convert afterwards if necessary.
             file_path = os.path.join(save_dir, "{}{}{}{}".format(os.path.basename(id_name),
@@ -909,7 +960,7 @@ class ModelTrainer(object):
                 coded_sp, lf0, vuv, bap = input_gen.convert_to_world_features(output,
                                                                               contains_deltas=input_gen.add_deltas,
                                                                               num_coded_sps=hparams.num_coded_sps)
-                coded_sp = merlin_post_filter(coded_sp, WorldFeatLabelGen.mgc_alpha)
+                coded_sp = merlin_post_filter(coded_sp, WorldFeatLabelGen.fs_to_mgc_alpha(hparams.synth_fs))
                 output = input_gen.convert_from_world_features(coded_sp, lf0, vuv, bap)
 
             output = input_gen.preprocess_sample(output)

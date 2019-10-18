@@ -155,14 +155,14 @@ class AcousticModelTrainer(ModelTrainer):
                           xlabel='frames [' + str(hparams.frame_size_ms) + ' ms]',
                           ylabel='Original spectrogram')
         plotter.set_specshow(grid_idx=grid_idx,
-                             spec=np.absolute(WorldFeatLabelGen.mgc_to_sp(original_mgc, hparams.synth_fs)))
+                             spec=np.absolute(WorldFeatLabelGen.mcep_to_amp_sp(original_mgc, hparams.synth_fs)))
 
         grid_idx += 1
         plotter.set_label(grid_idx=grid_idx,
                           xlabel='frames [' + str(hparams.frame_size_ms) + ' ms]',
                           ylabel='NN spectrogram')
         plotter.set_specshow(grid_idx=grid_idx,
-                             spec=np.absolute(WorldFeatLabelGen.mgc_to_sp(coded_sp, hparams.synth_fs)))
+                             spec=np.absolute(WorldFeatLabelGen.mcep_to_amp_sp(coded_sp, hparams.synth_fs)))
 
         if hasattr(hparams, "phoneme_indices") and hparams.phoneme_indices is not None \
            and hasattr(hparams, "question_file") and hparams.question_file is not None:

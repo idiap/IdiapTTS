@@ -57,7 +57,17 @@ class WaveNetVocoderTrainer(ModelTrainer):
         max_frames_input_trainset = int(1000.0 / hparams.frame_size_ms * hparams.max_input_train_sec) * in_to_out_multiplier  # Multiply by number of seconds.
         max_frames_input_testset = int(1000.0 / hparams.frame_size_ms * hparams.max_input_test_sec) * in_to_out_multiplier  # Ensure that test takes all frames. NOTE: Had to limit it because of memory constraints.
 
-        self.InputGen = WorldFeatLabelGen(dir_world_features, add_deltas=False, sampling_fn=partial(sample_linearly, in_to_out_multiplier=in_to_out_multiplier, dtype=np.float32), num_coded_sps=hparams.num_coded_sps)
+        self.InputGen = WorldFeatLabelGen(dir_world_features,
+                                          add_deltas=False,
+                                          sampling_fn=partial(sample_linearly,
+                                                              in_to_out_multiplier=in_to_out_multiplier,
+                                                              dtype=np.float32),
+                                          num_coded_sps=hparams.num_coded_sps,
+                                          sp_type=hparams.sp_type,
+                                          load_sp=hparams.load_sp,
+                                          load_lf0=hparams.load_lf0,
+                                          load_vuv=hparams.load_vuv,
+                                          load_bap=hparams.load_bap)
         self.InputGen.get_normalisation_params(dir_world_features, hparams.input_norm_params_file_prefix)
 
         self.OutputGen = RawWaveformLabelGen(frame_rate_output_Hz=hparams.frame_rate_output_Hz,
@@ -137,7 +147,13 @@ class WaveNetVocoderTrainer(ModelTrainer):
             freq_axis_kernel_size=3,
             gin_channels=-1,
             n_speakers=1,
-            use_speaker_embedding=False)
+            use_speaker_embedding=False,
+            sp_type="mcep",
+            load_sp=True,
+            load_lf0=True,
+            load_vuv=True,
+            load_bap=True
+        )
 
         if verbose:
             logging.info(hparams.get_debug_string())
