@@ -101,14 +101,17 @@ def discretized_mix_logistic_loss(y_hat, y, num_classes=256,
 
 
 class DiscretizedMixturelogisticLoss(nn.modules.loss._Loss):
-    def __init__(self, num_classes, log_scale_min, size_average=None, reduce=None, reduction='elementwise_mean', shift=1):
+    def __init__(self, num_classes, log_scale_min, size_average=None, reduce=None, reduction='elementwise_mean', shift=1, hinge_loss=True):
         self.num_classes = num_classes
         self.log_scale_min = log_scale_min
         self.shift = shift
+        self.hinge_loss = hinge_loss
 
         super(DiscretizedMixturelogisticLoss, self).__init__(size_average, reduce, reduction)
 
     def forward(self, input, target):
+        # print(input.dtype)
+        # print(target.dtype)
 
         if self.shift is not None:
             input = input[..., :-self.shift]
@@ -117,6 +120,16 @@ class DiscretizedMixturelogisticLoss(nn.modules.loss._Loss):
         # Input: (B x C x T), target: (B x 1 x T) --> required target: (B x T x 1)
         target = target.transpose(1, 2)
         loss_full = discretized_mix_logistic_loss(input, target, num_classes=self.num_classes, log_scale_min=self.log_scale_min, reduce=False)
+        if self.hinge_loss:
+            nr_mix = input.size(1) // 3
+            log_scales = input[:, 2 * nr_mix:3 * nr_mix, :]
+            # print(input.device)
+            # print(target.device)
+            # print(log_scales.device)
+            # print(torch.tensor(self.num_classes, device=input.device).device)
+            # print(torch.log(torch.tensor(self.num_classes, device=input.device)).device)
+            # print(torch.max(0.0, (-log_scales).add(torch.log(torch.tensor(self.num_classes, device=input.device)))).device)
+            loss_full += torch.max(torch.tensor(0.0, device=input.device), (-log_scales).add(-torch.log(torch.tensor(self.num_classes, dtype=input.dtype, device=input.device)))).sum(dim=1).unsqueeze(-1)
         # assert loss_full.size() == target.size()
 
         # TODO: Consider self.reduction here.

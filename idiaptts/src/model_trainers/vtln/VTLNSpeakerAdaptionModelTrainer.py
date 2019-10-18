@@ -80,7 +80,7 @@ class VTLNSpeakerAdaptionModelTrainer(AcousticModelTrainer):
         coded_sp, lf0, vuv, bap = WorldFeatLabelGen.convert_to_world_features(labels_post,
                                                                               contains_deltas=False,
                                                                               num_coded_sps=hparams.num_coded_sps)
-        sp = WorldFeatLabelGen.mgc_to_sp(coded_sp, hparams.synth_fs)
+        sp = WorldFeatLabelGen.mcep_to_amp_sp(coded_sp, hparams.synth_fs)
         lf0, _ = interpolate_lin(lf0)
 
         # Load original LF0.
@@ -112,7 +112,7 @@ class VTLNSpeakerAdaptionModelTrainer(AcousticModelTrainer):
         # plotter.set_data_list(grid_idx=grid_idx, data_list=graphs)
         # plotter.set_area_list(grid_idx=grid_idx, area_list=[(np.invert(vuv.astype(bool)), '0.8', 1.0),
         #                                                     (np.invert(original_vuv.astype(bool)), 'red', 0.2)])
-        # plotter.set_label(grid_idx=grid_idx, xlabel='frames [{}] ms'.format(hparams.frame_size_ms), ylabel='log(f0)')
+        # plotter.set_label(grid_idx=grid_idx, xlabel='frames [{}] ms'.format(hparams.frame_length), ylabel='log(f0)')
 
         # Reverse the warping.
         wl = self._get_dummy_warping_layer(hparams)
@@ -130,7 +130,7 @@ class VTLNSpeakerAdaptionModelTrainer(AcousticModelTrainer):
                           xlabel='frames [{}] ms'.format(hparams.frame_size_ms),
                           ylabel='Pre-network')
         plotter.set_specshow(grid_idx=grid_idx,
-                             spec=np.abs(WorldFeatLabelGen.mgc_to_sp(pre_net_mgc, hparams.synth_fs)[:, :sp.shape[1]]))
+                             spec=np.abs(WorldFeatLabelGen.mcep_to_amp_sp(pre_net_mgc, hparams.synth_fs)[:, :sp.shape[1]]))
 
         # Plot final predicted spectral features.
         grid_idx += 1
@@ -163,7 +163,7 @@ class VTLNSpeakerAdaptionModelTrainer(AcousticModelTrainer):
                           xlabel='frames [{}] ms'.format(hparams.frame_size_ms),
                           ylabel='Original spectrogram')
         plotter.set_specshow(grid_idx=grid_idx,
-                             spec=np.abs(WorldFeatLabelGen.mgc_to_sp(original_mgc, hparams.synth_fs)[:, :sp.shape[1]]))
+                             spec=np.abs(WorldFeatLabelGen.mcep_to_amp_sp(original_mgc, hparams.synth_fs)[:, :sp.shape[1]]))
 
         plotter.gen_plot()
         plotter.save_to_file(filename + '.VTLN' + hparams.gen_figure_ext)

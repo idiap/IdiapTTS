@@ -15,15 +15,19 @@ import argparse
 import glob
 import logging
 import numpy as np
+import scipy
 import os
 import math
 import sys
 from collections import OrderedDict
+from typing import Callable
 
 # Third-party imports.
 import pyworld
 import soundfile
 import pysptk
+import librosa
+import librosa.display
 from scipy.io import wavfile
 
 # Local source tree imports.
@@ -39,57 +43,66 @@ class WorldFeatLabelGen(LabelGen):
     # TODO: Constants into hparams.
     f0_silence_threshold = 30
     lf0_zero = 0
-    mgc_alpha = 0.58
+    mgc_gamma = -1./3.
+    preemphasis = 0.97
 
     dir_lf0 = "lf0"
     dir_vuv = "vuv"
     dir_bap = "bap"
     dir_deltas = "cmp"
 
-    ext_lf0 = ".lf0"
-    ext_vuv = ".vuv"
-    ext_bap = ".bap"
-    ext_deltas = ".cmp"
+    ext_lf0 = "lf0"
+    ext_vuv = "vuv"
+    ext_bap = "bap"
+    ext_deltas = "cmp"
 
     logger = logging.getLogger(__name__)
 
-    def __init__(self, dir_labels, add_deltas=False, sampling_fn=None, num_coded_sps=60, sp_type="mcep", load_sp=True, load_lf0=True, load_vuv=True, load_bap=True):
+    def __init__(self, dir_labels, add_deltas=False, sampling_fn=None, num_coded_sps=60, sp_type="mcep", hop_size_ms=5,
+                 load_sp=True, load_lf0=True, load_vuv=True, load_bap=True):
         """
         Constructor to use the class as a database.
         If add_delta is false labels have the dimension num_frames x (num_coded_sps + 3) [sp_type(num_coded_sps), lf0,
         vuv, bap(1)], otherwise the deltas and double deltas are added between the features resulting in
         num_frames x (3*num_coded_sps + 7) [sp_type(3*num_coded_sps), lf0(3*1), vuv, bap(3*1)].
 
-        :param dir_labels:             While using it as a database dir_labels has to contain the prepared labels.
-        :param add_deltas:             Determines if labels contain deltas and double deltas.
-        :param sampling_fn:            Provide a function for up- or down-sampling the features during preprocessing.
-        :param num_coded_sps:          Number of bins used to represent the coded spectral features.
-        :param sp_type:                Type of the encoded spectral features e.g. MFCC, MGC, mfbanks (mel-filter banks).
+        :param dir_labels:        While using it as a database dir_labels has to contain the prepared labels.
+        :param add_deltas:        Determines if labels contain deltas and double deltas.
+        :param sampling_fn:       Provide a function for up- or down-sampling the features during preprocessing.
+        :param num_coded_sps:     Number of bins used to represent the coded spectral features.
+        :param sp_type:           Type of the encoded spectral features e.g. mcep, mgc, mfbanks (mel-filter banks).
+        :param hop_size_ms:       Hop size of FFT window in milliseconds.
+        :param load_sp:           Whether to extract/load coded spectral features.
+        :param load_lf0:          Whether to extract/load LF0.
+        :param load_vuv:          Whether to extract/load V/UV flag.
+        :param load_bap:          Whether to extract/load BAP.
         """
 
-        # Attributes.
+        # Save parameters.
         self.dir_labels = dir_labels  # Only used in __getitem__().
         self.add_deltas = add_deltas
         self.sampling_fn = sampling_fn
-        self.norm_params = None
-        self.cov_coded_sp = None
-        self.cov_lf0 = None
-        self.cov_bap = None
         self.num_coded_sps = num_coded_sps
         self.sp_type = sp_type
+        self.hop_size_ms = hop_size_ms
         self.load_sp = load_sp
         self.load_lf0 = load_lf0
         self.load_vuv = load_vuv
         self.load_bap = load_bap
-        self.dir_coded_sps = sp_type + str(num_coded_sps)
+
+        # Attributes.
+        self.norm_params = None
+        self.cov_coded_sp = None
+        self.cov_lf0 = None
+        self.cov_bap = None
+        self.dir_coded_sps = self.sp_type + str(self.num_coded_sps)
         self.dir_deltas += "_" + self.dir_coded_sps
-        # self.dir_deltas += "_{}{}".format(num_coded_sps, self.dir_coded_sps)  # TODO: Use this instead.
 
     def __getitem__(self, id_name):
         """Return the preprocessed sample with the given id_name."""
         sample = self.load_sample(id_name,
                                   self.dir_labels,
-                                  self.add_deltas,
+                                  add_deltas=self.add_deltas,
                                   num_coded_sps=self.num_coded_sps,
                                   sp_type=self.sp_type,
                                   load_sp=self.load_sp,
@@ -241,7 +254,8 @@ class WorldFeatLabelGen(LabelGen):
         return sample
 
     @staticmethod
-    def load_sample(id_name, dir_out, add_deltas=False, num_coded_sps=60, sp_type="mcep", load_sp=True, load_lf0=True, load_vuv=True, load_bap=True):
+    def load_sample(id_name, dir_out, add_deltas=False, num_coded_sps=60, sp_type="mcep",
+                    load_sp=True, load_lf0=True, load_vuv=True, load_bap=True):
         """
         Load world features from dir_out.
 
@@ -264,7 +278,7 @@ class WorldFeatLabelGen(LabelGen):
         if add_deltas:
             path = os.path.join(dir_out,
                                 "{}_{}{}".format(WorldFeatLabelGen.dir_deltas, sp_type, num_coded_sps),
-                                id_name + WorldFeatLabelGen.ext_deltas)
+                                "{}.{}".format(id_name, WorldFeatLabelGen.ext_deltas))
             with open(path, 'rb') as f:
                 try:
                     cmp = np.fromfile(f, dtype=np.float32)
@@ -304,7 +318,9 @@ class WorldFeatLabelGen(LabelGen):
                 output_list.append(coded_sp)
 
             if load_lf0:
-                path = os.path.join(dir_out, WorldFeatLabelGen.dir_lf0, id_name + WorldFeatLabelGen.ext_lf0)
+                path = os.path.join(dir_out,
+                                    WorldFeatLabelGen.dir_lf0,
+                                    "{}.{}".format(id_name, WorldFeatLabelGen.ext_lf0))
                 with open(path, 'rb') as f:
                     try:
                         lf0 = np.fromfile(f, dtype=np.float32)
@@ -315,7 +331,9 @@ class WorldFeatLabelGen(LabelGen):
                 output_list.append(lf0)
 
             if load_vuv:
-                path = os.path.join(dir_out, WorldFeatLabelGen.dir_vuv, id_name + WorldFeatLabelGen.ext_vuv)
+                path = os.path.join(dir_out,
+                                    WorldFeatLabelGen.dir_vuv,
+                                    "{}.{}".format(id_name, WorldFeatLabelGen.ext_vuv))
                 with open(path, 'rb') as f:
                     try:
                         vuv = np.fromfile(f, dtype=np.float32)
@@ -326,7 +344,9 @@ class WorldFeatLabelGen(LabelGen):
                 output_list.append(vuv)
 
             if load_bap:
-                path = os.path.join(dir_out, WorldFeatLabelGen.dir_bap, id_name + WorldFeatLabelGen.ext_bap)
+                path = os.path.join(dir_out,
+                                    WorldFeatLabelGen.dir_bap,
+                                    "{}.{}".format(id_name, WorldFeatLabelGen.ext_bap))
                 with open(path, 'rb') as f:
                     try:
                         bap = np.fromfile(f, dtype=np.float32)
@@ -344,39 +364,6 @@ class WorldFeatLabelGen(LabelGen):
             labels = np.concatenate(output_list, axis=1)
 
         return labels
-
-    @staticmethod
-    def convert_to_world_features(sample, contains_deltas=False, num_coded_sps=60):
-        """Convert world acoustic features w/ or w/o deltas to WORLD understandable features."""
-
-        deltas_factor = 3 if contains_deltas else 1
-        assert sample.shape[1] == (num_coded_sps + 2) * deltas_factor + 1, "WORLD requires all features to be present."
-
-        coded_sp = sample[:, :num_coded_sps]
-        lf0 = sample[:, num_coded_sps * deltas_factor]
-        vuv = np.copy(sample[:, num_coded_sps * deltas_factor + deltas_factor])
-        vuv[vuv < 0.5] = 0.0
-        vuv[vuv >= 0.5] = 1.0
-        bap = sample[:, -deltas_factor]
-
-        return coded_sp, lf0, vuv, bap
-
-    @staticmethod
-    def convert_from_world_features(coded_sp, lf0, vuv, bap):
-        """Convert from world features to a single feature vector with T x (|coded_sp|, |lf0|, |vuv|, |bap|) dim."""
-        if lf0.ndim < 2:
-            lf0 = lf0[:, None]
-        if vuv.ndim < 2:
-            vuv = vuv[:, None]
-        if bap.ndim < 2:
-            bap = bap[:, None]
-        return np.concatenate((coded_sp, lf0, vuv, bap), axis=1)
-
-    @staticmethod
-    def mgc_to_sp(mgc, synth_fs):
-        fft_size = pyworld.get_cheaptrick_fft_size(synth_fs)
-        ln_sp = pysptk.mgc2sp(np.ascontiguousarray(mgc, dtype=np.float64), alpha=WorldFeatLabelGen.mgc_alpha, gamma=0.0, fftlen=fft_size)
-        return ln_sp
 
     def get_normalisation_params(self, dir_out, file_name=None):
         """
@@ -452,7 +439,7 @@ class WorldFeatLabelGen(LabelGen):
         return self.norm_params
 
     @staticmethod
-    def _fs_to_mgc_alpha(fs):
+    def fs_to_mgc_alpha(fs):
         """
         Convert sampling rate to appropriate MGC warping parameter.
 
@@ -470,12 +457,14 @@ class WorldFeatLabelGen(LabelGen):
             raise NotImplementedError()
 
     @staticmethod
-    def _fs_to_frame_length(fs):
+    def fs_to_frame_length(fs):
         """
         Convert sampling rate to frame length for STFT frame length.
 
         Code base on: Merlin's /misc/scripts/vocoder/world/extract_features_for_merlin.sh
         """
+        # return pyworld.get_cheaptrick_fft_size(fs)  # TODO: Is this a better alternative?
+
         if fs == 16000 or fs == 22050:
             return 1024
         elif fs == 44100 or fs == 44800:
@@ -484,137 +473,409 @@ class WorldFeatLabelGen(LabelGen):
             raise NotImplementedError()
 
     @staticmethod
-    def _framing(signal, sample_rate, frame_size_ms=None, frame_stride_ms=5):
+    def convert_to_world_features(sample, contains_deltas=False, num_coded_sps=60):
+        """Convert world acoustic features w/ or w/o deltas to WORLD understandable features."""
+
+        deltas_factor = 3 if contains_deltas else 1
+        assert sample.shape[1] == (num_coded_sps + 2) * deltas_factor + 1, "WORLD requires all features to be present."
+
+        coded_sp = sample[:, :num_coded_sps]
+        lf0 = sample[:, num_coded_sps * deltas_factor]
+        vuv = np.copy(sample[:, num_coded_sps * deltas_factor + deltas_factor])
+        vuv[vuv < 0.5] = 0.0
+        vuv[vuv >= 0.5] = 1.0
+        bap = sample[:, -deltas_factor]
+
+        return coded_sp, lf0, vuv, bap
+
+    @staticmethod
+    def convert_from_world_features(coded_sp, lf0, vuv, bap):
+        """Convert from world features to a single feature vector with T x (|coded_sp|, |lf0|, |vuv|, |bap|) dim."""
+        if lf0.ndim < 2:
+            lf0 = lf0[:, None]
+        if vuv.ndim < 2:
+            vuv = vuv[:, None]
+        if bap.ndim < 2:
+            bap = bap[:, None]
+        return np.concatenate((coded_sp, lf0, vuv, bap), axis=1)
+
+    # @staticmethod
+    # def _framing(signal, sample_rate, frame_size_ms=None, frame_hop_ms=5):
+    #
+    #     if frame_size_ms is None:
+    #         frame_length = WorldFeatLabelGen.fs_to_frame_length(sample_rate)
+    #     else:
+    #         frame_size = frame_size_ms / 1000.
+    #         frame_length = frame_size * sample_rate  # Convert from seconds to samples.
+    #
+    #     frame_stride = frame_hop_ms / 1000.
+    #     frame_step = frame_stride * sample_rate
+    #
+    #     # Framing.
+    #     signal_length = len(signal)
+    #     frame_length = int(round(frame_length))
+    #     frame_step = int(round(frame_step))
+    #     num_frames = int(np.ceil(
+    #         float(np.abs(signal_length - frame_length)) / frame_step))  # Make sure that we have at least 1 frame.
+    #
+    #     pad_signal_length = num_frames * frame_step + frame_length
+    #     z = np.zeros((pad_signal_length - signal_length))
+    #     # Pad Signal to make sure that all frames have equal number of samples
+    #     # without truncating any samples from the original signal.
+    #     pad_signal = np.append(signal, z)
+    #
+    #     indices = np.tile(np.arange(0, frame_length), (num_frames, 1)) + np.tile(
+    #         np.arange(0, num_frames * frame_step, frame_step), (frame_length, 1)).T
+    #     frames = pad_signal[indices.astype(np.int32, copy=False)]
+    #
+    #     return frames
+
+    @staticmethod
+    def get_raw(audio_name: str, preemphasis: float = 0.97):
+        """Extract the raw audio in [-1, 1] and apply pre-emphasis. 0.0 pre-emphasis means no pre-emphasis."""
+        # librosa_raw = librosa.load(audio_name, sr=16000)  # raw in [-1, 1]
+        # fs, raw = wavfile.read(audio_name)  # raw in [-32768, 32768]
+        raw, fs = soundfile.read(audio_name)  # raw in [-1, 1]
+
+        # Pre-emphasis
+        raw = np.append(raw[0], raw[1:] - preemphasis * raw[:-1])
+
+        return raw, fs
+
+    @staticmethod
+    def extract_mgc(raw: np.array, fs: int,
+                    num_coded_sps: int = 60, frame_size_ms: int = None,
+                    frame_hop_ms: int = 5, window_function: Callable = np.hanning,
+                    mgc_alpha: float = None) -> np.array:
+        """Extract MGC from raw [-1, 1] data with SPTK."""
 
         if frame_size_ms is None:
-            frame_length = WorldFeatLabelGen._fs_to_frame_length(sample_rate)
+            frame_length = WorldFeatLabelGen.fs_to_frame_length(fs)
         else:
-            frame_size = frame_size_ms / 1000.
-            frame_length = frame_size * sample_rate  # Convert from seconds to samples.
+            frame_length = int(frame_size_ms / 1000 * fs)
 
-        frame_stride = frame_stride_ms / 1000.
-        frame_step = frame_stride * sample_rate
-
-        # Framing.
-        signal_length = len(signal)
-        frame_length = int(round(frame_length))
-        frame_step = int(round(frame_step))
-        num_frames = int(np.ceil(
-            float(np.abs(signal_length - frame_length)) / frame_step))  # Make sure that we have at least 1 frame.
-
-        pad_signal_length = num_frames * frame_step + frame_length
-        z = np.zeros((pad_signal_length - signal_length))
-        # Pad Signal to make sure that all frames have equal number of samples
-        # without truncating any samples from the original signal.
-        pad_signal = np.append(signal, z)
-
-        indices = np.tile(np.arange(0, frame_length), (num_frames, 1)) + np.tile(
-            np.arange(0, num_frames * frame_step, frame_step), (frame_length, 1)).T
-        frames = pad_signal[indices.astype(np.int32, copy=False)]
-
-        return frames
-
-    @staticmethod
-    def _raw_to_mfbanks(signal, sample_rate, num_filters=80, frame_size_ms=None,
-                        frame_stride_ms=5, pre_emphasis=0.97, window_function=np.hanning):
-
-        # Pre-emphasis.
-        if pre_emphasis is not None:
-            signal = np.append(signal[0], signal[1:] - pre_emphasis * signal[:-1])
+        if mgc_alpha is None:
+            mgc_alpha = WorldFeatLabelGen.fs_to_mgc_alpha(fs)
 
         # Framing.
-        frames = WorldFeatLabelGen._framing(signal, sample_rate, frame_size_ms, frame_stride_ms)
-
+        padded_signal = np.pad(raw, pad_width=frame_length // 2, mode="reflect")
+        frames = librosa.util.frame(padded_signal, frame_length, int(frame_hop_ms / 1000 * fs))
         # Windowing.
         frames *= window_function(frames.shape[1])
 
-        # From time- to spectral-domain.
-        NFFT = 512
-        mag_frames = np.absolute(np.fft.rfft(frames, NFFT))  # Magnitude of the FFT
-        pow_frames = ((1.0 / NFFT) * ((mag_frames) ** 2))  # Power Spectrum
+        mgc = pysptk.mgcep(np.ascontiguousarray(frames.T),
+                           order=num_coded_sps - 1,
+                           alpha=mgc_alpha,
+                           gamma=WorldFeatLabelGen.mgc_gamma,
+                           eps=1.0e-8,
+                           min_det=0.0,
+                           etype=1,
+                           itype=0)
 
-        return WorldFeatLabelGen._pow_sp_to_mfbanks(pow_frames, sample_rate, num_filters)
+        return mgc.astype(np.float32, copy=False)
 
-    @staticmethod
-    def _pow_sp_to_mfbanks(power_spectrum, sample_rate, num_filters=80):
-
-        # Filter banks.
-        NFFT = (power_spectrum.shape[1] - 1) * 2
-        low_freq_mel = 0
-        high_freq_mel = (2595 * np.log10(1 + (sample_rate / 2) / 700))  # Convert Hz to Mel
-        mel_points = np.linspace(low_freq_mel, high_freq_mel, num_filters + 2)  # Equally spaced in Mel scale
-        hz_points = (700 * (10 ** (mel_points / 2595) - 1))  # Convert Mel to Hz
-        bin = np.floor((NFFT + 1) * hz_points / sample_rate)
-
-        fbank = np.zeros((num_filters, int(np.floor(NFFT / 2 + 1))))
-        for m in range(1, num_filters + 1):
-            f_m_minus = int(bin[m - 1])  # left
-            f_m = int(bin[m])  # center
-            f_m_plus = int(bin[m + 1])  # right
-
-            for k in range(f_m_minus, f_m):
-                fbank[m - 1, k] = (k - bin[m - 1]) / (bin[m] - bin[m - 1])
-            for k in range(f_m, f_m_plus):
-                fbank[m - 1, k] = (bin[m + 1] - k) / (bin[m + 1] - bin[m])
-        filter_banks = np.dot(power_spectrum, fbank.T)
-        filter_banks = np.where(filter_banks == 0, np.finfo(float).eps, filter_banks)  # Numerical Stability
-        filter_banks = 20 * np.log10(filter_banks)  # dB
-
-        return np.array(filter_banks, np.float32)
+    # @staticmethod
+    # def extract_mgc(amp_sp: np.array, fs: int, num_coded_sps: int = 60, mgc_alpha: float = None) -> np.array:
+    #     """Extract MGC from the amplitude spectrum from SPTK."""
+    #
+    #     if mgc_alpha is None:
+    #         mgc_alpha = WorldFeatLabelGen.fs_to_mgc_alpha(fs)
+    #
+    #     mgc = pysptk.mgcep(np.ascontiguousarray(amp_sp.T),
+    #                        order=num_coded_sps - 1,
+    #                        alpha=mgc_alpha,
+    #                        gamma=WorldFeatLabelGen.mgc_gamma,
+    #                        eps=1.0e-8,
+    #                        min_det=0.0,
+    #                        etype=1,
+    #                        itype=3)
+    #
+    #     return mgc.astype(np.float32, copy=False)
 
     @staticmethod
-    def _raw_to_mfcc(signal, sample_rate, num_filters=12, cep_lifter=None, frame_size_ms=25, frame_stride_ms=5, pre_emphasis=0.97, window_function=np.hanning):
-
-        filter_banks = WorldFeatLabelGen._raw_to_mfbanks(signal, sample_rate, 80, frame_size_ms, frame_stride_ms, pre_emphasis, window_function)
-
-        from scipy.fftpack import dct
-        mfcc = dct(filter_banks, type=2, axis=1, norm='ortho')[:, 1: (num_filters + 1)]  # Usually keep 2-13
-
-        if cep_lifter is not None:
-            (nframes, ncoeff) = mfcc.shape
-            n = np.arange(ncoeff)
-            lift = 1 + (cep_lifter / 2) * np.sin(np.pi * n / cep_lifter)
-            mfcc *= lift
-
-        return np.array(mfcc, np.float32)
+    def extract_mcep(amp_sp: np.array, num_coded_sps: int, mgc_alpha: float) -> np.array:
+        """Extract MCep from the amplitude spectrum with SPTK."""
+        mcep = pysptk.mcep(amp_sp,
+                           order=num_coded_sps - 1,
+                           alpha=mgc_alpha,
+                           eps=1.0e-8,
+                           min_det=0.0,
+                           etype=1,
+                           itype=3)
+        return mcep.astype(np.float32, copy=False)
 
     @staticmethod
-    def _raw_to_mgc(signal, sample_rate, num_filters=60, frame_size_ms=None, frame_stride_ms=5, window_function=np.hanning, mgc_alpha=None):
+    def librosa_extract_amp_sp(raw: np.array,
+                               fs: int, n_fft: int = None,
+                               hop_size_ms: int = 5,
+                               win_length: int = None,
+                               window: str = "hann",
+                               center: bool = True,
+                               pad_mode: str = 'reflect') -> np.array:
+        """Extract amplitude spectrum from raw [-1, 1] signal. Parameters are explained in librosa.stft."""
 
-        frames = WorldFeatLabelGen._framing(signal, sample_rate, frame_size_ms, frame_stride_ms)
+        if n_fft is None:
+            assert fs is not None, "Either fs or n_fft has to be given."
+            n_fft = WorldFeatLabelGen.fs_to_frame_length(fs)
 
-        # Windowing.
-        frames *= window_function(frames.shape[1])
+        amp_sp = np.abs(librosa.stft(raw, n_fft=n_fft, hop_length=int(hop_size_ms / 1000. * fs),
+                                     win_length=win_length, center=center,
+                                     window=window, pad_mode=pad_mode))
 
-        mgc = np.array(pysptk.mgcep(frames,
-                                    order=num_filters - 1,
-                                    alpha=mgc_alpha,
-                                    gamma=-1. / 3.,
-                                    eps=1.0e-8,
-                                    min_det=0.0,
-                                    etype=1,
-                                    itype=0),
-                       dtype=np.float32)
+        return (amp_sp / np.sqrt(amp_sp.shape[0])).T  # T x n_fft
 
-        return mgc
-
-    def gen_data(self, dir_in, dir_out=None, file_id_list=None, id_list=None, add_deltas=False, return_dict=False):
+    @staticmethod
+    def extract_mfbanks(raw: np.array = None, fs: int = 22050, amp_sp: np.array = None,
+                        n_fft: int = None, hop_size_ms: int = 5, num_coded_sps: int = 80) -> np.array:
         """
-        Prepare WORLD features from audio files. If add_delta is false labels have the dimension
-        num_frames x (num_coded_sps + 3) [mgc(num_coded_sps), lf0, vuv, bap(1)], otherwise
-        the deltas and double deltas are added between the features resulting in
-        num_frames x (3*num_coded_sps + 7) [mgc(3*num_coded_sps), lf0(3*1), vuv, bap(3*1)].
+        Extract Mel-filter banks using librosa.
 
-        :param dir_in:         Directory where the .wav files are stored for each utterance to process.
+        :param raw:            Raw audio signal in [-1, 1], ignored when amp_sp is given.
+        :param fs:             Sampling rate
+        :param amp_sp:         Amplitude spectrum, if not given it is extracted with librosa from the raw input.
+        :param n_fft:          FFT length
+        :param hop_size_ms:    Hop size in miliseconds.
+        :param num_coded_sps:  Number of output Mel-filter banks
+        :return:               Mel-filter banks as float32.
+        """
+        assert (n_fft is not None or amp_sp is not None), "Either FFT size has to be given or amplitude spectrogram."
+        if amp_sp is None:
+            assert raw is not None, "Either raw signal or amplitude spectrum must be given."
+            amp_sp = WorldFeatLabelGen.librosa_extract_amp_sp(raw, fs, n_fft, hop_size_ms)
+        mfbanks = librosa.feature.melspectrogram(sr=fs,
+                                                 S=amp_sp.T,  # Use amplitude spectrum.
+                                                 n_fft=n_fft,
+                                                 hop_length=int(fs * hop_size_ms / 1000.0),
+                                                 n_mels=num_coded_sps).T
+
+        return mfbanks.astype(np.float32, copy=False)
+
+    # @staticmethod
+    # def extract_mfcc(raw: np.array, fs: int, amp_sp: np.array = None,
+    #                  n_fft: int = None, hop_size_ms: int = 5, num_coded_sps = 12) -> np.array:
+    #     # Using the default number (128) of mel bins.
+    #     mel_sp = librosa.feature.melspectrogram(y=raw,  # Ignored when amp_sp not None.
+    #                                             sr=fs,
+    #                                             S=amp_sp.T if amp_sp is not None else None,  # Use amplitude spectrum.
+    #                                             n_fft=n_fft,
+    #                                             hop_length=int(fs * hop_size_ms / 1000.0))
+    #     log_pow_mel_sp = librosa.power_to_db(np.square(mel_sp), top_db=None)
+    #     mfcc = librosa.feature.mfcc(sr=fs, S=log_pow_mel_sp, n_mfcc=num_coded_sps).T
+    #
+    #     return mfcc
+
+    @staticmethod
+    def mcep_to_amp_sp(mcep: np.array, fs: int, alpha: float = None):
+        """Convert MCep back to amplitude spectrum using SPTK."""
+        if alpha is None:
+            alpha = WorldFeatLabelGen.fs_to_mgc_alpha(fs)
+        amp_sp = pysptk.mgc2sp(np.ascontiguousarray(mcep, dtype=np.float64),
+                               alpha=alpha,
+                               gamma=0.0,
+                               fftlen=WorldFeatLabelGen.fs_to_frame_length(fs))
+        return np.exp(amp_sp.real.astype(np.float32, copy=False))
+
+    @staticmethod
+    def mgc_to_amp_sp(mgc: np.array, fs: int, alpha: float = None, gamma: float = None, n_fft: int = None):
+        """Convert MGCs back to amplitude spectrum using SPTK."""
+        if alpha is None:
+            alpha = WorldFeatLabelGen.fs_to_mgc_alpha(fs)
+        if gamma is None:
+            gamma = WorldFeatLabelGen.mgc_gamma
+        if n_fft is None:
+            n_fft = WorldFeatLabelGen.fs_to_frame_length(fs)
+        amp_sp = pysptk.mgc2sp(np.ascontiguousarray(mgc, dtype=np.float64),
+                               alpha=alpha,
+                               gamma=gamma,
+                               fftlen=n_fft)
+
+        # WORLD expects spectrum divided by number of final bins, but SPTK does not divide it.
+        return np.exp(amp_sp.real.astype(np.float32, copy=False)) / np.sqrt(amp_sp.shape[1])
+
+    @staticmethod
+    def amp_sp_to_raw(amp_sp: np.array, fs: int, hop_size_ms: int = 5, preemphasis: float = 0.97):
+        """
+        Transform the amplitude spectrum into the waveform with Griffin-Lim.
+        The amplitude spectrum has to have the pitch information. Using amplitude spectrum which was extracted with
+        pitch aligned windows (as WORLD does it) will not work.
+        """
+        raw = librosa.griffinlim(amp_sp.T * np.sqrt(amp_sp.shape[1]), hop_length=int(fs * hop_size_ms / 1000.))
+        return scipy.signal.lfilter([1], [1, -preemphasis], raw)  # de-preemphasis
+
+    @staticmethod
+    def world_features_to_raw(amp_sp: np.array, lf0: np.array, vuv: np.array, bap: np.array, fs: int, n_fft: int = None,
+                              f0_silence_threshold: int = None, lf0_zero: float = None, preemphasis: float = 0.97):
+        """Using the world vocoder to generate the waveform."""
+        if f0_silence_threshold is None:
+            f0_silence_threshold = WorldFeatLabelGen.f0_silence_threshold
+        if lf0_zero is None:
+            lf0_zero = WorldFeatLabelGen.lf0_zero
+        if n_fft is None:
+            n_fft = WorldFeatLabelGen.fs_to_frame_length(fs)
+
+        pow_sp = np.square(amp_sp, dtype=np.float64)
+
+        f0 = np.exp(lf0, dtype=np.float64)
+        vuv[f0 < f0_silence_threshold] = 0  # WORLD throws an error for too small f0 values.
+        f0[vuv == 0] = lf0_zero
+        if f0.ndim > 1:
+            assert f0.shape[1:] == (1,) * (f0.ndim - 1), "F0 should have only one dimension at this stage."
+            f0 = f0.squeeze()
+
+        ap = pyworld.decode_aperiodicity(np.ascontiguousarray(bap.reshape(-1, 1), np.float64), fs, n_fft)
+
+        raw = pyworld.synthesize(f0, pow_sp, ap, fs).astype(np.float32, copy=False)  # Inplace conversion, if possible.
+        return scipy.signal.lfilter([1], [1, -preemphasis], raw)  # de-preemphasis
+
+    @staticmethod
+    def mfbanks_to_amp_sp(coded_sp: np.array, fs: int, n_fft: int = None):
+        """Convert Mel-filter banks back to amplitude spectrum. This does not work well. Use an SSRN instead."""
+        if n_fft is None:
+            n_fft = WorldFeatLabelGen.fs_to_frame_length(fs)
+        amp_sp = librosa.feature.inverse.mel_to_stft(coded_sp.T, sr=fs, n_fft=n_fft, power=1.0, norm=None).T
+        return amp_sp * amp_sp.shape[1]
+
+    @staticmethod
+    def world_extract_features(raw: np.array,
+                               fs: int,
+                               hop_size_ms: int,
+                               f0_silence_threshold: int = None,
+                               lf0_zero: float = None):
+        """Extract WORLD features """
+        if f0_silence_threshold is None:
+            f0_silence_threshold = WorldFeatLabelGen.f0_silence_threshold
+        if lf0_zero is None:
+            lf0_zero = WorldFeatLabelGen.lf0_zero
+
+        f0, pow_sp, ap = pyworld.wav2world(raw, fs, frame_period=hop_size_ms)  # Gives power spectrum in [0, 1]
+
+        amp_sp = np.sqrt(pow_sp)
+
+        # Compute lf0 and vuv information.
+        lf0 = np.log(f0.clip(min=1E-10), dtype=np.float32)
+        lf0[lf0 <= math.log(f0_silence_threshold)] = lf0_zero
+        lf0, vuv = interpolate_lin(lf0)
+        lf0 = lf0.astype(dtype=np.float32)
+        vuv = vuv.astype(dtype=np.float32)
+
+        # Decode aperiodicity to one band aperiodicity.
+        bap = np.array(pyworld.code_aperiodicity(ap, fs), dtype=np.float32)
+
+        return amp_sp, lf0, vuv, bap
+
+    @staticmethod
+    def extract_features(dir_in, file_name: str, file_ext: str = "wav",
+                         preemphasis: float = 0.97, sp_type: str = "mcep", num_coded_sps: int = 40,
+                         load_sp: bool = True, load_lf0: bool = True, load_vuv: bool = True, load_bap: bool = True,
+                         hop_size_ms: int = 5, f0_silence_threshold: int = None, lf0_zero: float = None):
+        """
+        Extract acoustic features from a single audio file.
+        This function is called from the gen_data function.
+        """
+
+        # Load raw audio file.
+        audio_name = os.path.join(dir_in, file_name + "." + file_ext)
+        raw, fs = WorldFeatLabelGen.get_raw(audio_name, preemphasis)
+
+        extr_features_msg = ""
+        lf0, vuv, bap = None, None, None
+        if sp_type == "mcep" or load_lf0 or load_vuv or load_bap:
+            amp_sp, lf0, vuv, bap = WorldFeatLabelGen.world_extract_features(raw,
+                                                                             fs,
+                                                                             hop_size_ms,
+                                                                             f0_silence_threshold,
+                                                                             lf0_zero)
+
+            # Compute the deltas and double deltas.
+            if load_lf0:
+                extr_features_msg += " WORLD lf0,"
+
+            if load_vuv:
+                # Throw a warning when less then 5% of all frames are unvoiced.
+                if vuv.sum() / len(vuv) < 0.05:
+                    logging.warning("Detected only {:.0f}% [{}/{}] unvoiced frames in {}."
+                                    .format(vuv.sum() / len(vuv) * 100.0, int(vuv.sum()), len(vuv), file_name))
+                extr_features_msg += " WORLD vuv,"
+                # V/UV never has deltas features.
+
+            if load_bap:
+                extr_features_msg += " WORLD {}bap,".format(bap.shape[1])
+
+        coded_sp = None
+        if load_sp:
+            if sp_type == "mcep":
+                coded_sp = WorldFeatLabelGen.extract_mcep(amp_sp,
+                                                          num_coded_sps,
+                                                          WorldFeatLabelGen.fs_to_mgc_alpha(fs))
+                assert len(coded_sp) == len(lf0), "Requires testing. Possibly trimming is a solution."
+                extr_features_msg = "WORLD {}{},{}".format(num_coded_sps, sp_type, extr_features_msg)
+            elif sp_type == "mgc":
+                coded_sp = WorldFeatLabelGen.extract_mgc(raw,
+                                                         fs=fs,
+                                                         num_coded_sps=num_coded_sps,
+                                                         frame_hop_ms=hop_size_ms)
+                extr_features_msg = "PySPTK {}{},{}".format(num_coded_sps, sp_type, extr_features_msg)
+            elif sp_type == "mfbanks":
+                coded_sp = WorldFeatLabelGen.extract_mfbanks(raw,
+                                                             fs=fs,
+                                                             n_fft=WorldFeatLabelGen.fs_to_frame_length(fs),
+                                                             hop_size_ms=hop_size_ms,
+                                                             num_coded_sps=num_coded_sps)
+                extr_features_msg = "Librosa {}{},{}".format(num_coded_sps, sp_type, extr_features_msg)
+
+        # Log some debug information.
+        file_name = os.path.basename(file_name)  # Remove speaker.
+        logging.debug("Extract ({}) features from {} at {} Hz with {} ms frame hop."
+                      .format(extr_features_msg.strip().strip(','), file_name, fs, hop_size_ms))
+
+        # # DEBUG
+        # import matplotlib.pyplot as plt
+        # amp_sp = np.sqrt(pow_sp)  # * (2 ** 16) / 2.
+        # hop_size_frames = int(fs * hop_size_ms / 1000.0)
+        # librosa_amp_sp = np.abs(librosa.core.stft(y=raw,
+        #                                           n_fft=WorldFeatLabelGen.fs_to_frame_length(fs),
+        #                                           hop_length=hop_size_frames)).T
+        # plt.figure(figsize=(10, 4))
+        # librosa.display.specshow(librosa.power_to_db(librosa_amp_sp.T, ref=np.max), sr=fs, hop_length=hop_size_ms)
+        # plt.colorbar()
+        # plt.title("librosa amp sp")
+        # plt.show()
+        #
+        # plt.figure()
+        # librosa.display.specshow(librosa.power_to_db(amp_sp.T, ref=np.max), sr=fs, hop_length=hop_size_ms)
+        # plt.colorbar()
+        # plt.title("WORLD amp sp")
+        # plt.show()
+
+        # frame_idx = 200
+        # plt.plot(librosa.power_to_db(pow_sp.T * pow_sp.shape[1], top_db=200)[:, frame_idx], "b-", linewidth=2.0,
+        #          label="WORLD amplitude spectrum 20log|X(w)|")
+        # plt.plot(librosa.amplitude_to_db(librosa_amp_sp.T, top_db=200)[:, frame_idx], "r-", linewidth=2.0,
+        #          label="Librosa amplitude spectrum 20log|X(w)|")
+        # # plt.plot(20/np.log(20)*envelope, "r-", lindewidth=3.0, label="Reconstruction")
+        # plt.xlabel("frequency bin")
+        # plt.ylabel("log amplitude")
+        # plt.legend()
+        # plt.show()
+
+        return coded_sp, lf0, vuv, bap
+
+    def gen_data(self, dir_in, dir_out=None, file_id_list=None, file_ext="wav", id_list=None, return_dict=False):
+        """
+        Prepare acoustic features from audio files. Which features are extracted are determined by the parameters
+        given in the constructor. The self.load_* flags determine if that features is extracted and the self.sp_type
+        determines the type of coded spectrum representation.
+
+        :param dir_in:         Directory where the audio files are stored for each utterance to process.
         :param dir_out:        Main directory where the labels and normalisation parameters are saved to subdirectories.
                                If None, labels are not saved.
         :param file_id_list:   Name of the file containing the ids. Normalisation parameters are saved using
                                this name to differentiate parameters between subsets.
+        :param file_ext:       Extension of all audio files.
         :param id_list:        The list of utterances to process.
                                Should have the form uttId1 \\n uttId2 \\n ...\\n uttIdN.
                                If None, all file in audio_dir are used.
-        :param add_deltas:     Add deltas and double deltas to all features except vuv.
-        :param return_dict:    If true, returns an OrderedDict of all samples as first output.
+        :param return_dict:    If true, returns an OrderedDict of all samples as first output_return_dict.
         :return:               Returns two normalisation parameters as tuple. If return_dict is True it returns
                                all processed labels in an OrderedDict followed by the two normalisation parameters.
         """
@@ -622,28 +883,36 @@ class WorldFeatLabelGen(LabelGen):
         # Fill file_id_list by .wav files in dir_in if not given and set an appropriate file_id_list_name.
         if id_list is None:
             id_list = list()
-            filenames = glob.glob(os.path.join(dir_in, "*.wav"))
+            filenames = glob.glob(os.path.join(dir_in, "*" + file_ext))
             for filename in filenames:
                 id_list.append(os.path.splitext(os.path.basename(filename))[0])
             file_id_list_name = "all"
         else:
             file_id_list_name = os.path.splitext(os.path.basename(file_id_list))[0]
 
+        # .cmp files contain all features with their deltas and double deltas.
+        # If not all features are present save them separately instead.
+        save_as_cmp = self.add_deltas and self.load_sp and self.load_lf0 and self.load_vuv and self.load_bap
+
         # Create directories in dir_out if it is given.
         if dir_out is not None:
-            if add_deltas:
+            if save_as_cmp:
                 makedirs_safe(os.path.join(dir_out, self.dir_deltas))
             else:
-                makedirs_safe(os.path.join(dir_out, self.dir_lf0))
-                makedirs_safe(os.path.join(dir_out, self.dir_vuv))
-                makedirs_safe(os.path.join(dir_out, self.dir_coded_sps))
-                makedirs_safe(os.path.join(dir_out, self.dir_bap))
+                if self.load_sp:
+                    makedirs_safe(os.path.join(dir_out, self.dir_coded_sps))
+                if self.load_lf0:
+                    makedirs_safe(os.path.join(dir_out, self.dir_lf0))
+                if self.load_vuv:
+                    makedirs_safe(os.path.join(dir_out, self.dir_vuv))
+                if self.load_bap:
+                    makedirs_safe(os.path.join(dir_out, self.dir_bap))
 
         # Create the return dictionary if required.
         if return_dict:
             label_dict = OrderedDict()
 
-        if add_deltas:
+        if self.add_deltas:
             # Create normalisation computation units.
             norm_params_ext_coded_sp = MeanCovarianceExtractor()
             norm_params_ext_lf0 = MeanCovarianceExtractor()
@@ -652,142 +921,123 @@ class WorldFeatLabelGen(LabelGen):
             # Create normalisation computation units.
             norm_params_ext_coded_sp = MeanStdDevExtractor()
             norm_params_ext_lf0 = MeanStdDevExtractor()
-            # norm_params_ext_vuv = MeanStdDevExtractor()
             norm_params_ext_bap = MeanStdDevExtractor()
 
-        logging.info("Extract WORLD{} features for".format("" if not add_deltas else " deltas")
+        class NormaliserVUVDummy(object):
+            """A dummy class to include VUV in the following loops."""
+            def add_sample(self, *args):
+                pass
+
+            def save(self, *args):
+                pass
+
+            def get_params(self):
+                return (0.0,), (1.0,)
+
+        norm_params_ext_vuv = NormaliserVUVDummy()
+
+        logging.info("Extract acoustic features{} for ".format("" if not self.add_deltas else " with deltas")
                      + "[{0}]".format(", ".join(str(i) for i in id_list)))
+
+        # Extract feature for each
         for file_name in id_list:
+            # Extract acoustic features from an audio file.
+            coded_sp, lf0, vuv, bap = self.extract_features(dir_in, file_name, file_ext,
+                                                            preemphasis=self.preemphasis,
+                                                            sp_type=self.sp_type,
+                                                            num_coded_sps=self.num_coded_sps,
+                                                            load_sp=self.load_sp,
+                                                            load_lf0=self.load_lf0,
+                                                            load_vuv=self.load_vuv,
+                                                            load_bap=self.load_bap,
+                                                            hop_size_ms=self.hop_size_ms,
+                                                            f0_silence_threshold=WorldFeatLabelGen.f0_silence_threshold,
+                                                            lf0_zero=WorldFeatLabelGen.lf0_zero)
 
-            # Load audio file and extract features.
-            audio_name = os.path.join(dir_in, file_name + ".wav")
-            raw, fs = soundfile.read(audio_name)  # raw in [0, 1]
-            # fs, raw = wavfile.read(audio_name)  # raw in [0, 32768]
-            logging.debug("Extract WORLD{} features from {} at {}Hz."
-                          .format("" if not add_deltas else " deltas", file_name, fs))
-            file_name = os.path.basename(file_name)  # Remove speaker.
+            output = list()
+            for load, feature, feature_dir, feature_ext, normaliser in\
+                    zip((self.load_sp, self.load_lf0, self.load_vuv, self.load_bap),
+                        (coded_sp, lf0, vuv, bap),
+                        (self.dir_coded_sps, self.dir_lf0, self.dir_vuv, self.dir_bap),
+                        (self.sp_type, self.ext_lf0, self.ext_vuv, self.ext_bap),
+                        (norm_params_ext_coded_sp, norm_params_ext_lf0, norm_params_ext_vuv, norm_params_ext_bap)):
+                if load:  # Check if feature should be loaded.
+                    if self.add_deltas:  # Add deltas if requested.
+                        deltas, double_deltas = compute_deltas(feature)
+                        feature = np.concatenate((feature, deltas, double_deltas), axis=1)
+                        if dir_out is not None and not save_as_cmp:
+                            # Not all features for cmp are present so save the labels separately in deltas directory.
+                            feature.tofile(os.path.join(dir_out,
+                                                        feature_dir,
+                                                        "{}.{}{}".format(file_name,
+                                                                         feature_ext,
+                                                                         "_deltas" if feature_ext != self.ext_vuv else "")))
+                    else:
+                        # Save features without deltas in their respective subdirectory.
+                        feature.tofile(os.path.join(dir_out, feature_dir, "{}.{}".format(file_name, feature_ext)))
 
-            f0, sp, ap = pyworld.wav2world(raw, fs)  # Gives power spectrum.
+                    # Add sample to normalisation computation unit.
+                    normaliser.add_sample(feature)
 
-            # Decode spectrum to a lower dimension.
-            if self.sp_type == "mfcc":
-                coded_sp = pyworld.code_spectral_envelope(sp, fs, self.num_coded_sps)  # WORLD version.
-            elif self.sp_type == "mgc":
-                coded_sp = self._raw_to_mgc(raw,
-                                            fs,
-                                            self.num_coded_sps,
-                                            mgc_alpha=WorldFeatLabelGen._fs_to_mgc_alpha(fs))
-            elif self.sp_type == "mcep":
-                sp = np.sqrt(sp) * 32768.0  # From power spectrum to amplitude spectrum and scaling.
-                coded_sp = np.array(pysptk.mcep(sp,
-                                                order=self.num_coded_sps - 1,
-                                                alpha=WorldFeatLabelGen._fs_to_mgc_alpha(fs),
-                                                eps=1.0e-8,
-                                                min_det=0.0,
-                                                etype=1,
-                                                itype=3),
-                                    dtype=np.float32)
-            elif self.sp_type == "mfbanks":
-                coded_sp = self._pow_sp_to_mfbanks(sp, fs, self.num_coded_sps)
-            else:
-                raise NotImplementedError()
+                    # Fill return dictionary.
+                    if return_dict:
+                        output.append(feature)
 
-            # Compute lf0 and vuv information.
-            lf0 = np.log(f0.clip(min=1E-10), dtype=np.float32)
-            lf0[lf0 <= math.log(self.f0_silence_threshold)] = self.lf0_zero
-            lf0, vuv = interpolate_lin(lf0)
-            lf0 = lf0.astype(dtype=np.float32)
-            vuv = vuv.astype(dtype=np.float32)
-            # Throw a warning when less then 5% of all frames are unvoiced.
-            if vuv.sum() / len(vuv) < 0.05:
-                self.logger.warning("Detected only {:.0f}% [{}/{}] unvoiced frames in {}."
-                                    .format(vuv.sum() / len(vuv) * 100.0, int(vuv.sum()), len(vuv), file_name))
-
-            # Decode aperiodicity to one band aperiodicity.
-            bap = np.array(pyworld.code_aperiodicity(ap, fs), dtype=np.float32)
-
-            assert len(coded_sp) == len(lf0), "Requires testing. Possibly trimming is a solution."
-
-            if add_deltas:
-                # Compute the deltas and double deltas for all features.
-                lf0_deltas, lf0_double_deltas = compute_deltas(lf0)
-                coded_sp_deltas, coded_sp_double_deltas = compute_deltas(coded_sp)
-                bap_deltas, bap_double_deltas = compute_deltas(bap)
-
-                coded_sp = np.concatenate((coded_sp, coded_sp_deltas, coded_sp_double_deltas), axis=1)
-                lf0 = np.concatenate((lf0, lf0_deltas, lf0_double_deltas), axis=1)
-                bap = np.concatenate((bap, bap_deltas, bap_double_deltas), axis=1)
-
+            # Save into a single file if all features are present (only when deltas are added).
+            if dir_out is not None and save_as_cmp:
                 # Combine them to a single feature sample.
                 labels = np.concatenate((coded_sp, lf0, vuv, bap), axis=1)
+                labels.tofile(os.path.join(dir_out, self.dir_deltas, "{}.{}".format(file_name, self.ext_deltas)))
 
-                # Save into return dictionary and/or file.
-                if return_dict:
-                    label_dict[file_name] = labels
-                if dir_out is not None:
-                    labels.tofile(os.path.join(dir_out, self.dir_deltas, file_name + self.ext_deltas))
+            if return_dict:
+                # Save into return dictionary.
+                label_dict[file_name] = np.concatenate(output, axis=1) if len(output) > 0 else None
+        # END feature extraction loop.
 
-            else:
-                # Save into return dictionary and/or file.
-                if return_dict:
-                    label_dict[file_name] = np.concatenate((coded_sp, lf0, vuv, bap), axis=1)
-                if dir_out is not None:
-                    coded_sp.tofile(os.path.join(dir_out, self.dir_coded_sps, "{}.{}".format(file_name, self.sp_type)))
-                    lf0.tofile(os.path.join(dir_out, self.dir_lf0, file_name + self.ext_lf0))
-                    vuv.astype(np.float32).tofile(os.path.join(dir_out, self.dir_vuv, file_name + self.ext_vuv))
-                    bap.tofile(os.path.join(dir_out, self.dir_bap, file_name + self.ext_bap))
+        # Collect normalisation parameters.
+        output_means = list()
+        output_std_dev = list()
+        for load, feature_dir, normaliser, ext in\
+                zip((self.load_sp, self.load_lf0, self.load_vuv, self.load_bap),
+                    (self.dir_coded_sps, self.dir_lf0, self.dir_vuv, self.dir_bap),
+                    (norm_params_ext_coded_sp, norm_params_ext_lf0, norm_params_ext_vuv, norm_params_ext_bap),
+                    (self.dir_coded_sps, self.ext_lf0, self.ext_vuv, self.ext_bap)):
+            if load:  # Check if feature was extracted.
+                # Collect the normalisation parameters to return them.
+                norm = normaliser.get_params()
+                output_means.append(norm[0])
+                output_std_dev.append(norm[1])
 
-            # Add sample to normalisation computation unit.
-            norm_params_ext_coded_sp.add_sample(coded_sp)
-            norm_params_ext_lf0.add_sample(lf0)
-            # norm_params_ext_vuv.add_sample(vuv)
-            norm_params_ext_bap.add_sample(bap)
+                if dir_out:
+                    # Select the correct output directory to save the normalisation parameters.
+                    if self.add_deltas:
+                        if save_as_cmp:
+                            norm_file_path = os.path.join(dir_out,
+                                                          self.dir_deltas,
+                                                          "{}_{}".format(file_id_list_name, ext))
+                        else:
+                            if ext == self.ext_vuv:  # Special case; VUV should never be saved with deltas ending.
+                                norm_file_path = os.path.join(dir_out,
+                                                              feature_dir,
+                                                              "{}_{}".format(file_id_list_name, ext))
+                            else:
+                                norm_file_path = os.path.join(dir_out,
+                                                              feature_dir,
+                                                              "{}_{}_deltas".format(file_id_list_name, ext))
+                    else:
+                        norm_file_path = os.path.join(dir_out, feature_dir, file_id_list_name)
+                    self.logger.info("Write norm_prams to{}".format(norm_file_path))
+                    normaliser.save(norm_file_path)
 
-        # Save mean and std dev of all features.
-        if not add_deltas:
-            norm_params_ext_coded_sp.save(os.path.join(dir_out, self.dir_coded_sps, file_id_list_name))
-            norm_params_ext_lf0.save(os.path.join(dir_out, self.dir_lf0, file_id_list_name))
-            # norm_params_ext_vuv.save(os.path.join(dir_out, WorldFeatLabelGen.dir_vuv, file_id_list_name))
-            norm_params_ext_bap.save(os.path.join(dir_out, self.dir_bap, file_id_list_name))
-        else:
-            name_norm_params_coded_sp = "{}_{}{}".format(file_id_list_name, self.sp_type, self.num_coded_sps)
-            self.logger.info("Write norm_prams to{}".format(os.path.join(dir_out,
-                                                                         self.dir_deltas,
-                                                                         name_norm_params_coded_sp)))
-            norm_params_ext_coded_sp.save(os.path.join(dir_out,
-                                                       self.dir_deltas,
-                                                       name_norm_params_coded_sp))
-            norm_params_ext_lf0.save(os.path.join(dir_out,
-                                                  self.dir_deltas,
-                                                  "_".join((file_id_list_name, self.dir_lf0))))
-            norm_params_ext_bap.save(os.path.join(dir_out,
-                                                  self.dir_deltas,
-                                                  "_".join((file_id_list_name, self.dir_bap))))
-
-        # Get normalisation parameters.
-        if not add_deltas:
-            norm_coded_sp = norm_params_ext_coded_sp.get_params()
-            norm_lf0 = norm_params_ext_lf0.get_params()
-            # norm_vuv = norm_params_ext_vuv.get_params()
-            norm_bap = norm_params_ext_bap.get_params()
-
-            norm_first = np.concatenate((norm_coded_sp[0], norm_lf0[0], (0.0,), norm_bap[0]), axis=0)
-            norm_second = np.concatenate((norm_coded_sp[1], norm_lf0[1], (1.0,), norm_bap[1]), axis=0)
-
-        else:
-            norm_coded_sp = norm_params_ext_coded_sp.get_params()
-            norm_lf0 = norm_params_ext_lf0.get_params()
-            # norm_vuv = norm_params_ext_vuv.get_params()
-            norm_bap = norm_params_ext_bap.get_params()
-
-            norm_first = (norm_coded_sp[0], norm_lf0[0], (0.0,), norm_bap[0])
-            norm_second = (norm_coded_sp[1], norm_lf0[1], (1.0,), norm_bap[1])
+        if not self.add_deltas:
+            output_means = np.concatenate(output_means, axis=0) if len(output_means) > 0 else None
+            output_std_dev = np.concatenate(output_std_dev, axis=0) if len(output_std_dev) > 0 else None
 
         if return_dict:
             # Return dict of labels for all utterances.
-            return label_dict, norm_first, norm_second
+            return label_dict, output_means, output_std_dev
         else:
-            return norm_first, norm_second
+            return output_means, output_std_dev
 
 
 def main():
@@ -796,8 +1046,13 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("-a", "--dir_audio", help="Directory containing the audio (wav) files.",
                         type=str, dest="dir_audio", required=True)
+    parser.add_argument("-s", "--sp_type",
+                        help="Type used to encode the spectral features into low dimensional representations.",
+                        type=str, dest="sp_type", choices=("mfcc", "mcep", "mgc", "mfbanks"), default="mcep")
     parser.add_argument("-n", "--num_coded_sps", help="Dimension of the frequency representation.",
                         type=int, dest="num_coded_sps", default=60)
+    parser.add_argument("--hop_size", help="Hop size in ms used for STFT from time- to frequency-domain.",
+                        type=int, dest="hop_size_ms", default=5)
     parser.add_argument("-i", "--file_id_list_path",
                         help="Path to text file to read the ids of the files to process.\
                               Default uses all .wav files in the given audio_dir.",
@@ -808,9 +1063,6 @@ def main():
     parser.add_argument("--add_deltas", help="Defines if features are augmented by their deltas and double deltas."
                                              "Features will then be stored as a single file.",
                         dest="add_deltas", action='store_const', const=True, default=False)
-    parser.add_argument("-s", "--sp_type",
-                        help="Type used to encode the spectral features into low dimensional representations.",
-                        type=str, dest="sp_type", choices=("mfcc", "mcep", "mgc", "mfbanks"), default="mcep")
 
     # Parse arguments
     args = parser.parse_args()
@@ -836,30 +1088,13 @@ def main():
     world_feat_gen = WorldFeatLabelGen(dir_out,
                                        add_deltas=args.add_deltas,
                                        num_coded_sps=args.num_coded_sps,
-                                       sp_type=args.sp_type)
+                                       sp_type=args.sp_type,
+                                       hop_size_ms=args.hop_size_ms)
     world_feat_gen.gen_data(dir_audio,
                             dir_out=dir_out,
                             file_id_list=args.file_id_list_path,
                             id_list=id_list,
-                            add_deltas=args.add_deltas,
-                            return_dict=False)
-
-    # # DEBUG
-    # label_dict, norm_first, norm_second = world_feat_gen.gen_dict(dir_audio,
-    #                                                               dir_out=dir_out,
-    #                                                               file_id_list=args.file_id_list_path,
-    #                                                               id_list=id_list,
-    #                                                               add_deltas=args.add_deltas,
-    #                                                               return_dict=True)
-    #
-    # # Call this once before starting the preprocessing.
-    # world_feat_gen.get_normalisation_params(dir_out, file_name=file_id_list_name)
-    # test_label = label_dict["roger_5535"]
-    # print(test_label[98:102, (179 if args.add_deltas else 59):])
-    # test_label = world_feat_gen.preprocess_sample(test_label)
-    # print(test_label[98:102, (179 if args.add_deltas else 59):])
-    # test_label = world_feat_gen.postprocess_sample(test_label)
-    # print(test_label[98:102, (179 if args.add_deltas else 59):])
+                            return_dict=True)
 
     sys.exit(0)
 
