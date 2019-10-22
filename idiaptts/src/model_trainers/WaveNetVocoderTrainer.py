@@ -101,6 +101,7 @@ class WaveNetVocoderTrainer(ModelTrainer):
     def create_hparams(hparams_string=None, verbose=False):
         """Create model hyper-parameters. Parse non-default from given string."""
         hparams = ModelTrainer.create_hparams(hparams_string, verbose=False)
+        hparams.synth_vocoder = "raw"
 
         hparams.add_hparams(
             batch_first=True,
@@ -218,44 +219,30 @@ class WaveNetVocoderTrainer(ModelTrainer):
         plotter.gen_plot()
         plotter.save_to_file(filename + '.Raw' + hparams.gen_figure_ext)
 
-    def synthesize(self, file_id_list, synth_output, hparams):
-        self.run_raw_synth(synth_output, hparams)
+    # def synthesize(self, file_id_list, synth_output, hparams):
+    #     self.run_raw_synth(synth_output, hparams)
 
-    def synth_ref(self, hparams, file_id_list):
-        self.logger.info("Synthesise references for [{0}].".format(", ".join([id_name for id_name in file_id_list])))  # Can be different from original by sampling frequency.
-
-        synth_output = dict()
-        for id_name in file_id_list:
-            # Use extracted data. Useful to create a reference.
-            raw = RawWaveformLabelGen.load_sample(id_name, self.OutputGen.frame_rate_output_Hz)
-            synth_output[id_name] = raw
-
-        # Add identifier to suffix.
-        old_synth_file_suffix = hparams.synth_file_suffix
-        hparams.synth_file_suffix += '_ref'
-
-        # Run the WORLD synthesiser.
-        self.run_raw_synth(synth_output, hparams)
-
-        # Restore identifier.
-        hparams.synth_file_suffix = old_synth_file_suffix
-
-    def synth_vocoder(self, file_id_list, hparams):
-        synth_output = dict()
-        for id_name in file_id_list:
-            # Use extracted data. Useful to create a reference.
-            synth_output[id_name] = WorldFeatLabelGen.load_sample(id_name, self.InputGen.dir_labels, add_deltas=False, num_coded_sps=hparams.num_coded_sps)
-
-        model_name = hparams.model_name
-        hparams.model_name = hparams.synth_vocoder
-        if hparams.synth_vocoder == "WORLD":
-            self.run_world_synth(synth_output, hparams)
-        elif hparams.synth_vocoder == "r9y9wavenet_quantized_16k_world_feats":
-            self.run_r9y9wavenet_mulaw_world_feats_synth(synth_output, hparams)
-        hparams.model_name = model_name
+    # def synth_ref(self, hparams, file_id_list):
+    #     self.logger.info("Synthesise references for [{0}].".format(", ".join([id_name for id_name in file_id_list])))  # Can be different from original by sampling frequency.
+    #
+    #     synth_output = dict()
+    #     for id_name in file_id_list:
+    #         # Use extracted data. Useful to create a reference.
+    #         raw = RawWaveformLabelGen.load_sample(id_name, self.OutputGen.frame_rate_output_Hz)
+    #         synth_output[id_name] = raw
+    #
+    #     # Add identifier to suffix.
+    #     old_synth_file_suffix = hparams.synth_file_suffix
+    #     hparams.synth_file_suffix += '_ref'
+    #
+    #     # Run the WORLD synthesiser.
+    #     self.run_raw_synth(synth_output, hparams)
+    #
+    #     # Restore identifier.
+    #     hparams.synth_file_suffix = old_synth_file_suffix
 
     def save_for_vocoding(self, filename):
-        # Save the full model so that hyper-paramters are already set.
+        # Save the full model so that hyper-parameters are already set.
         self.model_handler.save_full_model(filename, self.model_handler.model, verbose=True)
         # Save an easily loadable version of the normalisation parameters on the input side used during training.
         np.save(os.path.splitext(filename)[0] + "_norm_params", np.concatenate(self.InputGen.norm_params, axis=0))

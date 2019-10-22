@@ -30,6 +30,7 @@ from idiaptts.src.data_preparation.world.FlatLF0LabelGen import FlatLF0LabelGen
 from idiaptts.src.data_preparation.world.WorldFeatLabelGen import WorldFeatLabelGen
 from idiaptts.src.model_trainers.wcad.AtomVUVDistPosModelTrainer import AtomVUVDistPosModelTrainer
 from idiaptts.src.neural_networks.pytorch.loss.L1WeightedVUVMSELoss import L1WeightedVUVMSELoss
+from idiaptts.src.Synthesiser import Synthesiser
 
 
 class AtomNeuralFilterModelTrainer(ModelTrainer):
@@ -367,7 +368,6 @@ class AtomNeuralFilterModelTrainer(ModelTrainer):
         self.atom_trainer.gen_figure(hparams, ids_input)
 
     def synthesize(self, id_list, synth_output, hparams):
-        """Save output of model to .lf0 and (.vuv) files and call Merlin synth which reads those files."""
 
         # Reconstruct lf0 from generated atoms and write it to synth output.
         # recon_dict = self.get_recon_from_synth_output(synth_output)
@@ -406,7 +406,7 @@ class AtomNeuralFilterModelTrainer(ModelTrainer):
             full_output[id_name + "_E2E"] = full_sample
 
         # Run the merlin synthesizer
-        self.run_world_synth(full_output, hparams)
+        Synthesiser.run_world_synth(full_output, hparams)
 
     def compute_score(self, dict_outputs_post, dict_hiddens, hparams):
 

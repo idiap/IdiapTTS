@@ -30,6 +30,7 @@ from idiaptts.src.data_preparation.PyTorchLabelGensDataset import PyTorchLabelGe
 from idiaptts.src.DataPlotter import DataPlotter
 from idiaptts.misc.utils import interpolate_lin
 from idiaptts.src.model_trainers.AcousticModelTrainer import AcousticModelTrainer
+from idiaptts.src.Synthesiser import Synthesiser
 
 
 class AtomModelTrainer(ModelTrainer):
@@ -319,7 +320,7 @@ class AtomModelTrainer(ModelTrainer):
         # generating them with the model at hparams.synth_acoustic_model_path.
         full_output = self.run_atom_synth(id_list, synth_output, hparams)
         # Run the WORLD synthesizer.
-        self.run_world_synth(full_output, hparams)
+        Synthesiser.run_world_synth(full_output, hparams)
 
     def synth_ref_wcad(self, file_id_list, hparams):
         synth_output = dict()
@@ -335,7 +336,7 @@ class AtomModelTrainer(ModelTrainer):
         hparams.synth_file_suffix += "_wcad_ref"
 
         # Run the WORLD synthesizer.
-        self.run_world_synth(full_output, hparams)
+        Synthesiser.run_world_synth(full_output, hparams)
 
         # Restore identifier.
         hparams.synth_file_suffix = old_synth_file_suffix

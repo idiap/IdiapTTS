@@ -14,6 +14,7 @@ import warnings
 from functools import partial
 
 from idiaptts.src.model_trainers.WaveNetVocoderTrainer import WaveNetVocoderTrainer
+from idiaptts.src.data_preparation.audio.RawWaveformLabelGen import RawWaveformLabelGen
 
 
 class TestWaveNetVocoderTrainer(unittest.TestCase):
@@ -123,7 +124,8 @@ class TestWaveNetVocoderTrainer(unittest.TestCase):
                                                                                        one_hot_target)
         if inputs is not None:
             inputs = inputs[..., :TestWaveNetVocoderTrainer.max_auto_regressive_frames]
-            seq_length_input[seq_length_input > TestWaveNetVocoderTrainer.max_auto_regressive_frames] = TestWaveNetVocoderTrainer.max_auto_regressive_frames
+            seq_length_input[seq_length_input > TestWaveNetVocoderTrainer.max_auto_regressive_frames] = \
+                TestWaveNetVocoderTrainer.max_auto_regressive_frames
         return (inputs, targets, seq_length_input, *misc)
 
     def test_gen_figure(self):
@@ -136,7 +138,9 @@ class TestWaveNetVocoderTrainer(unittest.TestCase):
         hparams.batch_size_gen_figure = 1
 
         trainer = WaveNetVocoderTrainer(self.dir_world_features, self.id_list, hparams)
-        trainer.batch_collate_fn = partial(self.trimming_batch_collate_fn, use_cond=hparams.use_cond, one_hot_target=True)
+        trainer.batch_collate_fn = partial(self.trimming_batch_collate_fn,
+                                           use_cond=hparams.use_cond,
+                                           one_hot_target=True)
 
         trainer.init(hparams)
 
@@ -162,7 +166,9 @@ class TestWaveNetVocoderTrainer(unittest.TestCase):
         hparams.synth_ext = "wav"
 
         trainer = WaveNetVocoderTrainer(self.dir_world_features, self.id_list, hparams)
-        trainer.batch_collate_fn = partial(self.trimming_batch_collate_fn, use_cond=hparams.use_cond, one_hot_target=True)
+        trainer.batch_collate_fn = partial(self.trimming_batch_collate_fn,
+                                           use_cond=hparams.use_cond,
+                                           one_hot_target=True)
 
         trainer.init(hparams)
         hparams.synth_dir = hparams.out_dir
@@ -179,10 +185,39 @@ class TestWaveNetVocoderTrainer(unittest.TestCase):
         raw, fs = soundfile.read(os.path.join(hparams.synth_dir, found_files[0]))
         self.assertEqual(hparams.synth_fs, fs, msg="Desired sampling frequency of output doesn't match.")
         # files = [id_name for id_name in self.id_list[:num_test_files]
-        #          if "{}_{}.{}".format(os.path.splitext(os.path.basename(id_name))[0], hparams.model_name, hparams.synth_ext) in found_files]
+        # if "{}_{}.{}".format(os.path.splitext(os.path.basename(id_name))[0],
+        #                      hparams.model_name, hparams.synth_ext) in found_files]
         # labels = trainer.OutputGen[files[0]]
 
         self.assertEqual(len(raw), TestWaveNetVocoderTrainer.max_auto_regressive_frames,
                          msg="Saved raw audio file length does not match num_synth_frames.")
+
+        shutil.rmtree(hparams.out_dir)
+
+    def test_synth_ref(self):
+        num_test_files = 2
+
+        hparams = self._get_hparams()
+        hparams.out_dir = os.path.join(hparams.out_dir, "test_synth_ref")  # Add function name to path
+        hparams.synth_ext = "wav"
+
+        trainer = WaveNetVocoderTrainer(self.dir_world_features, self.id_list, hparams)
+        trainer.init(hparams)
+        hparams.synth_dir = hparams.out_dir
+        trainer.synth_ref(hparams, self.id_list[:num_test_files])
+
+        found_files = list([name for name in os.listdir(hparams.synth_dir)
+                            if os.path.isfile(os.path.join(hparams.synth_dir, name))
+                            and name.endswith(hparams.model_name + "_ref." + hparams.synth_ext)])
+        # Check number of created files.
+        self.assertEqual(len(self.id_list[:num_test_files]), len(found_files),
+                         msg="Number of {} files in synth_dir directory does not match.".format(hparams.synth_ext))
+
+        # Check readability and length of one created file.
+        raw, fs = soundfile.read(os.path.join(hparams.synth_dir, found_files[0]))
+        self.assertEqual(hparams.synth_fs, fs, msg="Desired sampling frequency of output doesn't match.")
+
+        self.assertTrue((raw == RawWaveformLabelGen.load_sample(self.id_list[0], hparams.frame_rate_output_Hz)).all(),
+                        msg="Saved raw audio file does not match reference.")
 
         shutil.rmtree(hparams.out_dir)

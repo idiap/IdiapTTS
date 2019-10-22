@@ -28,6 +28,7 @@ import soundfile
 import pysptk
 import librosa
 import librosa.display
+from nnmnkwii.postfilters import merlin_post_filter
 from scipy.io import wavfile
 
 # Local source tree imports.
@@ -859,6 +860,25 @@ class WorldFeatLabelGen(LabelGen):
         # plt.show()
 
         return coded_sp, lf0, vuv, bap
+
+    @staticmethod
+    def decode_sp(coded_sp: np.array, sp_type: str = "mcep", fs: int = None, alpha: float = None, mgc_gamma:
+                  float = None, n_fft: int = None, post_filtering: bool = False):
+
+        if post_filtering:
+            if sp_type in ["mcep", "mgc"]:
+                coded_sp = merlin_post_filter(coded_sp, WorldFeatLabelGen.fs_to_mgc_alpha(fs))
+            else:
+                logging.warning("Post-filtering only implemented for cepstrum features.")
+
+        if sp_type == "mcep":
+            return WorldFeatLabelGen.mcep_to_amp_sp(coded_sp, fs, alpha)
+        elif sp_type == "mgc":
+            return WorldFeatLabelGen.mgc_to_amp_sp(coded_sp, fs, alpha, mgc_gamma, n_fft)
+        elif sp_type == "mfbanks":
+            return WorldFeatLabelGen.mfbanks_to_amp_sp(coded_sp, fs, n_fft)
+        else:
+            raise NotImplementedError("Unknown feature type {}. No decoding method available.".format(sp_type))
 
     def gen_data(self, dir_in, dir_out=None, file_id_list=None, file_ext="wav", id_list=None, return_dict=False):
         """

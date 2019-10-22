@@ -34,9 +34,10 @@ from nnmnkwii.postfilters import merlin_post_filter
 # Local source tree imports.
 from idiaptts.src.ExtendedHParams import ExtendedHParams
 from idiaptts.src.data_preparation.world.WorldFeatLabelGen import WorldFeatLabelGen
-# from idiaptts.src.data_preparation.audio.RawWaveformLabelGen import RawWaveformLabelGen
 from idiaptts.src.neural_networks.pytorch.ModelHandlerPyTorch import ModelHandlerPyTorch
 from idiaptts.misc.utils import makedirs_safe, get_gpu_memory_map, sample_linearly
+from idiaptts.src.data_preparation.audio.RawWaveformLabelGen import RawWaveformLabelGen
+from idiaptts.src.Synthesiser import Synthesiser
 
 
 class ModelTrainer(object):
@@ -49,8 +50,9 @@ class ModelTrainer(object):
     the synthesize method.
     """
     logger = logging.getLogger(__name__)
-    dir_extracted_acoustic_features = "../WORLD/"  # Default is hparams.out_dir/self.dir_extracted_acoustic_features,
-                                                   # but can be overwritten by hparams.world_dir.
+
+    # Default is hparams.out_dir/self.dir_extracted_acoustic_features, but can be overwritten by hparams.world_dir.
+    dir_extracted_acoustic_features = "../WORLD/"
 
     def __init__(self, id_list, hparams):
         """Default constructor.
@@ -138,160 +140,7 @@ class ModelTrainer(object):
     @staticmethod
     def create_hparams(hparams_string=None, verbose=False):
         """Create model hyper-parameters. Parse non-default from given string."""
-
-        hparams = ExtendedHParams(
-            ################################
-            # General Parameters           #
-            ################################
-
-            voice=None,  # Specifies a part of the dataset used.
-            work_dir=None,  # Directory from where the script is running.
-            data_dir=None,  # Database directory.
-            logging_batch_index_perc=10,  # Percentage used from the full dataset between logging the train/test loss.
-            start_with_test=True,  # Determines if the model is tested first before any training loops.
-                                   # The computed loss is also used to identify the best model so far.
-                                   # Therefore, if this is False and use_best_as_final_model is True
-                                   # the best model of the current training will be saved, which possibly
-                                   # overrides an older better model.
-            log_memory_consumption=True,
-            epochs_per_test=1,  # Number of training epochs before testing
-                                # NOTE that this includes the scheduler_type with epoch scheduling.
-
-            networks_dir="nn",
-            checkpoints_dir="checkpoints",  # Subdirectory within the networks_dir to save checkpoints.
-            epochs_per_checkpoint=1,  # Number of epochs between checkpoints, 0 for no checkpoints at all.
-            save_final_model=True,  # Determines if the model is saved after training.
-            use_best_as_final_model=True,  # Substitutes the saved final model with the best of the current run.
-            gen_figure_ext=".pdf",
-
-            ################################
-            # Experiment Parameters        #
-            ################################
-            epochs=0,
-            test_set_perc=0.05,  # Percentage of samples taken from the given id_list in __init__ for testing.
-                                 # Ignored when self.id_list_train is already set.
-                                 # Note that self.id_list_test must be set then as well.
-            val_set_perc=0.05,   # Percentage of samples taken from the given id_list in __init__ for validation.
-                                 # Ignored when self.id_list_train is already set.
-                                 # Note that self.id_list_val should be set then as well.
-            seed=None,  # Used to initialize torch, numpy, and random.
-                        # If None, the id_list is not shuffled before taking test and validation set from it.
-            # fp16_run=False,  # TODO: Not implemented.
-            # distributed_run=False,  # TODO: Find out how distributed run works.
-            # dist_url="file://distributed.dpt",
-            # cudnn_enabled=True,
-            # cudnn_benchmark=False,
-            use_gpu=False,
-            num_gpus=1,  # TODO: Change to num_devices.
-            batch_first=False,  # Note: This might not be implemented properly everywhere.
-            variable_sequence_length_train=None,  # Do samples in mini batches during training have variable length.
-            variable_sequence_length_test=None,  # Do samples in mini batches during testing have variable length.
-            shuffle_train_set=True,  # Shuffle in dataset to get mini batches.
-            shuffle_val_set=False,  # Shuffle in dataset to get mini batches.
-            batch_size_train=1,
-            batch_size_test=48,
-            batch_size_val=48,
-            batch_size_benchmark=48,
-            batch_size_synth=48,
-            batch_size_gen_figure=48,
-            dataset_num_workers_gpu=4,  # Number of workers used in dataset when running on GPU(s).
-            dataset_num_workers_cpu=0,  # Number of workers used in dataset when running on CPU(s).
-            dataset_pin_memory=True,
-            dataset_load_async=True,
-            teacher_forcing_in_test=False,  # If True, the targets are also given to the model when running the test
-                                            # (needed for WaveNet).
-            preload_next_batch_to_gpu=False,  # If True loads the next batch to GPU while processing the current one.
-                                              # This enhances GPU usage for the cost of memory (two batches are loaded).
-                                              # TODO: This does not work yet, because cuda async does lazy loading.
-
-            ################################
-            # Data Parameters              #
-            ################################
-            input_norm_params_file_prefix=None,
-            output_norm_params_file_prefix=None,
-            len_in_out_multiplier=1,
-            out_dir=None,
-            world_dir=None,  # Full path to directory with WORLD features, required for copy synthesis.
-                             # If None, hparams.out_dir/../WORLD is used.
-
-            ################################
-            # Audio Parameters             #
-            ################################
-            frame_size_ms=5,
-
-            ################################
-            # Model Parameters             #
-            ################################
-            model_type=None,
-            model_name=None,
-            model_path=None,  # Full path to load model from, otherwise dir_out/networks_dir/model_name.
-            ignore_layers=["type dummy"],  # List of layers which are ignored when loading the model from model_path.
-                                           # Giving the dummy ensures that hparams expects a list of strings.
-            dropout=0.0,
-            hidden_init=0.0,  # Hidden state init value
-            train_hidden_init=False,  # Is the hidden state init value trainable  # TODO: Unused?
-
-            ################################
-            # Optimization Hyperparameters #
-            ################################
-            loss_per_sample=False,  # If True the loss is first averaged on each sample and then over the batch.
-                                    # If False the loss is averaged over each frame in the whole batch (default).
-            backward_retain_graph=False,  # Determines if the gradient computation should do aggressive memory freeing.
-                                          # Only needed when gradient computational graph is reused.
-            optimiser_type="Adam",  # "Adam", "SGD"  TODO: more
-            optimiser_args=dict(),  # Set optimiser arguments. Preferred way to set learning rate: optimiser_args["lr"]=
-            use_saved_learning_rate=True,  # Use the learning rate saved with a model after loading it.
-            replace_inf_grads_by_zero=False,  # Automatically substitute +/- inf gradients with zero during training.
-            # dynamic_loss_scaling=True,
-            ema_decay=None,  # Any value enables EMA. EMA models are saved with a _ema in the end.
-
-            scheduler_type="default",  # "None", "Plateau", "Exponential","Noam",  TODO: "Step", "Cyclic_cosine"
-            scheduler_args=dict(),
-            iterations_per_scheduler_step=None,  # Number of training iterations after which the scheduler step function
-                                                 # is called with the current loss and total number of iterations as
-                                                 # parameter. If None the scheduler is not called.
-            epochs_per_scheduler_step=None,  # Number of training epochs after which the scheduler step function is
-                                             # called with the current validation loss and total number of epochs.
-                                             # When a model is loaded the epoch number continues from the epoch number
-                                             # stored in the model.
-
-            grad_clip_norm_type=None,  # If None no gradient clipping otherwise uses grad_clip_max_norm (small bias).
-            grad_clip_max_norm=None,  # Ignored if grad_clip_norm_type is None.
-            grad_clip_thresh=None,  # Clip absolute value of gradient (big bias).
-
-            # Set optimiser or scheduler_type to ignore type configuration above. Used to try new implementations.
-            optimiser=None,  # Will be called with model parameters only. Set other parameters with partial.
-                             # Example: partial(torch.optim.Adam, **args)).
-            scheduler=None,  # Will be called with optimiser only. Set other parameters with partial.
-                             # Example: partial(ReduceLROnPlateau, **args)).
-
-            ################################
-            # Synthesis Parameters         #
-            ################################
-            synth_vocoder="WORLD",  # "WORLD", "r9y9wavenet_quantized_16k_world_feats"
-            synth_ext="wav",  # Extension of the output audio.
-            synth_fs=16000,
-            sp_type="mcep",
-            num_coded_sps=60,  # Number of coded spectral features.
-            synth_dir=None,  # Output directory to save the synthesised audio.
-            synth_acoustic_model_path=None,
-            synth_file_suffix='',  # Suffix of synthesised files name.
-            do_post_filtering=False,  # Merlin post-filtering of cepstrum.
-            synth_gen_figure=False,  # Saves a plot when synthesising.
-
-            # epochs_per_plot=0,  # No plots per epoch with <= 0. # TODO: plot in run method each ... epochs.
-            # plot_per_epoch_id_list=None,  # TODO: Id(s) in the dictionary which are plotted.
-        )
-        hparams.set_hparam("ignore_layers", list())  # Remove string type dummy.
-
-        if hparams_string:
-            logging.info('Parsing command line hparams: %s', hparams_string)
-            hparams.parse(hparams_string)
-
-        if verbose:
-            logging.info(hparams.get_debug_string())
-
-        return hparams
+        return ExtendedHParams.create_hparams(hparams_string, verbose)
 
     # def plot_outputs(self, max_epochs, id_name, outputs, target):
     #     plotter = DataPlotter()
@@ -808,217 +657,13 @@ class ModelTrainer(object):
                                   .format(self.__class__.__name__))
 
     def synth_ref(self, hparams, file_id_list):
-        # Create reference audio files containing only the vocoder degradation.
-        self.logger.info("Synthesise references for [{0}].".format(", ".join([id_name for id_name in file_id_list])))
-
-        synth_dict = dict()
-        for id_name in file_id_list:
+        if hparams.synth_vocoder == "WORLD":
             world_dir = hparams.world_dir if hasattr(hparams, "world_dir") and hparams.world_dir is not None\
                                           else os.path.join(self.OutputGen.dir_labels, self.dir_extracted_acoustic_features)
-            # Load reference audio features.
-            try:
-                output = WorldFeatLabelGen.load_sample(id_name, world_dir, num_coded_sps=hparams.num_coded_sps)
-            except FileNotFoundError as e1:
-                try:
-                    output = WorldFeatLabelGen.load_sample(id_name, world_dir, add_deltas=True, num_coded_sps=hparams.num_coded_sps)
-                    coded_sp, lf0, vuv, bap = WorldFeatLabelGen.convert_to_world_features(output, True, hparams.num_coded_sps)
-                    length = len(output)
-                    lf0 = lf0.reshape(length, 1)
-                    vuv = vuv.reshape(length, 1)
-                    bap = bap.reshape(length, 1)
-                    output = np.concatenate((coded_sp, lf0, vuv, bap), axis=1)
-                except FileNotFoundError as e2:
-                    self.logger.error("Cannot find extracted acoustic feature with or without deltas labels in {}.".format(world_dir))
-                    raise Exception([e1, e2])
-            synth_dict[id_name] = output
-
-        # Add identifier to suffix.
-        old_synth_file_suffix = hparams.synth_file_suffix
-        hparams.synth_file_suffix = '_ref' + str(hparams.num_coded_sps) + 'sp'
-
-        # Run the vocoder.
-        ModelTrainer.synthesize(self, file_id_list, synth_dict, hparams)
-
-        # Restore identifier.
-        hparams.synth_file_suffix = old_synth_file_suffix
-
-    def _coded_sp_to_pow_sp(self, coded_sp, fs, sp_type, cep_post_filtering):
-        """
-        Convert a coded spectrum back to its power spectrum representation.
-
-        :param coded_sp:
-        :param fs:
-        :param sp_type:
-        :param cep_post_filtering:
-        :return:
-        """
-        if cep_post_filtering:
-            if sp_type in ["mcep", "mgc"]:
-                coded_sp = merlin_post_filter(coded_sp, WorldFeatLabelGen.fs_to_mgc_alpha(fs))
-            else:
-                self.logger.warning("Post-filtering only implemented for cepstrum features.")
-
-        fft_size = pyworld.get_cheaptrick_fft_size(fs)
-        if sp_type == "mcep":
-            ln_sp = pysptk.mgc2sp(np.ascontiguousarray(coded_sp, dtype=np.float64),
-                                  alpha=WorldFeatLabelGen.fs_to_mgc_alpha(fs),
-                                  gamma=0.0,
-                                  fftlen=fft_size)
-            # ln_sp = np.exp(ln_sp.real * 2.0)
-            # ln_sp.imag = ln_sp.imag * 180.0 / np.pi
-            ln_sp = np.exp(ln_sp.real)
-            ln_sp = np.power(ln_sp.real / 32768.0, 2)
-        elif sp_type == "mgc":
-            ln_sp = pysptk.mgc2sp(np.ascontiguousarray(coded_sp, dtype=np.float64),
-                                  alpha=WorldFeatLabelGen.fs_to_mgc_alpha(fs),
-                                  gamma=WorldFeatLabelGen.mgc_gamma,
-                                  fftlen=fft_size)
-            # ln_sp = np.exp(ln_sp.real * 2.0)
-            # ln_sp.imag = ln_sp.imag * 180.0 / np.pi
-            ln_sp = np.exp(ln_sp.real)
-            ln_sp = np.power(ln_sp.real / 32768.0, 2)
-        elif sp_type == "mfcc":
-            return pyworld.decode_spectral_envelope(np.ascontiguousarray(coded_sp, np.float64),
-                                                    fs,
-                                                    fft_size)
-        elif sp_type == "mfbanks":
-            raise NotImplementedError()  # TODO
+            Synthesiser.synth_ref(hparams, file_id_list, world_dir)
+            hparams.synth_file_suffix += str(hparams.num_coded_sps) + 'sp'
         else:
-            raise NotImplementedError("Unknown sp_type {}, cannot convert it to power spectrum".format(sp_type))
-
-        return ln_sp
-
-    def run_world_synth(self, synth_output, hparams):
-        """Run the WORLD synthesize method."""
-        fft_size = pyworld.get_cheaptrick_fft_size(hparams.synth_fs)
-
-        save_dir = hparams.synth_dir if hparams.synth_dir is not None else hparams.out_dir if hparams.out_dir is not None else os.path.curdir
-        for id_name, output in synth_output.items():
-            logging.info("Synthesise {} with the WORLD vocoder.".format(id_name))
-
-            coded_sp, lf0, vuv, bap = WorldFeatLabelGen.convert_to_world_features(output,
-                                                                                  contains_deltas=False,
-                                                                                  num_coded_sps=hparams.num_coded_sps)
-            sp = self._coded_sp_to_pow_sp(coded_sp, hparams.synth_fs, hparams.sp_type, hparams.do_post_filtering)
-
-            f0 = np.exp(lf0, dtype=np.float64)
-            vuv[f0 < WorldFeatLabelGen.f0_silence_threshold] = 0  # WORLD throws an error for too small f0 values.
-            f0[vuv == 0] = 0.0
-            ap = pyworld.decode_aperiodicity(np.ascontiguousarray(bap.reshape(-1, 1), np.float64), hparams.synth_fs, fft_size)
-
-            waveform = pyworld.synthesize(f0, sp, ap, hparams.synth_fs)
-            waveform = waveform.astype(np.float32, copy=False)  # Does inplace conversion, if possible.
-            # TODO: waveform = WorldFeatLabelGen.world_features_to_raw(amp_sp, lf0, vuv, bap, hparams.synth_fs)
-
-            # Always save as wav file first and convert afterwards if necessary.
-            file_path = os.path.join(save_dir, "{}{}{}{}".format(os.path.basename(id_name),
-                                                                 "_" + hparams.model_name if hparams.model_name is not None else "",
-                                                                 hparams.synth_file_suffix, "_WORLD"))
-            makedirs_safe(hparams.synth_dir)
-            soundfile.write(file_path + ".wav", waveform, hparams.synth_fs)
-
-            # Use PyDub for special audio formats.
-            if hparams.synth_ext.lower() != 'wav':
-                as_wave = pydub.AudioSegment.from_wav(file_path + ".wav")
-                file = as_wave.export(file_path + "." + hparams.synth_ext, format=hparams.synth_ext)
-                file.close()
-                os.remove(file_path + ".wav")
-
-    def run_r9y9wavenet_mulaw_world_feats_synth(self, synth_output, hparams):
-        from idiaptts.src.neural_networks.pytorch.models.WaveNetWrapper import WaveNetWrapper
-        from idiaptts.src.data_preparation.audio.RawWaveformLabelGen import RawWaveformLabelGen
-
-        org_model_type = hparams.model_type
-        hparams.model_type = WaveNetWrapper.IDENTIFIER
-
-        synth_output = copy.copy(synth_output)
-
-        input_fs_Hz = 1000.0 / hparams.frame_size_ms
-        in_to_out_multiplier = hparams.frame_rate_output_Hz / input_fs_Hz
-        # dir_world_features = os.path.join(self.OutputGen.dir_labels, self.dir_extracted_acoustic_features)
-        input_gen = WorldFeatLabelGen(None,
-                                      add_deltas=False,
-                                      sampling_fn=partial(sample_linearly, in_to_out_multiplier=in_to_out_multiplier, dtype=np.float32))
-        # Load normalisation parameters for wavenet input.
-        try:
-            norm_params_path = os.path.splitext(hparams.synth_vocoder_path)[0] + "_norm_params.npy"
-            input_gen.norm_params = np.load(norm_params_path).reshape(2, -1)
-        except FileNotFoundError:
-            self.logger.error("Cannot find normalisation parameters for WaveNet input at {}."
-                              "Please save them there with numpy.save().".format(norm_params_path))
-            raise
-
-        wavenet_model_handler = ModelHandlerPyTorch()
-        wavenet_model_handler.model, *_ = wavenet_model_handler.load_model(hparams.synth_vocoder_path,
-                                                                           hparams,
-                                                                           verbose=False)
-
-        for id_name, output in synth_output.items():
-            logging.info("Synthesise {} with {} vocoder.".format(id_name, hparams.synth_vocoder_path))
-
-            if hparams.do_post_filtering:
-                coded_sp, lf0, vuv, bap = input_gen.convert_to_world_features(output,
-                                                                              contains_deltas=input_gen.add_deltas,
-                                                                              num_coded_sps=hparams.num_coded_sps)
-                coded_sp = merlin_post_filter(coded_sp, WorldFeatLabelGen.fs_to_mgc_alpha(hparams.synth_fs))
-                output = input_gen.convert_from_world_features(coded_sp, lf0, vuv, bap)
-
-            output = input_gen.preprocess_sample(output)
-
-            # output (T x C) --transpose--> (C x T) --unsqueeze(0)--> (B x C x T).
-            output = output.transpose()[None, ...]
-            # Wavenet input has to be (B x C x T).
-            output, _ = wavenet_model_handler.forward(output, hparams, batch_seq_lengths=(output.shape[-1],))
-            output = output[0].transpose()  # Remove batch dim and transpose back to (T x C).
-            # Revert mu-law quantization.
-            output = output.argmax(axis=1)
-            synth_output[id_name] = RawWaveformLabelGen.mu_law_companding_reversed(output, hparams.mu)
-
-        if hasattr(hparams, 'bit_depth'):
-            org_bit_depth = hparams.bit_depth
-            hparams.bit_depth = 16
-        else:
-            org_bit_depth = None
-            hparams.add_hparam("bit_depth", 16)
-
-        # Add identifier to suffix.
-        old_synth_file_suffix = hparams.synth_file_suffix
-        hparams.synth_file_suffix += '_' + hparams.synth_vocoder
-
-        self.run_raw_synth(synth_output, hparams)
-
-        # Restore identifier.
-        hparams.model_type = org_model_type
-        hparams.setattr_no_type_check("synth_file_suffix", old_synth_file_suffix)  # Can be None, thus no type check.
-        hparams.setattr_no_type_check("bit_depth", org_bit_depth)  # Can be None, thus no type check.
-
-    def run_raw_synth(self, synth_output, hparams):
-        """Use Pydub to synthesis audio from raw data given in the synth_output dictionary."""
-
-        for id_name, raw in synth_output.items():
-            logging.info("Save {} from raw waveform.".format(id_name))
-
-            # Load raw data into pydub AudioSegment.
-            # raw /= raw.abs().max()
-            raw *= math.pow(2, hparams.bit_depth) / 2  # Expand to pydub range.
-            raw = raw.astype(np.int16)
-            audio_seg = AudioSegment(
-                # raw audio data (bytes)
-                data=raw.tobytes(),
-                # 2 byte (16 bit) samples
-                sample_width=2,
-                # Hz frame rate
-                frame_rate=hparams.frame_rate_output_Hz,
-                # mono
-                channels=1
-            )
-            audio_seg.set_frame_rate(hparams.synth_fs)
-
-            # Save the audio.
-            wav_file_path = os.path.join(hparams.synth_dir, "".join((os.path.basename(id_name).rsplit('.', 1)[0], "_",
-                                                                     hparams.model_name, hparams.synth_file_suffix, ".",
-                                                                     hparams.synth_ext)))
-            audio_seg.export(wav_file_path, format=hparams.synth_ext)
+            Synthesiser.synth_ref(hparams, file_id_list)
 
     def synthesize(self, file_id_list, synth_output, hparams):
 
@@ -1029,28 +674,17 @@ class ModelTrainer(object):
                 makedirs_safe(os.path.join(hparams.synth_dir, *path_split[:-1]))
 
         if hparams.synth_vocoder == "WORLD":
-            self.run_world_synth(synth_output, hparams)
+            Synthesiser.run_world_synth(synth_output, hparams)
         # elif hparams.synth_vocoder == "STRAIGHT":  # Add further vocoders here.
+
         elif hparams.synth_vocoder == "r9y9wavenet_mulaw_16k_world_feats_English":
+            Synthesiser.run_r9y9wavenet_mulaw_world_feats_synth(synth_output, hparams)
 
-            # If no path is given, use pre-trained model.
-            if not hasattr(hparams, "synth_vocoder_path") or hparams.synth_vocoder_path is None:
-                parent_dirs = os.path.realpath(__file__).split(os.sep)
-                dir_root = str.join(os.sep, parent_dirs[:parent_dirs.index("IdiapTTS") + 1])
-                hparams.synth_vocoder_path = os.path.join(dir_root, "idiaptts", "misc", "pretrained", "r9y9wavenet_quantized_16k_world_feats_English.nn")
+        elif hparams.synth_vocoder == "raw":
+            # The features in the synth_output dictionary are raw waveforms and can be written directly to the file.
+            Synthesiser.run_raw_synth(synth_output, hparams)
 
-            # Default quantization is with mu=255.
-            if not hasattr(hparams, "mu") or hparams.mu is None:
-                hparams.add_hparam("mu", 255)
-
-            if hasattr(hparams, 'frame_rate_output_Hz'):
-                org_frame_rate_output_Hz = hparams.frame_rate_output_Hz
-                hparams.frame_rate_output_Hz = 16000
-            else:
-                org_frame_rate_output_Hz = None
-                hparams.add_hparam("frame_rate_output_Hz", 16000)
-
-            self.run_r9y9wavenet_mulaw_world_feats_synth(synth_output, hparams)
-
-            # TODO: Convert to requested frame rate. if org_frame_rate_output_Hz != 16000:
-            hparams.setattr_no_type_check("frame_rate_output_Hz", org_frame_rate_output_Hz)  # Can be None.
+        elif hparams.synth_vocoder == "80_SSRN_English_GL":
+            # Use a pre-trained spectrogram super resolution network for English and Griffin-Lim.
+            # The features in the synth_output should be mfbanks.
+            raise NotImplementedError()  # TODO

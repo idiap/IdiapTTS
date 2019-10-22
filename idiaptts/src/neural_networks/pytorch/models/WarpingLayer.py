@@ -24,6 +24,7 @@ import torch.nn as nn
 
 # Local source tree imports.
 from idiaptts.misc.utils import ncr, makedirs_safe
+from idiaptts.src.Synthesiser import Synthesiser
 
 
 class WarpingLayer(nn.Module):
@@ -531,7 +532,9 @@ def main():
             alpha_vec = alpha_vec[:, None, None].repeat(batch_size, 1)  # Copy data in batch dimension.
 
             t_start = timer()
-            mfcc_warped, (_, nn_alpha) = wl(torch.from_numpy(coded_sps), None, (len(coded_sps),), (len(coded_sps),), alphas=torch.from_numpy(alpha_vec))
+            mfcc_warped, (_, nn_alpha) = wl(torch.from_numpy(coded_sps), None,
+                                            (len(coded_sps),), (len(coded_sps),),
+                                            alphas=torch.from_numpy(alpha_vec))
             mfcc_warped.sum().backward()
             t_benchmark += timer() - t_start
             assert((mfcc_warped[:, 0] == mfcc_warped[:, 1]).all())  # Compare results for cloned coded_sps within batch.
@@ -550,7 +553,7 @@ def main():
             sample_pre.tofile(os.path.join(out_dir, id_name + WorldFeatLabelGen.ext_deltas))
 
             hparams.synth_dir = out_dir
-            trainer.run_world_synth({id_name: sample_post}, hparams)
+            Synthesiser.run_world_synth({id_name: sample_post}, hparams)
 
     print("Process time for {} runs: {}".format(len(id_list) * idx, timedelta(seconds=t_benchmark)))
 
