@@ -216,6 +216,9 @@ class DataPlotter(object):
             # elif grid.atom_list is not None:
             #     for atom in grid.atom_list:
             #         max_length = max(max_length, atom.position + atom.length + 10)
+            if grid.spec is not None:
+                max_length = max(max_length, len(grid.spec))
+
         t = np.arange(0, max_length)
 
         for grid_idx, grid in reversed(list(enumerate(self.grids))):  # Reversed order so that legend is not overlaid.
