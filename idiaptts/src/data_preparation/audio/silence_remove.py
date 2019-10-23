@@ -17,10 +17,13 @@ import logging
 import argparse
 
 # Third-party imports.
-from pydub import AudioSegment
+# from pydub import AudioSegment
+import librosa
+import soundfile
 
 # Local source tree imports.
 from idiaptts.misc.utils import makedirs_safe
+from idiaptts.src.data_preparation.world.WorldFeatLabelGen import WorldFeatLabelGen
 
 
 class SilenceRemover(object):
@@ -36,7 +39,7 @@ class SilenceRemover(object):
         # logging.getLogger("pydub.converter").setLevel(level=logging.INFO)
 
         for file_id in id_list:
-            self.process_file(file_id + "." + format, dir_audio, dir_out, format, silence_threshold_db, chunk_size_ms)
+            self.process_file(file_id + "." + format, dir_audio, dir_out, silence_threshold_db, chunk_size_ms)
 
     @staticmethod
     def _detect_leading_silence(sound, silence_threshold_db=-50.0, chunk_size_ms=10):
@@ -59,11 +62,23 @@ class SilenceRemover(object):
 
         return trim_ms
 
-    def process_file(self, file, dir_audio, dir_out, audio_format="wav", silence_threshold_db=-50, chunk_size_ms=10):
-        sound = AudioSegment.from_file(os.path.join(dir_audio, file), format=audio_format)
+    def process_file(self, file, dir_audio, dir_out, silence_threshold_db=-50, hop_size_ms=None):
+        # sound = AudioSegment.from_file(os.path.join(dir_audio, file), format=audio_format)
+        # trim_start = self._detect_leading_silence(sound, silence_threshold_db, chunk_size_ms)
+        # trim_end = self._detect_leading_silence(sound.reverse(), silence_threshold_db, chunk_size_ms)
 
-        trim_start = self._detect_leading_silence(sound, silence_threshold_db, chunk_size_ms)
-        trim_end = self._detect_leading_silence(sound.reverse(), silence_threshold_db, chunk_size_ms)
+        raw, fs = soundfile.read(os.path.join(dir_audio, file))
+
+        frame_length = WorldFeatLabelGen.fs_to_frame_length(fs)
+        if hop_size_ms is None:
+            hop_size_ms = min(self.min_silence_ms, 32)
+
+        _, indices = librosa.effects.trim(raw,
+                                          top_db=abs(silence_threshold_db),
+                                          frame_length=frame_length,
+                                          hop_length=int(fs / 1000 * hop_size_ms))
+        trim_start = indices[0] / fs * 1000
+        trim_end = (len(raw) - indices[1]) / fs * 1000
 
         # Add silence to the front if audio starts to early.
         if trim_start < self.min_silence_ms:
@@ -99,14 +114,15 @@ class SilenceRemover(object):
             trim_end -= self.min_silence_ms
 
         # Trim the sound.
-        trimmed_sound = sound[trim_start:-trim_end-1]
+        trimmed_raw = raw[int(trim_start * fs / 1000):int(-trim_end * fs / 1000 - 1)]
+        # trimmed_sound = sound[trim_start:-trim_end-1]
 
         # Save trimmed sound to file.
         out_file = os.path.join(dir_out, file)
         makedirs_safe(os.path.dirname(out_file))
-        trimmed_sound.export(out_file, format=audio_format)
+        soundfile.write(out_file, trimmed_raw, samplerate=fs)
 
-        return trimmed_sound
+        return trimmed_raw
 
 
 def main():
