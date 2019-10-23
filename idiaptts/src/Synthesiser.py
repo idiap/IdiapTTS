@@ -126,34 +126,35 @@ class Synthesiser(object):
         """Use Pydub to synthesis audio from raw data given in the synth_output dictionary."""
 
         for id_name, raw in synth_output.items():
-            logging.info("Save {} from raw waveform.".format(id_name))
-
-            # Load raw data into pydub AudioSegment.
-            # raw /= raw.abs().max()
-            raw *= math.pow(2, hparams.bit_depth) / 2  # Expand to pydub range.
-            raw = raw.astype(np.int16)
-            audio_seg = AudioSegment(
-                # raw audio data (bytes)
-                data=raw.tobytes(),
-                # 2 byte (16 bit) samples
-                sample_width=2,
-                # Hz frame rate
-                frame_rate=hparams.frame_rate_output_Hz,
-                # mono
-                channels=1
-            )
-            audio_seg.set_frame_rate(hparams.synth_fs)
-
             # Save the audio.
             wav_file_path = os.path.join(hparams.synth_dir, "".join((os.path.basename(id_name).rsplit('.', 1)[0], "_",
                                                                      hparams.model_name, hparams.synth_file_suffix, ".",
                                                                      hparams.synth_ext)))
-            audio_seg.export(wav_file_path, format=hparams.synth_ext)
+            Synthesiser.raw_to_file(wav_file_path, raw, hparams.synth_fs, hparams.bit_depth)
+
+    @staticmethod
+    def raw_to_file(file_path, raw, fs, bit_depth):
+        logging.info("Save {} from raw waveform.".format(file_path))
+
+        # Load raw data into pydub AudioSegment.
+        # raw /= raw.abs().max()
+        raw *= math.pow(2, bit_depth) / 2  # Expand to pydub range.
+        raw = raw.astype(np.int16)
+        audio_seg = AudioSegment(
+            # raw audio data (bytes)
+            data=raw.tobytes(),
+            # 2 byte (16 bit) samples
+            sample_width=2,
+            # Hz frame rate
+            frame_rate=fs,
+            # mono
+            channels=1
+        )
+        audio_seg.set_frame_rate(fs)
+        audio_seg.export(file_path, format=os.path.splitext(file_path))
 
     @staticmethod
     def run_r9y9wavenet_mulaw_world_feats_synth(synth_output, hparams):
-        # Import ModelHandlerPyTorch here to prevent circular dependencies.
-        from idiaptts.src.neural_networks.pytorch.ModelHandlerPyTorch import ModelHandlerPyTorch
 
         # If no path is given, use pre-trained model.
         if not hasattr(hparams, "synth_vocoder_path") or hparams.synth_vocoder_path is None:
@@ -173,14 +174,50 @@ class Synthesiser(object):
             org_frame_rate_output_Hz = None
             hparams.add_hparam("frame_rate_output_Hz", 16000)
 
-        org_model_type = hparams.model_type
-        hparams.model_type = WaveNetWrapper.IDENTIFIER
+        synth_output = copy.copy(synth_output)
+
+        if hparams.do_post_filtering:
+            for id_name, output in synth_output.items():
+                coded_sp, lf0, vuv, bap = WorldFeatLabelGen.convert_to_world_features(
+                                                                output,
+                                                                contains_deltas=False,
+                                                                num_coded_sps=hparams.num_coded_sps)
+                coded_sp = merlin_post_filter(coded_sp, WorldFeatLabelGen.fs_to_mgc_alpha(hparams.synth_fs))
+                synth_output[id_name] = WorldFeatLabelGen.convert_from_world_features(coded_sp, lf0, vuv, bap)
+
+        if hasattr(hparams, 'bit_depth'):
+            org_bit_depth = hparams.bit_depth
+            hparams.bit_depth = 16
+        else:
+            org_bit_depth = None
+            hparams.add_hparam("bit_depth", 16)
+
+        Synthesiser.run_wavenet_vocoder(synth_output, hparams)
+
+        # Restore identifier.
+        hparams.setattr_no_type_check("bit_depth", org_bit_depth)  # Can be None, thus no type check.
+        hparams.setattr_no_type_check("frame_rate_output_Hz", org_frame_rate_output_Hz)  # Can be None.
+
+    @staticmethod
+    def run_wavenet_vocoder(synth_output, hparams):
+        # Import ModelHandlerPyTorch here to prevent circular dependencies.
+        from idiaptts.src.neural_networks.pytorch.ModelHandlerPyTorch import ModelHandlerPyTorch
+
+        assert hparams.synth_vocoder_path is not None, "Please set path to neural vocoder in hparams.synth_vocoder_path"
+        # Add identifier to suffix.
+        old_synth_file_suffix = hparams.synth_file_suffix
+        hparams.synth_file_suffix += '_' + hparams.synth_vocoder
+
+        if not hasattr(hparams, 'bit_depth'):
+            hparams.add_hparam("bit_depth", 16)
 
         synth_output = copy.copy(synth_output)
 
         input_fs_Hz = 1000.0 / hparams.frame_size_ms
+        assert hasattr(hparams, "frame_rate_output_Hz") and hparams.frame_rate_output_Hz is not None, \
+            "hparams.frame_rate_output_Hz has to be set and match the trained WaveNet."
         in_to_out_multiplier = hparams.frame_rate_output_Hz / input_fs_Hz
-        # dir_world_features = os.path.join(self.OutputGen.dir_labels, self.dir_extracted_acoustic_features)
+        # # dir_world_features = os.path.join(self.OutputGen.dir_labels, self.dir_extracted_acoustic_features)
         input_gen = WorldFeatLabelGen(None,
                                       add_deltas=False,
                                       sampling_fn=partial(sample_linearly,
@@ -195,48 +232,40 @@ class Synthesiser(object):
                           "Please save them there with numpy.save().".format(norm_params_path))
             raise
 
-        wavenet_model_handler = ModelHandlerPyTorch()
-        wavenet_model_handler.model, *_ = wavenet_model_handler.load_model(hparams.synth_vocoder_path,
-                                                                           hparams,
-                                                                           verbose=False)
+        model_handler = ModelHandlerPyTorch()
+        model_handler.model, *_ = model_handler.load_model(hparams.synth_vocoder_path,
+                                                           hparams,
+                                                           verbose=False)
 
         for id_name, output in synth_output.items():
             logging.info("Synthesise {} with {} vocoder.".format(id_name, hparams.synth_vocoder_path))
 
-            if hparams.do_post_filtering:
-                coded_sp, lf0, vuv, bap = input_gen.convert_to_world_features(output,
-                                                                              contains_deltas=input_gen.add_deltas,
-                                                                              num_coded_sps=hparams.num_coded_sps)
-                coded_sp = merlin_post_filter(coded_sp, WorldFeatLabelGen.fs_to_mgc_alpha(hparams.synth_fs))
-                output = input_gen.convert_from_world_features(coded_sp, lf0, vuv, bap)
+            # Any other post-processing could be done here.
 
+            # Normalize input.
             output = input_gen.preprocess_sample(output)
 
             # output (T x C) --transpose--> (C x T) --unsqueeze(0)--> (B x C x T).
             output = output.transpose()[None, ...]
             # Wavenet input has to be (B x C x T).
-            output, _ = wavenet_model_handler.forward(output, hparams, batch_seq_lengths=(output.shape[-1],))
+            output, _ = model_handler.forward(output, hparams, batch_seq_lengths=(output.shape[-1],))
+            # output, _ = model_handler.forward(output[:, :, :1000], hparams, batch_seq_lengths=(1000,))  # DEBUG
             output = output[0].transpose()  # Remove batch dim and transpose back to (T x C).
-            # Revert mu-law quantization.
-            output = output.argmax(axis=1)
-            synth_output[id_name] = RawWaveformLabelGen.mu_law_companding_reversed(output, hparams.mu)
 
-        if hasattr(hparams, 'bit_depth'):
-            org_bit_depth = hparams.bit_depth
-            hparams.bit_depth = 16
-        else:
-            org_bit_depth = None
-            hparams.add_hparam("bit_depth", 16)
+            out_channels = output.shape[1]
+            if out_channels > 1:  # Check if the output is one-hot (quantized) or 1 (raw).
+                # Revert mu-law quantization.
+                output = output.argmax(axis=1)
+                synth_output[id_name] = RawWaveformLabelGen.mu_law_companding_reversed(output, out_channels)
 
-        # Add identifier to suffix.
-        old_synth_file_suffix = hparams.synth_file_suffix
-        hparams.synth_file_suffix += '_' + hparams.synth_vocoder
-
-        Synthesiser.run_raw_synth(synth_output, hparams)
+            # Save the audio.
+            wav_file_path = os.path.join(hparams.synth_dir,
+                                         "".join((os.path.basename(id_name).rsplit('.', 1)[0], "_",
+                                                  hparams.model_name, hparams.synth_file_suffix, ".",
+                                                  hparams.synth_ext)))
+            Synthesiser.raw_to_file(wav_file_path, synth_output[id_name], hparams.synth_fs, hparams.bit_depth)
 
         # Restore identifier.
-        hparams.model_type = org_model_type
         hparams.setattr_no_type_check("synth_file_suffix", old_synth_file_suffix)  # Can be None, thus no type check.
-        hparams.setattr_no_type_check("bit_depth", org_bit_depth)  # Can be None, thus no type check.
+
         # TODO: Convert to requested frame rate. if org_frame_rate_output_Hz != 16000:
-        hparams.setattr_no_type_check("frame_rate_output_Hz", org_frame_rate_output_Hz)  # Can be None.

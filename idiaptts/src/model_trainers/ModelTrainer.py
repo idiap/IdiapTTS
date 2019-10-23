@@ -688,3 +688,7 @@ class ModelTrainer(object):
             # Use a pre-trained spectrogram super resolution network for English and Griffin-Lim.
             # The features in the synth_output should be mfbanks.
             raise NotImplementedError()  # TODO
+
+        elif hparams.synth_vocoder == "r9y9wavenet":
+            # Synthesise with a pre-trained r9y9 WaveNet. The hyper-parameters have to match the model.
+            Synthesiser.run_wavenet_vocoder(synth_output, hparams)

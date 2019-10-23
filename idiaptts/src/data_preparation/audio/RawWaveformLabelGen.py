@@ -192,8 +192,6 @@ def main():
                         type=str, dest="dir_audio", required=True)
     parser.add_argument("-s", "--output_frequency", help="Desired frequency of all audio files [Hz].",
                         type=int, dest="output_frequency")
-    # parser.add_argument("-f", "--frame_size_ms", help="Frame size of the labels.",
-    #                     type=int, dest="frame_size_ms", default=5) # TODO: Use the frame size in pydubs from_file.
     parser.add_argument("-i", "--file_id_list_path",
                         help="Path to text file to read the ids of the files to process.\
                               Default uses all .wav files in the given audio_dir.",
@@ -208,8 +206,6 @@ def main():
 
     dir_audio = os.path.abspath(args.dir_audio)
     dir_out = os.path.abspath(args.dir_out)
-    output_frequency = args.output_frequency
-    mu = args.mu
 
     # Read ids and select an appropriate file_id_list_name,
     # used to identify normalisation parameters of different subsets.
@@ -229,11 +225,11 @@ def main():
         id_list[index] = os.path.join(dir_audio, id_name + ".wav")
 
     # Execute main functionality.
-    raw_feat_gen = RawWaveformLabelGen(frame_rate_output_Hz=output_frequency, mu=mu)
+    raw_feat_gen = RawWaveformLabelGen(frame_rate_output_Hz=args.output_frequency, mu=args.mu)
     # label_dict, norm_first, norm_second = raw_feat_gen.gen_data(dir_audio, dir_out, args.file_id_list_path, id_list, add_deltas=False, return_dict=True)
 
     # DEBUG
-    test_label = raw_feat_gen.load_sample(id_list[0], output_frequency)
+    test_label = raw_feat_gen.load_sample(id_list[0], args.output_frequency)
     print(test_label[98:102])
     test_label = raw_feat_gen.preprocess_sample(test_label)
     print(test_label[98:102])
