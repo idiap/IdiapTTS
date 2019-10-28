@@ -543,55 +543,56 @@ class WorldFeatLabelGen(LabelGen):
 
         return raw, fs
 
-    @staticmethod
-    def extract_mgc(raw: np.array, fs: int,
-                    num_coded_sps: int = 60, frame_size_ms: int = None,
-                    frame_hop_ms: int = 5, window_function: Callable = np.hanning,
-                    mgc_alpha: float = None) -> np.array:
-        """Extract MGC from raw [-1, 1] data with SPTK."""
-
-        if frame_size_ms is None:
-            frame_length = WorldFeatLabelGen.fs_to_frame_length(fs)
-        else:
-            frame_length = int(frame_size_ms / 1000 * fs)
-
-        if mgc_alpha is None:
-            mgc_alpha = WorldFeatLabelGen.fs_to_mgc_alpha(fs)
-
-        # Framing.
-        padded_signal = np.pad(raw, pad_width=frame_length // 2, mode="reflect")
-        frames = librosa.util.frame(padded_signal, frame_length, int(frame_hop_ms / 1000 * fs))
-        # Windowing.
-        frames *= window_function(frames.shape[1])
-
-        mgc = pysptk.mgcep(np.ascontiguousarray(frames.T),
-                           order=num_coded_sps - 1,
-                           alpha=mgc_alpha,
-                           gamma=WorldFeatLabelGen.mgc_gamma,
-                           eps=1.0e-8,
-                           min_det=0.0,
-                           etype=1,
-                           itype=0)
-
-        return mgc.astype(np.float32, copy=False)
-
     # @staticmethod
-    # def extract_mgc(amp_sp: np.array, fs: int, num_coded_sps: int = 60, mgc_alpha: float = None) -> np.array:
-    #     """Extract MGC from the amplitude spectrum from SPTK."""
+    # def extract_mgc(raw: np.array, fs: int,
+    #                 num_coded_sps: int = 60, frame_size_ms: int = None,
+    #                 frame_hop_ms: int = 5, window_function: Callable = np.hanning,
+    #                 mgc_alpha: float = None) -> np.array:
+    #     """Extract MGC from raw [-1, 1] data with SPTK."""
+    #
+    #     if frame_size_ms is None:
+    #         frame_length = WorldFeatLabelGen.fs_to_frame_length(fs)
+    #     else:
+    #         frame_length = int(frame_size_ms / 1000 * fs)
     #
     #     if mgc_alpha is None:
     #         mgc_alpha = WorldFeatLabelGen.fs_to_mgc_alpha(fs)
     #
-    #     mgc = pysptk.mgcep(np.ascontiguousarray(amp_sp.T),
+    #     # Framing.
+    #     padded_signal = np.pad(raw, pad_width=frame_length // 2, mode="reflect")
+    #     frames = librosa.util.frame(padded_signal, frame_length, int(frame_hop_ms / 1000 * fs))
+    #     # Windowing.
+    #     frames *= window_function(frames.shape[1])
+    #
+    #     mgc = pysptk.mgcep(np.ascontiguousarray(frames.T),
     #                        order=num_coded_sps - 1,
     #                        alpha=mgc_alpha,
     #                        gamma=WorldFeatLabelGen.mgc_gamma,
     #                        eps=1.0e-8,
     #                        min_det=0.0,
     #                        etype=1,
-    #                        itype=3)
+    #                        itype=0)
     #
     #     return mgc.astype(np.float32, copy=False)
+
+    @staticmethod
+    def extract_mgc(amp_sp: np.array, fs: int = None, num_coded_sps: int = 60, mgc_alpha: float = None) -> np.array:
+        """Extract MGC from the amplitude spectrum from SPTK."""
+
+        if mgc_alpha is None:
+            assert fs is not None, "Either sampling rate or mgc alpha has to be given."
+            mgc_alpha = WorldFeatLabelGen.fs_to_mgc_alpha(fs)
+
+        mgc = pysptk.mgcep(amp_sp,
+                           order=num_coded_sps - 1,
+                           alpha=mgc_alpha,
+                           gamma=WorldFeatLabelGen.mgc_gamma,
+                           eps=1.0e-8,
+                           min_det=0.0,
+                           etype=1,
+                           itype=3)
+
+        return mgc.astype(np.float32, copy=False)
 
     @staticmethod
     def extract_mcep(amp_sp: np.array, num_coded_sps: int, mgc_alpha: float) -> np.array:
@@ -691,7 +692,7 @@ class WorldFeatLabelGen(LabelGen):
                                fftlen=n_fft)
 
         # WORLD expects spectrum divided by number of final bins, but SPTK does not divide it.
-        return np.exp(amp_sp.real.astype(np.float32, copy=False)) / np.sqrt(amp_sp.shape[1])
+        return np.exp(amp_sp.real.astype(np.float32, copy=False))
 
     @staticmethod
     def amp_sp_to_raw(amp_sp: np.array, fs: int, hop_size_ms: int = 5, preemphasis: float = 0.97):

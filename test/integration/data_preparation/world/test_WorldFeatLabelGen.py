@@ -654,8 +654,8 @@ class TestWorldFeatLabelGen(unittest.TestCase):
                            msg="Mfbanks reconstruction doesn't seem to be in the same domain.")
 
         # Check mcep reconstruction.
-        mgc = WorldFeatLabelGen.extract_mgc(raw, fs=fs, num_coded_sps=num_coded_sps,
-                                            frame_hop_ms=hop_size_ms,
+        mgc = WorldFeatLabelGen.extract_mgc(amp_sp=world_amp_sp,
+                                            num_coded_sps=num_coded_sps,
                                             mgc_alpha=WorldFeatLabelGen.fs_to_mgc_alpha(fs))
         reconstruction = WorldFeatLabelGen.mgc_to_amp_sp(mgc, fs)
         # TestWorldFeatLabelGen._plot_power_sp(librosa_amp_sp ** 2, reconstruction ** 2, sp_type="mgc",
@@ -670,8 +670,8 @@ class TestWorldFeatLabelGen(unittest.TestCase):
         # TestWorldFeatLabelGen._plot_power_sp(numpy.exp(librosa_mcep), numpy.exp(mgc),
         #                                      label_ground_truth="MCep from librosa amp sp",
         #                                      label_reconstruction="MGC from SPTK amp sp")
-        # # self.assertGreater(100000, ((librosa_mcep - mgc) ** 2).sum(),
-        # #                    msg="Extracted MGC and MCep do not seem to be in the same domain.")
+        # self.assertGreater(1000, ((librosa_mcep - mgc) ** 2).sum(),
+        #                    msg="Extracted MGC and MCep do not seem to be in the same domain.")
         # librosa_mcep_reconstruction = WorldFeatLabelGen.mcep_to_amp_sp(librosa_mcep, fs)
         # TestWorldFeatLabelGen._plot_power_sp(librosa_mcep_reconstruction, reconstruction,
         #                                      label_ground_truth="Amp sp from MCep from librosa amp sp",
