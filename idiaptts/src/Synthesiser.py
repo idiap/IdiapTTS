@@ -151,7 +151,7 @@ class Synthesiser(object):
             channels=1
         )
         audio_seg.set_frame_rate(fs)
-        audio_seg.export(file_path, format=os.path.splitext(file_path))
+        audio_seg.export(file_path, format=os.path.splitext(file_path)[1].lstrip('.'))
 
     @staticmethod
     def run_r9y9wavenet_mulaw_world_feats_synth(synth_output, hparams):
