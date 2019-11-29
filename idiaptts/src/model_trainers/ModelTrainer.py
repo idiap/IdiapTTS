@@ -18,25 +18,18 @@ from functools import partial
 from operator import itemgetter
 from timeit import default_timer as timer
 import numpy as np
-import soundfile
 from datetime import datetime
 import random
 import platform
 from shutil import copy2
 
 # Third-party imports.
-import pydub
-from pydub import AudioSegment
-import pyworld
-import pysptk
-from nnmnkwii.postfilters import merlin_post_filter
+import git
 
 # Local source tree imports.
 from idiaptts.src.ExtendedHParams import ExtendedHParams
-from idiaptts.src.data_preparation.world.WorldFeatLabelGen import WorldFeatLabelGen
 from idiaptts.src.neural_networks.pytorch.ModelHandlerPyTorch import ModelHandlerPyTorch
-from idiaptts.misc.utils import makedirs_safe, get_gpu_memory_map, sample_linearly
-from idiaptts.src.data_preparation.audio.RawWaveformLabelGen import RawWaveformLabelGen
+from idiaptts.misc.utils import makedirs_safe, get_gpu_memory_map
 from idiaptts.src.Synthesiser import Synthesiser
 
 
@@ -62,6 +55,17 @@ class ModelTrainer(object):
         """
 
         self.logger.info("Running on host {}.".format(platform.node()))
+        try:
+            repo = git.Repo(search_parent_directories=True)
+            self.logger.info("Git: {} at {}".format(repo.git_dir, repo.head.object.hexsha))
+        except git.exc.InvalidGitRepositoryError:
+            pass
+        try:
+            framework_repo = git.Repo(path=os.environ['IDIAPTTS_ROOT'], search_parent_directories=True)
+            self.logger.info("IdiapTTS framework git: {} at {}"
+                             .format(framework_repo.git_dir, framework_repo.head.object.hexsha))
+        except git.exc.InvalidGitRepositoryError:
+            pass
 
         assert(hparams is not None)
 

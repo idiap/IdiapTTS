@@ -63,6 +63,7 @@ cleanup()
 {
     # Cleanup code.
     rm -rf "$TMP"
+    echo "Exit"
 }
 # Die should be called when an error occurs with a HELPFUL error message.
 die () {
@@ -72,6 +73,7 @@ die () {
 
 # Set magic variables for current file $ directory (upper-case).
 readonly TMP=$(mktemp -d)
+#readonly TMP=$(realpath "TMP"); mkdir ${TMP}
 
 # The main function of this file.
 main()
@@ -137,7 +139,8 @@ main()
     mkdir -p $utt
     $festival_dir/bin/festival $input_file_festready || true
     echo "done."
-    
+
+    exit 0
     # Create labels from utts
     echo -n "Create labels from utts ... "
     (
