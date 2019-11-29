@@ -17,6 +17,11 @@ from idiaptts.misc.utils import parse_int_set
 class RNNDyn(nn.Module):
     IDENTIFIER = "RNNDYN"
 
+    # Supported nonlins. Nonlins are normally used in every layer, but only in the last layer in RNNs.
+    # NOTE: FC and LIN are the same and meaning a fully-connected linear layer without non-linearity.
+    nonlin_options = {'RELU': F.relu, 'TANH': torch.tanh, 'FC': None, 'LIN': None,
+                      'SOFTMAX': F.softmax, 'LOGSOFTMAX': F.log_softmax, 'EXP': torch.exp}
+
     def __init__(self, dim_in, _, hparams):
         super().__init__()
 
@@ -36,6 +41,7 @@ class RNNDyn(nn.Module):
         self.emb_groups = nn.ModuleList()
 
         # Translate model name to layer groups.
+        assert(hparams.model_type is not None)
         assert(str(hparams.model_type).startswith(RNNDyn.IDENTIFIER))
         self.name_to_groups(hparams.model_type, hparams.hidden_init, hparams.train_hidden_init, hparams.f_get_emb_index if hasattr(hparams, "f_get_emb_index") else None)
 
@@ -57,6 +63,26 @@ class RNNDyn(nn.Module):
 
     def set_gpu_flag(self, use_gpu):
         self.use_gpu = use_gpu
+
+    def _setup_embeddings(self, in_dim, group_attr, f_get_emb_index):
+        n_layers, embedding_dim = re.split('x', group_attr[0])
+        n_layers = int(n_layers)
+        embedding_dim = int(embedding_dim)
+        emb = nn.Embedding(n_layers, embedding_dim)
+        emb.affected_layer_indices = parse_int_set(group_attr[2].replace('(', '').replace(')', ''))
+        if f_get_emb_index is None or len(f_get_emb_index) < len(self.emb_groups):
+            raise ValueError("Embedding layer is defined but not enough f_get_emb_index functions are given in hparams.f_get_emb_index.")
+        emb.f_get_emb_index = f_get_emb_index[len(self.emb_groups)]
+        self.emb_groups.append(emb)
+        in_dim -= int(np.prod(self.dim_in[1:]))  # Remove the embedding index from the input dimension.
+
+        return in_dim
+
+    def _gets_embedding(self, layer_idx):
+        for emb in self.emb_groups:
+            if -1 in emb.affected_layer_indices or layer_idx in emb.affected_layer_indices:
+                return True
+        return False
 
     def name_to_groups(self, name, hidden_init, train_hidden_init, f_get_emb_index):
         """
@@ -86,106 +112,101 @@ class RNNDyn(nn.Module):
         out_dim = in_dim
 
         embeddings_done = False
-        for group_idx, group in enumerate(str_layer_groups):
+        layer_idx = 0
+        for group in str_layer_groups:
             # Split group string by underscore. The first three items always have to be set.
             # Layer who require more arguments can access group_attr[3:].
             group_attr = re.split('_', group)
             layer_type = group_attr[1]
+            bidirectional = False
+            if 'Bi' == layer_type[:2]:
+                bidirectional = True
+                layer_type = layer_type[2:]
 
             # First process embeddings.
             if layer_type == "EMB":
                 if embeddings_done:
                     raise NotImplementedError("Please specify all embeddings layers before any other layers.")
-                n_layers, embedding_dim = re.split('x', group_attr[0])
-                n_layers = int(n_layers)
-                embedding_dim = int(embedding_dim)
-                emb = nn.Embedding(n_layers, embedding_dim)
-                emb.affected_layer_indices = parse_int_set(group_attr[2].replace('(', '').replace(')', ''))
-                if f_get_emb_index is None or len(f_get_emb_index) < len(self.emb_groups):
-                    raise ValueError("Embedding layer is defined but not enough f_get_emb_index functions are given in hparams.f_get_emb_index.")
-                emb.f_get_emb_index = f_get_emb_index[len(self.emb_groups)]
-                self.emb_groups.append(emb)
-                in_dim -= int(np.prod(self.dim_in[1:]))  # Remove the embedding from the input dimension.
+                in_dim = self._setup_embeddings(in_dim, group_attr, f_get_emb_index)
                 continue
 
-            embeddings_done = True  # Set to true once a non-embedding layer is found. Used to check that embedding layers are specified first.
-            layer_group = nn.ModuleList()
-            # Check if emb is involved.
-            for emb in self.emb_groups:
-                if -1 in emb.affected_layer_indices or group_idx - len(self.emb_groups) in emb.affected_layer_indices:
-                    in_dim += emb.embedding_dim
-            layer_group.in_dim = in_dim
+            embeddings_done = True  # Set to true once a non-embedding layer is found.
+                                    # Used to check that embedding layers are specified first.
             n_layers = int(group_attr[0])
             group_out_dim = int(group_attr[2])
+            idx_sub_group = 0
+            while idx_sub_group < n_layers:
+                layer_group = nn.ModuleList()
 
-            # Supported nonlins. Nonlins are normally used in every layer, but only in the last layer in RNNs.
-            # NOTE: FC and LIN are the same and meaning a fully-connected linear layer without non-linearity.
-            nonlin_options = {'RELU': F.relu, 'TANH': torch.tanh, 'FC': None, 'LIN': None,
-                              'SOFTMAX': F.softmax, 'LOGSOFTMAX': F.log_softmax, 'EXP': torch.exp}
+                # Check if emb is involved.
+                for emb in self.emb_groups:
+                    if -1 in emb.affected_layer_indices or layer_idx in emb.affected_layer_indices:
+                        in_dim += emb.embedding_dim
+                    layer_group.in_dim = in_dim
 
-            # Supported recurrent nonlins.
-            if layer_type in ['LSTM', 'BiLSTM', 'LSTMP', 'BiLSTMP',
-                              'GRU', 'BiGRU',
-                              'RNNTANH', 'BiRNNTANH', 'RNNRELU', 'BiRNNRELU']:
+                # Include all following layers which do not require an embedding.
+                n_sub_group = 1
+                for n in range(1, n_layers - idx_sub_group):
+                    if self._gets_embedding(layer_idx + n):
+                        break
+                    n_sub_group += 1
 
-                layer_group.is_rnn = True
-                layer_group.nonlin = layer_type
-                layer_group.n_layers = n_layers
+                layer_group.n_layers = n_sub_group
 
-                out_dim = group_out_dim
+                # Supported recurrent non-linearity.
+                if layer_type in ['LSTM', 'GRU', 'RNNTANH', 'RNNRELU']:
 
-                if layer_type in ['LSTM', 'GRU']:
-                    layer_group.append(getattr(nn, layer_type)(in_dim, out_dim, n_layers, dropout=self.dropout))
-                elif layer_type in ['BiLSTM', 'BiGRU']:
-                    layer_group.append(getattr(nn, layer_type[2:])(in_dim, out_dim, n_layers, dropout=self.dropout,
-                                                                   bidirectional=True))
-                elif layer_type in ['LSTMP']:
-                    layer_group.append(getattr(nn, 'LSTM')(in_dim, out_dim, n_layers, dropout=self.dropout,
-                                                           peepholes=True))
-                elif layer_type in ['BiLSTMP']:
-                    layer_group.append(getattr(nn, 'LSTM')(in_dim, out_dim, n_layers, dropout=self.dropout,
-                                                           bidirectional=True, peepholes=True))
-                elif layer_type in ['BiRNNTANH', 'BiRNNRELU']:
-                    rnn_opt = {'BiRNNTANH': 'tanh', 'BiRNNRELU': 'relu'}[layer_type]
-                    layer_group.append(nn.RNN(in_dim, out_dim, n_layers, nonlinearity=rnn_opt, dropout=self.dropout,
-                                              bidirectional=True))
-                else:
-                    rnn_opt = {'RNNTANH': 'tanh', 'RNNRELU': 'relu'}[layer_type]
-                    layer_group.append(nn.RNN(in_dim, out_dim, n_layers, nonlinearity=rnn_opt, dropout=self.dropout,
-                                              bidirectional=False))
+                    layer_group.is_rnn = True
+                    layer_group.nonlin = layer_type
 
-                num_directions = 2 if layer_group[0].bidirectional else 1
-                # group_out_dim = out_dim * num_directions
-                in_dim = out_dim * num_directions  # Next in_dim is the current outdim times the directions.
-
-                h0_init = torch.Tensor(n_layers * num_directions, 1, out_dim).fill_(hidden_init)
-                c0_init = torch.Tensor(n_layers * num_directions, 1, out_dim).fill_(hidden_init)
-
-                if train_hidden_init:
-                    layer_group.register_parameter('h_0', nn.Parameter(h0_init))
-                    layer_group.register_parameter('c_0', nn.Parameter(c0_init))
-                else:
-                    layer_group.register_buffer('h_0', h0_init)
-                    layer_group.register_buffer('c_0', c0_init)
-            else:
-                layer_group.is_rnn = False
-                layer_group.nonlin = nonlin_options[layer_type]
-
-                # Options to pick different layers by name.
-                if True:
-                    nn_layer = nn.Linear
-                else:
-                    nn_layer = None
-
-                # Add requested number of layers.
-                for i in range(n_layers):
                     out_dim = group_out_dim
-                    layer_group.append(nn_layer(in_dim, out_dim))
-                    in_dim = out_dim  # Next in_dim is the current out_dim.
 
-            layer_group.out_dim = out_dim
-            # Append to the modules layer groups list.
-            self.layer_groups.append(layer_group)
+                    if layer_type in ['LSTM', 'GRU']:
+                        layer_group.append(getattr(nn, layer_type)(in_dim, out_dim, layer_group.n_layers,
+                                                                   dropout=self.dropout,
+                                                                   bidirectional=bidirectional))
+                    else:
+                        rnn_opt = {'RNNTANH': 'tanh', 'RNNRELU': 'relu'}[layer_type]
+                        layer_group.append(nn.RNN(in_dim, out_dim, layer_group.n_layers,
+                                                  nonlinearity=rnn_opt,
+                                                  dropout=self.dropout,
+                                                  bidirectional=False))
+
+                    num_directions = 2 if layer_group[0].bidirectional else 1
+                    # group_out_dim = out_dim * num_directions
+                    in_dim = out_dim * num_directions  # Next in_dim is the current outdim times the directions.
+
+                    h0_init = torch.Tensor(layer_group.n_layers * num_directions, 1, out_dim).fill_(hidden_init)
+                    c0_init = torch.Tensor(layer_group.n_layers * num_directions, 1, out_dim).fill_(hidden_init)
+
+                    if train_hidden_init:
+                        layer_group.register_parameter('h_0', nn.Parameter(h0_init))
+                        layer_group.register_parameter('c_0', nn.Parameter(c0_init))
+                    else:
+                        layer_group.register_buffer('h_0', h0_init)
+                        layer_group.register_buffer('c_0', c0_init)
+                else:
+                    layer_group.is_rnn = False
+                    layer_group.nonlin = self.nonlin_options[layer_type]
+
+                    # Options to pick different layers by name.
+                    if True:
+                        nn_layer = nn.Linear
+                    else:
+                        nn_layer = None
+
+                    # Add requested number of layers.
+                    for i in range(layer_group.n_layers):
+                        out_dim = group_out_dim
+                        layer_group.append(nn_layer(in_dim, out_dim))
+                        in_dim = out_dim  # Next in_dim is the current out_dim.
+
+                layer_group.out_dim = out_dim
+                # Append to the modules layer groups list.
+                self.layer_groups.append(layer_group)
+                # Increment indices.
+                layer_idx += layer_group.n_layers
+                idx_sub_group += layer_group.n_layers
 
     def forward_sample(self, input, *_):
         """Forward one input through all layer groups, does not use the hidden parameter."""
@@ -198,9 +219,10 @@ class RNNDyn(nn.Module):
             output = input
 
         last_hidden = None
-        for group_idx, group in enumerate(self.layer_groups):
+        layer_idx = 0
+        for group in self.layer_groups:
             for emb_idx, emb in enumerate(self.emb_groups):
-                if -1 in emb.affected_layer_indices or group_idx in emb.affected_layer_indices:
+                if -1 in emb.affected_layer_indices or layer_idx in emb.affected_layer_indices:
                     output = torch.cat((output, emb(input_embs[:, :, emb_idx].long())), dim=2)
 
             if group.is_rnn:
@@ -219,6 +241,8 @@ class RNNDyn(nn.Module):
                             output = self.drop(group.nonlin(layer(output), dim=2))
                         else:
                             output = self.drop(group.nonlin(layer(output)))
+
+            layer_idx += group.n_layers
             # Only save the output of each group.
             if hasattr(self, "save_intermediate_outputs") and self.save_intermediate_outputs:
                 group.output = output
@@ -236,15 +260,16 @@ class RNNDyn(nn.Module):
             output = input
 
         last_hidden = None
-        for group_idx, group in enumerate(self.layer_groups):
+        layer_idx = 0
+        for group in self.layer_groups:
             for emb_idx, emb in enumerate(self.emb_groups):
-                if -1 in emb.affected_layer_indices or group_idx in emb.affected_layer_indices:
+                if -1 in emb.affected_layer_indices or layer_idx in emb.affected_layer_indices:
                     output = torch.cat((output, emb(input_embs[:, :, emb_idx].long())), dim=2)
 
             if group.is_rnn:
                 # Pack the sequence for RNN.
                 total_length = output.size(1)  # Get max sequence length, required to use pad_packed_sequence with data parallel. # TODO: Requires testing.
-                output = pack_padded_sequence(output, seq_lengths_input)  # TODO: batch first
+                output = pack_padded_sequence(output, seq_lengths_input)  # TODO: Accept batch first
 
                 output, group.hidden = group[0](output, group.hidden)  # If group.hidden is not set here, init_hidden was not called.
                 if group.hidden is not None:  # Keep last not None hidden state.
@@ -255,15 +280,18 @@ class RNNDyn(nn.Module):
 
                 output = self.drop(output)  # Dropout is by default not applied to last rnn layer.
             else:
-                if group.nonlin is None:
-                    for layer in group:
-                        output = self.drop(layer(output))
-                else:
-                    for layer in group:
-                        if group.nonlin is F.softmax:
-                            output = self.drop(group.nonlin(layer(output), dim=2))
-                        else:
-                            output = self.drop(group.nonlin(layer(output)))
+                for layer in group:
+                    # Pass through layer.
+                    output = layer(output)
+                    # Apply non-linearity.
+                    if group.nonlin is F.softmax:
+                        output = group.nonlin(output, dim=2)
+                    elif group.nonlin is not None:
+                        output = group.nonlin(output)
+                    # Apply dropout.
+                    output = self.drop(output)
+
+            layer_idx += group.n_layers
             # Only save the output of each group.
             if hasattr(self, "save_intermediate_outputs") and self.save_intermediate_outputs:
                 group.output = output
@@ -337,6 +365,20 @@ class RNNDyn(nn.Module):
             return h_0, c_0
         else:
             return h_0
+
+    def __getitem__(self, item):
+        """Zero-based indexing of layers."""
+
+        layer_idx = 0
+        for group in self.layer_groups:
+            if layer_idx + group.n_layers > item:
+                if group.is_rnn:
+                    return group[0]  # RNN layers contain multiple layers in the same object, so return that object.
+                else:
+                    return group[item - layer_idx]
+            else:
+                layer_idx += group.n_layers
+        raise KeyError("The model contains only {} layers.".format(layer_idx))
 
 
 class MerlinAcoustic(RNNDyn):
