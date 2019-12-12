@@ -128,7 +128,7 @@ class PhraseAtomNeuralFilterModelTrainer(ModelTrainer):
             weight_unvoiced=0.5,  # Weight on unvoiced frames.
             num_questions=None,  # Dimension of the input questions.
             dist_window_size=51,  # Size of distribution around spikes when training the AtomModel.
-            phrase_bias_init=None,  # Initial bias of neural filter, should be estimated mean of speaker's LF0.
+            phrase_bias_init=0.0,  # Initial bias of neural filter, should be estimated mean of speaker's LF0.
             atom_model_path=None,  # Path to load a pre-trained atom model from.
             hparams_atom=None,  # Hyper-parameter container used in the AtomModelTrainer
             flat_model_path=None,  # Path to load a pre-trained atom neural filter model from (without phrase curve).
@@ -394,8 +394,6 @@ class PhraseAtomNeuralFilterModelTrainer(ModelTrainer):
         # plotter.gen_plot(True)
         plotter.save_to_file(filename + ".PHRASE" + hparams.gen_figure_ext)
 
-        plotter.plt.show()
-
         if clustering is None:
             return
 
@@ -451,8 +449,6 @@ class PhraseAtomNeuralFilterModelTrainer(ModelTrainer):
         plotter.gen_plot()
         # plotter.gen_plot(True)
         plotter.save_to_file(filename + ".CLUSTERS" + hparams.gen_figure_ext)
-
-        plotter.plt.show()
 
     def gen_figure_atoms(self, hparams, ids_input):
         self.flat_trainer.gen_figure_atoms(hparams, ids_input)

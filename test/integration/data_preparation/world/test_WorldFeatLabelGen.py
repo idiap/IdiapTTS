@@ -445,6 +445,9 @@ class TestWorldFeatLabelGen(unittest.TestCase):
                                                 and name.endswith("cmp")])
                     self.assertEqual(len(self.id_list), len(found_feature_files),
                                      msg="Wrong number of generated feature files for {} for {}".format(sp_type, args))
+                    # Check if generated features are loadable.
+                    generator.load_sample(found_feature_files[0], out_dir,
+                                          num_coded_sps=num_coded_sps, sp_type=sp_type, **args)
                     # Check if all normalisation parameter files are generated.
                     for feature, load in zip((sp_type, "lf0", "bap"),
                                              ("load_sp", "load_lf0", "load_bap")):
@@ -452,10 +455,12 @@ class TestWorldFeatLabelGen(unittest.TestCase):
                             found_norm_files = list([name for name in os.listdir(expected_out_dir)
                                                      if os.path.isfile(os.path.join(expected_out_dir, name))
                                                      and name.endswith(".bin")
-                                                     and name.startswith("{}_{}".format(file_id_list_name, feature))])
+                                                     and name.startswith("{}-{}".format(file_id_list_name, feature))])
                             self.assertEqual(2, len(found_norm_files),
                                              msg="Did not find two norm files for {} in {} for {}"
                                                  .format(feature, expected_out_dir, args))
+                            # Check if normalisation paramters are loadable.
+                            generator.get_normalisation_params(out_dir, "test_id_list")
                 else:
                     # Handle case where no cmp file is generated but .<feature>_deltas files in each subdirectory.
                     for feature, ext, load in zip((sp_type + str(num_coded_sps), "lf0", "vuv", "bap"),
@@ -470,6 +475,9 @@ class TestWorldFeatLabelGen(unittest.TestCase):
                             self.assertEqual(len(self.id_list), len(found_feature_files),
                                              msg="Wrong number of generated feature files for {} in {} for {}"
                                              .format(feature, expected_out_dir, args))
+                            # Check if generated features are loadable.
+                            generator.load_sample(found_feature_files[0], out_dir,
+                                                  num_coded_sps=num_coded_sps, sp_type=sp_type, **args)
                             # Check if normalisation parameter files were generated.
                             if feature != "vuv":
                                 found_norm_files = list([name for name in os.listdir(expected_out_dir)
@@ -479,8 +487,72 @@ class TestWorldFeatLabelGen(unittest.TestCase):
                                 self.assertEqual(2, len(found_norm_files),
                                                  msg="Did not find two norm files for {} in {} for {}"
                                                  .format(feature, expected_out_dir, args))
+                                # Check if normalisation paramters are loadable.
+                                generator.get_normalisation_params(out_dir, "test_id_list")
 
                 shutil.rmtree(out_dir)
+
+    def test_extract_and_combine(self):
+        """
+        Extract features with two disjoint id lists and combine stats afterwards
+        for features with and without deltas.
+        """
+
+        # Hyper-parameters and id list split.
+        out_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), type(self).__name__)
+        makedirs_safe(out_dir)
+        feature = "lf0"
+        dir_deltas = "cmp_mcep60"
+
+        file_id_list_name_1 = "test_id_list1"
+        file_id_list_name_2 = "test_id_list2"
+        split_idx = len(self.id_list) // 2
+        id_list_1 = self.id_list[:split_idx]
+        id_list_2 = self.id_list[split_idx:]
+
+        # Generate features without deltas and check if normalisation parameters for each list are created.
+        generator = WorldFeatLabelGen(out_dir, add_deltas=False)
+        generator.gen_data(dir_in=self.dir_wav, dir_out=out_dir, file_id_list=file_id_list_name_1, id_list=id_list_1)
+        generator.gen_data(dir_in=self.dir_wav, dir_out=out_dir, file_id_list=file_id_list_name_2, id_list=id_list_2)
+        self.assertTrue(os.path.isfile(os.path.join(out_dir, feature, file_id_list_name_1 + "-mean-std_dev.bin")))
+        self.assertTrue(os.path.isfile(os.path.join(out_dir, feature, file_id_list_name_2 + "-stats.bin")))
+
+        # Combine the normalisation parameters.
+        from idiaptts.misc.normalisation.MeanStdDevExtractor import MeanStdDevExtractor
+        MeanStdDevExtractor.combine_mean_std(
+            map(lambda x: os.path.join(out_dir, feature, x + "-stats.bin"), [file_id_list_name_1, file_id_list_name_2]),
+            dir_out=os.path.join(out_dir, feature))
+        self.assertTrue(os.path.isfile(os.path.join(out_dir, feature, "stats.bin")))
+        self.assertTrue(os.path.isfile(os.path.join(out_dir, feature, "mean-std_dev.bin")))
+
+        # Generate features with deltas and check if normalisation parameters for each list are created.
+        generator = WorldFeatLabelGen(out_dir, add_deltas=True)
+        generator.gen_data(dir_in=self.dir_wav, dir_out=out_dir, file_id_list=file_id_list_name_1, id_list=id_list_1)
+        generator.gen_data(dir_in=self.dir_wav, dir_out=out_dir, file_id_list=file_id_list_name_2, id_list=id_list_2)
+        self.assertTrue(os.path.isfile(os.path.join(out_dir, dir_deltas,
+                                                    file_id_list_name_1 + "-" + feature + "-mean-covariance.bin")))
+        self.assertTrue(os.path.isfile(os.path.join(out_dir, dir_deltas,
+                                                    file_id_list_name_2 + "-" + feature + "-stats.bin")))
+
+        # Combine the normalisation parameters for one feature to a file named after the feature.
+        from idiaptts.misc.normalisation.MeanCovarianceExtractor import MeanCovarianceExtractor
+        MeanCovarianceExtractor.combine_mean_covariance(
+            map(lambda x: os.path.join(out_dir, dir_deltas, x + "-" + feature + "-stats.bin"),
+                [file_id_list_name_1, file_id_list_name_2]),
+            dir_out=os.path.join(out_dir, dir_deltas),
+            file_name=feature)
+        self.assertTrue(os.path.isfile(os.path.join(out_dir, dir_deltas, feature + "-stats.bin")))
+        self.assertTrue(os.path.isfile(os.path.join(out_dir, dir_deltas, feature + "-mean-covariance.bin")))
+
+        # Combine the normalisation parameters for one feature to a general normalisation parameter file.
+        MeanCovarianceExtractor.combine_mean_covariance(
+            map(lambda x: os.path.join(out_dir, dir_deltas, x + "-" + feature + "-stats.bin"),
+                [file_id_list_name_1, file_id_list_name_2]),
+            dir_out=os.path.join(out_dir, dir_deltas))
+        self.assertTrue(os.path.isfile(os.path.join(out_dir, dir_deltas, "stats.bin")))
+        self.assertTrue(os.path.isfile(os.path.join(out_dir, dir_deltas, "mean-covariance.bin")))
+
+        shutil.rmtree(out_dir)
 
     @staticmethod
     def _plot_power_sp(ground_truth, reconstruction, sp_type=None, num_coded_sps=None, label_ground_truth=None, label_reconstruction=None):

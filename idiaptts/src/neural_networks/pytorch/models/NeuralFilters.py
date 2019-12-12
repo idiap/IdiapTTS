@@ -35,10 +35,17 @@ class NeuralFilters(nn.Module):
 
         from idiaptts.src.neural_networks.pytorch.ModelHandlerPyTorch import ModelHandlerPyTorch
         self.model_handler_atoms = ModelHandlerPyTorch()
-        self.model_handler_atoms.load_checkpoint(hparams.atom_model_path,
-                                                 hparams.hparams_atom,
-                                                 hparams.hparams_atom.learning_rate if hasattr(hparams.hparams_atom, "learning_rate")
-                                                                                    else hparams.hparams_atom.optimiser_args["lr"])
+        if hasattr(hparams.hparams_atom, "learning_rate"):
+            lr = hparams.hparams_atom.learning_rate
+        elif hasattr(hparams.hparams_atom, "optimiser_args"):
+            lr = hparams.hparams_atom.optimiser_args["lr"]
+        elif hasattr(hparams, "learning_rate"):
+            lr = hparams.learning_rate
+        elif hasattr(hparams.optimiser_args, "lr"):
+            lr = hparams.optimiser_args["lr"]
+        else:
+            lr = None
+        self.model_handler_atoms.load_checkpoint(hparams.atom_model_path, hparams.hparams_atom, lr)
         self.add_module("atom_model", self.model_handler_atoms.model)  # Add atom model as submodule so that parameters are properly registered.
 
         if hparams.complex_poles:

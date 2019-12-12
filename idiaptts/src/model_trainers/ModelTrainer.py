@@ -205,7 +205,7 @@ class ModelTrainer(object):
                                                                       hparams,
                                                                       hparams.optimiser_args["lr"] if hasattr(hparams, "optimiser_args")
                                                                                                      and "lr" in hparams.optimiser_args
-                                                                                                     else 0.0)
+                                                                                                     else None)
             except FileNotFoundError:
                 if hparams.model_type is None:
                     self.logger.error("Model does not exist at {} and you didn't give model_type to create a new one.".format(hparams.model_path))
@@ -225,7 +225,7 @@ class ModelTrainer(object):
                                                                   hparams,
                                                                   hparams.optimiser_args["lr"] if hasattr(hparams, "optimiser_args")
                                                                                                  and "lr" in hparams.optimiser_args
-                                                                                                 else 0.0)
+                                                                                                 else None)
         else:
             dim_in, dim_out = self.dataset_train.get_dims()
             self.model_handler.create_model(hparams, dim_in, dim_out)

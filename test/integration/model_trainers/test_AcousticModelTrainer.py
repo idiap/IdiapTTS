@@ -96,7 +96,7 @@ class TestAcousticModelTrainer(unittest.TestCase):
         trainer.init(hparams)
         scores = trainer.benchmark(hparams)
 
-        numpy.testing.assert_almost_equal((8.740, 66.069, 0.624, 37.654), scores, 3, "Wrong benchmark score.")
+        numpy.testing.assert_almost_equal((8.616, 78.4, 0.609, 37.352), scores, 3, "Wrong benchmark score.")
 
         shutil.rmtree(hparams.out_dir)
 

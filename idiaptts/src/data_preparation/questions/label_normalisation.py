@@ -856,6 +856,7 @@ class HTSLabelNormalisation(LabelNormalisation):
                     logger.critical('The question set is not defined correctly: %s' %(line))
                     raise Exception
 
+        fid.close()
 #                question_index = question_index + 1
         return  binary_dict, continuous_dict
 

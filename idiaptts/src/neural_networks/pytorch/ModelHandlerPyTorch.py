@@ -311,9 +311,11 @@ class ModelHandlerPyTorch(ModelHandler):
         dim_out = None
         model_type = None
 
+        assert file_path is not None, "Path to model is None."
+
         checkpoint = torch.load(file_path, map_location=lambda storage, loc: storage)
         try:
-            expected_model_type = hparams.model_type
+            expected_model_type = hparams.model_type if hasattr(hparams, "model_type") else None
             model_type = checkpoint['model_type']
             if expected_model_type and expected_model_type != model_type:  # None when model should be loaded by name.
                 raise TypeError("Expected type in hparams ({}) and loaded type ({}) should match."
@@ -328,7 +330,7 @@ class ModelHandlerPyTorch(ModelHandler):
                              (" ignoring {}.".format(hparams.ignore_layers) if len(hparams.ignore_layers) > 0 else "."))
 
             model_dict = checkpoint['model_state_dict']
-            if len(hparams.ignore_layers) > 0:
+            if hasattr(hparams, "ignore_layers") and len(hparams.ignore_layers) > 0:
                 model_dict = {k: v for k, v in model_dict.items()
                               if k not in hparams.ignore_layers}
                 org_dict = model.state_dict()
@@ -337,7 +339,7 @@ class ModelHandlerPyTorch(ModelHandler):
             model.load_state_dict(model_dict)
         except KeyError:  # Ensure backwards compatibility.
             model = checkpoint['model']
-            if len(hparams.ignore_layers) > 0:
+            if hasattr(hparams, "ignore_layers") and len(hparams.ignore_layers) > 0:
                 logging.warning("Model was loaded as a whole. Cannot ignore {}".format(hparams.ignore_layers))
 
         if hparams.use_gpu:
@@ -346,7 +348,7 @@ class ModelHandlerPyTorch(ModelHandler):
 
         return model, model_type, dim_in, dim_out
 
-    def load_checkpoint(self, file_path, hparams, initial_lr=0.0):
+    def load_checkpoint(self, file_path, hparams, initial_lr=None):
         """
         Load a checkpoint, also transfers model and optimiser to GPU if hparams.use_gpu is True.
 
@@ -392,7 +394,7 @@ class ModelHandlerPyTorch(ModelHandler):
                                         + "\nContinuing without loading optimiser instead.")
 
         # Initial learning rate is required by some optimisers to compute the learning rate of the current epoch.
-        if self.optimiser is not None:
+        if self.optimiser is not None and initial_lr is not None:
             for group in self.optimiser.param_groups:
                 if hasattr(group, 'initial_lr'):
                     group.setdefault('initial_lr', initial_lr)

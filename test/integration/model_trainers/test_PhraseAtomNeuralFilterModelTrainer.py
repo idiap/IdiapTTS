@@ -220,12 +220,12 @@ class TestPhraseAtomNeuralFilterModelTrainer(unittest.TestCase):
         numpy.testing.assert_almost_equal((87.312, 0.624), scores, 3)
 
         scores = trainer.flat_trainer.benchmark(hparams)
-        numpy.testing.assert_almost_equal((201.288, 0.624), scores, 3)
+        numpy.testing.assert_almost_equal((212.879, 0.624), scores, 3)
 
         hparams.epochs = 0  # Load model.
         trainer.init(hparams)
         scores = trainer.benchmark(hparams)
-        numpy.testing.assert_almost_equal((148.609, 0.604), scores, 3)
+        numpy.testing.assert_almost_equal((1679.056, 0.604), scores, 3)
 
         shutil.rmtree(hparams.out_dir)
 

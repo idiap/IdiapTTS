@@ -49,6 +49,7 @@ class TestModelTrainer(unittest.TestCase):
         hparams.epochs = 0
         hparams.test_set_perc = 0.05
         hparams.val_set_perc = 0.05
+        hparams.optimiser_args["lr"] = 0.02
         hparams.seed = None  # Remove the default seed.
         hparams.out_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), type(self).__name__)
         hparams.num_coded_sps = 20
@@ -267,7 +268,7 @@ class TestModelTrainer(unittest.TestCase):
                 hparams.model_type = self.IDENTIFIER
         ModelFactory.register_architecture(TestArchitecture)
 
-        for seed in [13]:  # itertools.count(0):
+        for seed in [158]:  # itertools.count(0):
             hparams = self._get_hparams()
             hparams.out_dir = os.path.join(hparams.out_dir, "test_train_e4_plus2")  # Add function name to path.
             hparams.seed = seed
@@ -371,13 +372,21 @@ class TestModelTrainer(unittest.TestCase):
         hparams.out_dir = os.path.join(hparams.out_dir, "test_train_no_best_model")  # Add function name to path
         hparams.model_name = "test_model_in409_out67.nn"
         hparams.model_path = os.path.join("integration", "fixtures", hparams.model_name)
-        hparams.seed = 1234
+        hparams.seed = 0
         hparams.batch_size_train = 2
         hparams.batch_size_val = hparams.batch_size_train
         hparams.epochs = 1
         hparams.use_best_as_final_model = True
         hparams.optimiser_args["lr"] = 0.001
         hparams.scheduler_type = "Plateau"
+
+        # for seed in itertools.count(0):
+        #     hparams.seed = seed
+        #     trainer = self._get_trainer(hparams)
+        #     trainer.init(hparams)
+        #     all_loss, *_ = trainer.train(hparams)
+        #     if all_loss[0] < all_loss[1]:
+        #         break
 
         trainer = self._get_trainer(hparams)
         trainer.init(hparams)

@@ -304,8 +304,6 @@ class AtomNeuralFilterModelTrainer(ModelTrainer):
         # plotter.gen_plot(True)
         plotter.save_to_file(filename + ".FILTERS" + hparams.gen_figure_ext)
 
-        plotter.plt.show()
-
         if clustering is None:
             return
 
@@ -361,8 +359,6 @@ class AtomNeuralFilterModelTrainer(ModelTrainer):
         plotter.gen_plot()
         # plotter.gen_plot(True)
         plotter.save_to_file(filename + ".CLUSTERS" + hparams.gen_figure_ext)
-
-        plotter.plt.show()
 
     def gen_figure_atoms(self, hparams, ids_input):
         self.atom_trainer.gen_figure(hparams, ids_input)

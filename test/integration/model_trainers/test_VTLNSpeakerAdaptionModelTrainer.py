@@ -157,7 +157,7 @@ class TestVTLNSpeakerAdaptionModelTrainer(unittest.TestCase):
         trainer.init(hparams)
         scores = trainer.benchmark(hparams)
 
-        numpy.testing.assert_almost_equal((9.716, 65.819,  0.624, 38.898), scores, 3, "Wrong benchmark score.")
+        numpy.testing.assert_almost_equal((9.401, 78.124, 0.609, 38.964), scores, 3, "Wrong benchmark score.")
 
         shutil.rmtree(hparams.out_dir)
 

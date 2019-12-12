@@ -12,7 +12,7 @@ import torch
 import numpy
 
 from idiaptts.misc.utils import makedirs_safe
-from src.model_trainers.ModelTrainer import ModelTrainer
+from idiaptts.src.model_trainers.ModelTrainer import ModelTrainer
 from idiaptts.src.neural_networks.pytorch.ModelFactory import ModelFactory
 
 

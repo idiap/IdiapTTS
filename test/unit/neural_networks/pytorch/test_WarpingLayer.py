@@ -39,6 +39,7 @@ class TestWarpingLayer(unittest.TestCase):
 
         hparams = VTLNSpeakerAdaptionModelTrainer.create_hparams()
         hparams.out_dir = os.path.join(self.out_dir, "test_compare_to_recursive_matrix")  # Add function name to path.
+        hparams.num_speakers = 1
         wl = WarpingLayer(10, 4, hparams)
         alpha_range = wl.alpha_range  # Range of alpha to test in.
         assert (precision < 2 * alpha_range)  # Precision must fit in range.
