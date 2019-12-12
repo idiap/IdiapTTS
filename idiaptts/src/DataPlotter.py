@@ -16,7 +16,12 @@ import logging
 import collections
 import numpy as np
 import matplotlib
-matplotlib.use('Agg')
+if bool(os.environ.get('DISPLAY', None)) and not os.environ.get('TEST_FLAG'):
+    matplotlib.use('TkAgg')
+    has_display = True
+else:
+    matplotlib.use('Agg')
+    has_display = False
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 import matplotlib.ticker as ticker
@@ -52,6 +57,7 @@ class DataPlotter(object):
             self.colors = None
             self.alpha = None
             self.linewidth = None
+            self.hlines = list()
 
     def __init__(self):
         self.logger = self.logger or logging.getLogger(__name__)
@@ -63,8 +69,15 @@ class DataPlotter(object):
         self.num_colors = None
 
     def set_data_list(self, grid_idx, data_list):
+        """
+        Set data to plot. Data has to be 1d or size 1 in second dimension.
+        The data can be given as (data, legend name, x_coords) where legend name and x_coords are optional.
+        """
         self._create_missing_grids(grid_idx)
-        self.grids[grid_idx].data_list = data_list
+        if self.grids[grid_idx].data_list is None:
+            self.grids[grid_idx].data_list = data_list
+        else:
+            self.grids[grid_idx].data_list += data_list
 
     def set_atom_list(self, grid_idx, atom_list):
         self._create_missing_grids(grid_idx)
@@ -100,6 +113,10 @@ class DataPlotter(object):
     def set_linewidth(self, grid_idx, linewidth):
         self._create_missing_grids(grid_idx)
         self.grids[grid_idx].linewidth = linewidth
+
+    def add_hline(self, grid_idx, y, xmin=0, xmax=1, kwargs=None):
+        self._create_missing_grids(grid_idx)
+        self.grids[grid_idx].hlines += [(y, xmin, xmax, kwargs)]
 
     def set_lim(self, grid_idx=None, xmin=None, xmax=None, ymin=None, ymax=None):
         """
@@ -212,7 +229,10 @@ class DataPlotter(object):
         for grid in self.grids:
             if grid.data_list is not None:
                 for data in grid.data_list:
-                    max_length = max(max_length, len(data[0]))
+                    if len(data) == 3:  # If data has three elements it is (data, name, indices).
+                        max_length = max(max_length, data[2][-1])
+                    else:
+                        max_length = max(max_length, len(data[0]))
             # elif grid.atom_list is not None:
             #     for atom in grid.atom_list:
             #         max_length = max(max_length, atom.position + atom.length + 10)
@@ -242,13 +262,14 @@ class DataPlotter(object):
                 line_num = 0
                 for data in grid.data_list:
                     name = None if len(data) == 1 else data[1]
+                    x_coords = data[2] if len(data) == 3 else t[:len(data[0])]
                     data = data[0]
 
                     acolor = next(color)
                     if data.ndim > 1 and data.shape[1] > 1:
                         self.logger.error((str(name) + " has" if name is not None else "Data has") + " too many dimensions (" + str(data.shape) + ").")
                         continue
-                    plot, = plt.plot(t[:len(data)], data, acolor, linestyle=linestyles[line_num % len(linestyles)], linewidth=linewidth[line_num % len(linewidth)], alpha=alpha)
+                    plot, = plt.plot(x_coords, data, acolor, linestyle=linestyles[line_num % len(linestyles)], linewidth=linewidth[line_num % len(linewidth)], alpha=alpha)
                     line_num += 1
                     if name is not None:
                         legend_plots.append(plot)
@@ -302,6 +323,13 @@ class DataPlotter(object):
                 # librosa.display.specshow(grid.spec.T)
                 # plt.colorbar(format='%+2.0f DB')
 
+            if len(grid.hlines) > 0:
+                for y, xmin, xmax, kwargs in grid.hlines:
+                    if kwargs is not None:
+                        grid.ax.axhline(y, xmin, xmax, **kwargs)
+                    else:
+                        grid.ax.axhline(y, xmin, xmax)
+
             if grid.xlabel is not None:
                 plt.xlabel(grid.xlabel)
             if grid.ylabel is not None:
@@ -341,8 +369,7 @@ class DataPlotter(object):
         else:
             plt.subplots_adjust(hspace=0.5)
 
-        have_display = bool(os.environ.get('DISPLAY', None))
-        if have_display:
+        if has_display:
             plt.show()
         self.plt = plt
 
