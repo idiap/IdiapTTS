@@ -136,7 +136,8 @@ class PhonemeDurationLabelGen(LabelGen):
 
         return self.norm_params
 
-    def gen_data(self, dir_in, dir_out=None, file_id_list=None, id_list=None, return_dict=False):
+    @staticmethod
+    def gen_data(dir_in, dir_out=None, file_id_list="", id_list=None, return_dict=False):
         """
         Prepare durations from HTK labels (forced-aligned).
         Each numpy array has the dimension num_phonemes x PhonemeDurationLabelGen.num_states (default num_state=5).
@@ -242,8 +243,7 @@ def main():
         file_id_list_name = "all"
 
     # Execute main functionality.
-    dur_gen = PhonemeDurationLabelGen(dir_out)
-    dur_gen.gen_data(dir_labels, dir_out, args.file_id_list_path, id_list, return_dict=False)
+    PhonemeDurationLabelGen.gen_data(dir_labels, dir_out, args.file_id_list_path, id_list, return_dict=False)
 
     # # DEBUG
     # label_dict, *_ = dur_gen.gen_data(dir_labels, dir_out, args.file_id_list_path, id_list, return_dict=True)

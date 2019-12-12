@@ -46,10 +46,11 @@ class MinMaxExtractor(object):
         samples_min, samples_max = self.get_params()
         samples_min_max = np.stack((samples_min, samples_max), axis=0)
 
+        filename += "" if filename is None or os.path.basename(filename) == "" else "-"
         if datatype is np.str:
-            np.savetxt(filename + "-" + self.file_name_appendix + ".txt", samples_min_max)
+            np.savetxt(filename + self.file_name_appendix + ".txt", samples_min_max)
         elif datatype is np.float32 or datatype is np.float64:
-            with open(filename + "-" + self.file_name_appendix + ".bin", 'wb') as file:
+            with open(filename + self.file_name_appendix + ".bin", 'wb') as file:
                 np.array(samples_min_max, dtype=datatype).tofile(file)
         else:
             self.logger.error("Unknown datatype: " + datatype.__name__ + ". "
@@ -106,7 +107,6 @@ class MinMaxExtractor(object):
                 np.savetxt(os.path.join(dir_out, MinMaxExtractor.file_name_appendix + ".txt"), samples_min_max)
 
         return samples_min_max
-
 
 
 def main():

@@ -155,7 +155,7 @@ class QuestionLabelGen(LabelGen):
         return self.norm_params
 
     @staticmethod
-    def gen_data(dir_in, file_questions, dir_out=None, file_id_list=None, id_list=None, return_dict=False):
+    def gen_data(dir_in, file_questions, dir_out=None, file_id_list="", id_list=None, return_dict=False):
         """
         Generate question labels from HTK labels.
 

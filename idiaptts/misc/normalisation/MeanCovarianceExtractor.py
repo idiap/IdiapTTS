@@ -54,10 +54,11 @@ class MeanCovarianceExtractor(object):
 
         stats = np.concatenate((np.atleast_1d(self.sum_frames), np.atleast_1d(self.sum_product_frames)))
 
+        filename += "" if filename is None or os.path.basename(filename) == "" else "-"
         if datatype is np.str:
-            np.savetxt(filename + "-" + self.file_name_stats + ".txt", stats, header=str(self.sum_length))
+            np.savetxt(filename + self.file_name_stats + ".txt", stats, header=str(self.sum_length))
         elif datatype is np.float32 or datatype is np.float64:
-            with open(filename + "-" + self.file_name_stats + ".bin", 'wb') as file:
+            with open(filename + self.file_name_stats + ".bin", 'wb') as file:
                 file.write(struct.pack("ii", self.sum_length, len(stats)))
                 np.array(stats, dtype=datatype).tofile(file)
         else:
@@ -67,10 +68,11 @@ class MeanCovarianceExtractor(object):
     def save_mean_covariance(self, filename, datatype=np.float64):
         mean_covariance = np.concatenate((self.get_params()), axis=0)
 
+        filename += "" if filename is None or os.path.basename(filename) == "" else "-"
         if datatype is np.str:
-            np.savetxt(filename + "-" + self.file_name_appendix + ".txt", mean_covariance, header=str(self.sum_length))
+            np.savetxt(filename + self.file_name_appendix + ".txt", mean_covariance, header=str(self.sum_length))
         elif datatype is np.float32 or datatype is np.float64:
-            with open(filename + "-" + self.file_name_appendix + ".bin", 'wb') as file:
+            with open(filename + self.file_name_appendix + ".bin", 'wb') as file:
                 file.write(struct.pack("ii", self.sum_length, len(mean_covariance)))
                 np.array(mean_covariance, dtype=datatype).tofile(file)
         else:
@@ -159,12 +161,13 @@ class MeanCovarianceExtractor(object):
         stats = np.concatenate((sum_frames, sum_product_frames), axis=0)
 
         if dir_out is not None:
-            with open(os.path.join(dir_out, MeanCovarianceExtractor.file_name_stats + file_name + ".bin"), 'wb') as file:
+            file_name += "" if file_name is None or os.path.basename(file_name) == "" else "-"
+            with open(os.path.join(dir_out, "{}{}.bin".format(file_name, MeanCovarianceExtractor.file_name_stats)), 'wb') as file:
                 file.write(struct.pack("ii", sum_length, len(stats)))
                 np.array(stats, dtype=datatype).tofile(file)
 
             if save_txt:
-                with open(os.path.join(dir_out, MeanCovarianceExtractor.file_name_stats + file_name + ".txt"), 'w') as file:
+                with open(os.path.join(dir_out, "{}{}.txt".format(file_name, MeanCovarianceExtractor.file_name_stats)), 'w') as file:
                     file.write(str(sum_length) + '\n')
                     np.savetxt(file, stats)
 
@@ -192,12 +195,16 @@ class MeanCovarianceExtractor(object):
         combined = np.concatenate((mean, covariance), axis=0)
 
         if dir_out is not None:
-            with open(os.path.join(dir_out, MeanCovarianceExtractor.file_name_appendix + file_name + ".bin"), 'wb') as file:
+            file_name += "" if file_name is None or os.path.basename(file_name) == "" else "-"
+            with open(os.path.join(dir_out, "{}{}.bin".format(file_name, MeanCovarianceExtractor.file_name_appendix)),
+                      'wb') as file:
                 file.write(struct.pack("ii", length, len(combined)))
                 combined.tofile(file)
 
             if save_txt:
-                with open(os.path.join(dir_out, MeanCovarianceExtractor.file_name_appendix + file_name + ".txt"), 'w') as file:
+                with open(os.path.join(dir_out, "{}{}.txt".format(file_name,
+                                                                  MeanCovarianceExtractor.file_name_appendix)),
+                          'w') as file:
                     file.write(str(length) + '\n')
                     np.savetxt(file, combined)
 

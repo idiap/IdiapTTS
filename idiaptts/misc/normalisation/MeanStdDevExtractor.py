@@ -58,10 +58,11 @@ class MeanStdDevExtractor(object):
 
         stats = np.concatenate((np.atleast_1d(self.sum_frames), np.atleast_1d(self.sum_squared_frames)))
 
+        filename += "" if filename is None or os.path.basename(filename) == "" else "-"
         if datatype is np.str:
-            np.savetxt(filename + "-" + self.file_name_stats + ".txt", stats, header=str(self.sum_length))
+            np.savetxt(filename + self.file_name_stats + ".txt", stats, header=str(self.sum_length))
         elif datatype is np.float32 or datatype is np.float64:
-            with open(filename + "-" + self.file_name_stats + ".bin", 'wb') as file:
+            with open(filename + self.file_name_stats + ".bin", 'wb') as file:
                 file.write(struct.pack("i", self.sum_length))
                 np.array(stats, dtype=datatype).tofile(file)
         else:
@@ -71,10 +72,11 @@ class MeanStdDevExtractor(object):
     def save_mean_std_dev(self, filename, datatype=np.float64):
         mean_std_dev = np.concatenate((self.get_params()), axis=0)
 
+        filename += "" if filename is None or os.path.basename(filename) == "" else "-"
         if datatype is np.str:
-            np.savetxt(filename + "-" + self.file_name_appendix + ".txt", mean_std_dev, header=str(self.sum_length))
+            np.savetxt(filename + self.file_name_appendix + ".txt", mean_std_dev, header=str(self.sum_length))
         elif datatype is np.float32 or datatype is np.float64:
-            with open(filename + "-" + self.file_name_appendix + ".bin", 'wb') as file:
+            with open(filename + self.file_name_appendix + ".bin", 'wb') as file:
                 file.write(struct.pack("i", self.sum_length))
                 np.array(mean_std_dev, dtype=datatype).tofile(file)
         else:

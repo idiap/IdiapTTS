@@ -20,7 +20,6 @@ import os
 import math
 import sys
 from collections import OrderedDict
-from typing import Callable
 
 # Third-party imports.
 import pyworld
@@ -29,7 +28,6 @@ import pysptk
 import librosa
 import librosa.display
 from nnmnkwii.postfilters import merlin_post_filter
-from scipy.io import wavfile
 
 # Local source tree imports.
 from idiaptts.misc.normalisation.MeanStdDevExtractor import MeanStdDevExtractor
@@ -41,7 +39,7 @@ from idiaptts.misc.mlpg import MLPG
 
 class WorldFeatLabelGen(LabelGen):
     """Create world feat labels for .wav files."""
-    # TODO: Constants into hparams.
+    # TODO: Constants into hparams?
     f0_silence_threshold = 30
     lf0_zero = 0
     mgc_gamma = -1./3.
@@ -93,9 +91,10 @@ class WorldFeatLabelGen(LabelGen):
 
         # Attributes.
         self.norm_params = None
-        self.cov_coded_sp = None
-        self.cov_lf0 = None
-        self.cov_bap = None
+        self.covs = [None] * 4  # Leave space for V/UV covariance even though it is never used.
+        # self.cov_coded_sp = None
+        # self.cov_lf0 = None
+        # self.cov_bap = None
         self.dir_coded_sps = self.sp_type + str(self.num_coded_sps)
         self.dir_deltas += "_" + self.dir_coded_sps
 
@@ -217,7 +216,7 @@ class WorldFeatLabelGen(LabelGen):
                 coded_sp_full = sample[:, :self.num_coded_sps * 3]
                 num_processed_features += self.num_coded_sps * 3
                 if apply_mlpg:
-                    coded_sp = mlpg.generation(coded_sp_full, self.cov_coded_sp, self.cov_coded_sp.shape[0] // 3)
+                    coded_sp = mlpg.generation(coded_sp_full, self.covs[0], self.covs[0].shape[0] // 3)
                 else:
                     coded_sp = coded_sp_full[:, :self.num_coded_sps]
                 output_list.append(coded_sp)
@@ -226,7 +225,7 @@ class WorldFeatLabelGen(LabelGen):
                 lf0_full = sample[:, num_processed_features:num_processed_features + 3]
                 num_processed_features += 3
                 if apply_mlpg:
-                    lf0 = mlpg.generation(lf0_full, self.cov_lf0, 1)
+                    lf0 = mlpg.generation(lf0_full, self.covs[1], self.covs[1].shape[0] // 3)
                     # lf0[vuv == 0] = -1e10
                     # lf0[lf0 <= math.log(20)] = -1e10  # Fix for WORLD vocoder which will cause memory error otherwise.
                 else:
@@ -245,7 +244,7 @@ class WorldFeatLabelGen(LabelGen):
                 bap_full = sample[:, -3:]
 
                 if apply_mlpg:
-                    bap = mlpg.generation(bap_full, self.cov_bap, self.cov_bap.shape[0] // 3)
+                    bap = mlpg.generation(bap_full, self.covs[3], self.covs[3].shape[0] // 3)
                 else:
                     bap = bap_full[:, 0:1]
                 output_list.append(bap)
@@ -258,13 +257,17 @@ class WorldFeatLabelGen(LabelGen):
     def load_sample(id_name, dir_out, add_deltas=False, num_coded_sps=60, sp_type="mcep",
                     load_sp=True, load_lf0=True, load_vuv=True, load_bap=True):
         """
-        Load world features from dir_out.
+        Load world features from dir_out. It does not pre-process, use __getitem__ method instead.
 
         :param id_name:         Id of the sample.
         :param dir_out:         Directory containing the sample.
         :param add_deltas:      Determines if deltas and double deltas are expected.
         :param num_coded_sps:   Number of bins used to represent the coded spectral features.
         :param sp_type:         Type in which the coded spectral features are saved.
+        :param load_sp:         Load spectral features defined by sp_type.
+        :param load_lf0:        Load fundamental frequency.
+        :param load_vuv:        Load voiced/unvoiced flag.
+        :param load_bap:        Load band aperiodicity features.
         :return:                Numpy array with dimensions num_frames x len(coded_sp, lf0, vuv, bap).
         """
         id_name = os.path.splitext(os.path.basename(id_name))[0]
@@ -276,93 +279,68 @@ class WorldFeatLabelGen(LabelGen):
         dim_vuv = 1
         dim_bap = 1 * deltas_factor
 
-        if add_deltas:
-            path = os.path.join(dir_out,
-                                "{}_{}{}".format(WorldFeatLabelGen.dir_deltas, sp_type, num_coded_sps),
-                                "{}.{}".format(id_name, WorldFeatLabelGen.ext_deltas))
-            with open(path, 'rb') as f:
-                try:
-                    cmp = np.fromfile(f, dtype=np.float32)
-                    labels = np.reshape(cmp, [-1, dim_coded_sp + dim_lf0 + dim_vuv + dim_bap])
-                except ValueError as e:
-                    logging.error("Cannot load labels from {}.".format(path))
-                    raise e
+        # If not all features are present also deltas features are saved separately.
+        saved_as_cmp = add_deltas and load_sp and load_lf0 and load_vuv and load_bap
 
-            output_list = list()
-            if load_sp:
-                output_list.append(labels[:, :dim_coded_sp])
+        output_list = list()
+        if not saved_as_cmp:
+            try:
+                for load, feature_dir, feature_ext, feature_dim in\
+                        zip((load_sp, load_lf0, load_vuv, load_bap),
+                            (sp_type + str(num_coded_sps), WorldFeatLabelGen.dir_lf0,
+                             WorldFeatLabelGen.dir_vuv, WorldFeatLabelGen.dir_bap),
+                            (sp_type, WorldFeatLabelGen.ext_lf0,
+                             WorldFeatLabelGen.ext_vuv, WorldFeatLabelGen.ext_bap),
+                            (dim_coded_sp, dim_lf0, dim_vuv, dim_bap)):
+                    if load:
+                        path = os.path.join(dir_out, feature_dir, "{}.{}".format(id_name, feature_ext))
+                        if add_deltas and feature_ext != WorldFeatLabelGen.ext_vuv:
+                            path += "_deltas"
+                        with open(path, 'rb') as f:
+                            try:
+                                feature = np.fromfile(f, dtype=np.float32)
+                                labels = np.reshape(feature, [-1, feature_dim])
+                            except ValueError as e:
+                                logging.error("Cannot load labels from {}.".format(path))
+                                raise e
+                        output_list.append(labels)
 
-            if load_lf0:
-                output_list.append(labels[:, dim_coded_sp:dim_coded_sp + dim_lf0])
+                assert len(output_list) > 0, "At least one type of acoustic feature has to be loaded."
+                labels = np.concatenate(output_list, axis=1)
+                return labels
+            except FileNotFoundError as e1:
+                # Try to load from cmp folder. Reset output_list for it.
+                output_list = list()
 
-            if load_vuv:
-                output_list.append(labels[:, -dim_bap-dim_vuv:-dim_bap])
+        path = os.path.join(dir_out,
+                            "{}_{}{}".format(WorldFeatLabelGen.dir_deltas, sp_type, num_coded_sps),
+                            "{}.{}".format(id_name, WorldFeatLabelGen.ext_deltas))
+        with open(path, 'rb') as f:
+            try:
+                cmp = np.fromfile(f, dtype=np.float32)
+                # cmp files always contain deltas.
+                labels = np.reshape(cmp, [-1, 3 * (num_coded_sps + 1 + 1) + dim_vuv])
+            except ValueError as e:
+                logging.error("Cannot load labels from {}.".format(path))
+                raise e
 
-            if load_bap:
-                output_list.append(labels[:, -dim_bap:])
+        if load_sp:
+            output_list.append(labels[:, :dim_coded_sp])
 
-            assert len(output_list) > 0, "At least one type of acoustic feature has to be loaded."
-            labels = np.concatenate(output_list, axis=1)
+        if load_lf0:
+            output_list.append(labels[:, 3*num_coded_sps:3*num_coded_sps + dim_lf0])
 
-        else:
-            output_list = list()
+        if load_vuv:
+            output_list.append(labels[:, -3-dim_vuv:-3])
 
-            if load_sp:
-                path = os.path.join(dir_out, sp_type + str(num_coded_sps), "{}.{}".format(id_name, sp_type))
-                with open(path, 'rb') as f:
-                    try:
-                        coded_sp = np.fromfile(f, dtype=np.float32)
-                        coded_sp = np.reshape(coded_sp, [-1, num_coded_sps])
-                    except ValueError as e:
-                        logging.error("Cannot load labels from {}.".format(path))
-                        raise e
-                output_list.append(coded_sp)
+        if load_bap:
+            if dim_bap == 3:
+                output_list.append(labels[:, -3:])
+            else:
+                output_list.append(labels[:, -3:-3 + dim_bap])
 
-            if load_lf0:
-                path = os.path.join(dir_out,
-                                    WorldFeatLabelGen.dir_lf0,
-                                    "{}.{}".format(id_name, WorldFeatLabelGen.ext_lf0))
-                with open(path, 'rb') as f:
-                    try:
-                        lf0 = np.fromfile(f, dtype=np.float32)
-                        lf0 = np.reshape(lf0, [-1, dim_lf0])
-                    except ValueError as e:
-                        logging.error("Cannot load labels from {}.".format(path))
-                        raise e
-                output_list.append(lf0)
-
-            if load_vuv:
-                path = os.path.join(dir_out,
-                                    WorldFeatLabelGen.dir_vuv,
-                                    "{}.{}".format(id_name, WorldFeatLabelGen.ext_vuv))
-                with open(path, 'rb') as f:
-                    try:
-                        vuv = np.fromfile(f, dtype=np.float32)
-                        vuv = np.reshape(vuv, [-1, dim_vuv])
-                    except ValueError as e:
-                        logging.error("Cannot load labels from {}.".format(path))
-                        raise e
-                output_list.append(vuv)
-
-            if load_bap:
-                path = os.path.join(dir_out,
-                                    WorldFeatLabelGen.dir_bap,
-                                    "{}.{}".format(id_name, WorldFeatLabelGen.ext_bap))
-                with open(path, 'rb') as f:
-                    try:
-                        bap = np.fromfile(f, dtype=np.float32)
-                        bap = np.reshape(bap, [-1, dim_bap])
-                    except ValueError as e:
-                        logging.error("Cannot load labels from {}.".format(path))
-                        raise e
-                output_list.append(bap)
-
-            # print(coded_sp.shape)
-            # print(lf0.shape)
-            # print(vuv.shape)
-            # print(bap.shape)
-
-            labels = np.concatenate(output_list, axis=1)
+        assert len(output_list) > 0, "At least one type of acoustic feature has to be loaded."
+        labels = np.concatenate(output_list, axis=1)
 
         return labels
 
@@ -372,70 +350,91 @@ class WorldFeatLabelGen(LabelGen):
         Save them in self.norm_params.
 
         :param dir_out:       Directory containing the normalisation file.
-        :param file_name:     Prefix of normalisation file.
-                              Expects file to be named <file_name-><MeanStdDevExtractor.file_name_appendix>.bin
+        :param file_name:     Prefix of normalisation file (underscore "_" is expected as separator).
         :return:              Tuple of normalisation parameters (mean, std_dev).
         """
 
-        if not self.add_deltas:
-            # Collect all requested means and std_dev in a list.
-            all_mean = list()
-            all_std_dev = list()
-            full_file_name = "{}{}.bin".format((file_name + "-" if file_name is not None else ""),
-                                               MeanStdDevExtractor.file_name_appendix)
+        # If not all features are present also deltas features are saved separately.
+        saved_as_cmp = self.add_deltas and self.load_sp and self.load_lf0 and self.load_vuv and self.load_bap
 
-            requested_features = list()
-            if self.load_sp:
-                requested_features.append(self.dir_coded_sps)
-            if self.load_lf0:
-                requested_features.append(self.dir_lf0)
-            if self.load_bap:
-                requested_features.append(self.dir_bap)
+        if not saved_as_cmp:# Collect all requested means and std_dev in a list.
+            try:
+                all_mean = list()
+                all_std_dev = list()
 
-            # Load normalisation parameters for all features.
-            for dir_feature in requested_features:
-                mean, std_dev = MeanStdDevExtractor.load(os.path.join(dir_out, dir_feature, full_file_name))
-                all_mean.append(np.atleast_2d(mean))
-                all_std_dev.append(np.atleast_2d(std_dev))
+                # full_path = os.path.join(dir_out, feature_dir,
+                #                          "{}{}{}.bin".format(file_name + "_" if file_name is not None else "",
+                #                                              feature_dir + "-" if self.add_deltas else "",
+                #                                              MeanStdDevExtractor.file_name_appendix if self.add_deltas else MeanCovarianceExtractor.file_name_appendix))
 
-            if self.load_vuv:
-                # Manually set vuv normalisation parameters.
-                if self.load_bap:
-                    all_mean.insert(-1, np.atleast_2d(0.0))
-                    all_std_dev.insert(-1, np.atleast_2d(1.0))
+                for load, feature_dir in zip((self.load_sp, self.load_lf0, self.load_vuv, self.load_bap),
+                                             (self.dir_coded_sps, self.dir_lf0, self.dir_vuv, self.dir_bap)):
+                    if load:
+                        if feature_dir != self.dir_vuv:
+                            if self.add_deltas:
+                                full_path = os.path.join(dir_out, feature_dir,
+                                                         "{}{}{}.bin".format(file_name + "-" if file_name is not None else "",
+                                                                             feature_dir + "_deltas-",
+                                                                             MeanCovarianceExtractor.file_name_appendix))
+                            else:
+                                full_path = os.path.join(dir_out, feature_dir,
+                                                         "{}{}.bin".format(file_name + "-" if file_name is not None else "",
+                                                                           MeanStdDevExtractor.file_name_appendix))
+
+                            mean, std_dev = MeanStdDevExtractor.load(full_path)
+                            all_mean.append(np.atleast_2d(mean))
+                            all_std_dev.append(np.atleast_2d(std_dev))
+                        else:
+                            all_mean.append(np.atleast_2d(0.0))
+                            all_std_dev.append(np.atleast_2d(1.0))
+
+                # Save the concatenated normalisation parameters locally.
+                self.norm_params = np.concatenate(all_mean, axis=1), np.concatenate(all_std_dev, axis=1)
+
+                return self.norm_params
+            except FileNotFoundError:
+                # Try to load from the cmp folder.
+                pass
+
+        # Load the normalisation parameters.
+        output_means = list()
+        output_std_devs = list()
+        for load, cov_idx, feature_dir in zip((self.load_sp, self.load_lf0, self.load_vuv, self.load_bap),
+                                              range(4),
+                                              (self.dir_coded_sps, self.dir_lf0, self.dir_vuv, self.dir_bap)):
+            if load:
+                if feature_dir != self.dir_vuv:
+                    try:
+                        path_new_style = os.path.join(dir_out, self.dir_deltas,
+                                                      "{}{}-{}.bin".format(file_name + "-" if file_name is not None else "",
+                                                                           feature_dir,
+                                                                           MeanCovarianceExtractor.file_name_appendix))
+                        mean, cov, std_dev = MeanCovarianceExtractor.load(path_new_style)
+                    except FileNotFoundError as e1:
+                        try:
+                            # TODO: Remove legacy style path.
+                            path = os.path.join(dir_out, self.dir_deltas,
+                                                "{}{}_{}.bin".format(file_name + "-" if file_name is not None else "",
+                                                                     MeanCovarianceExtractor.file_name_appendix,
+                                                                     feature_dir))
+                            mean, cov, std_dev = MeanCovarianceExtractor.load(path)
+                            self.logger.warning("Found legacy style normalisation parameters at {}. "
+                                                "Consider recreating features or renaming to {}"
+                                                .format(path, path_new_style),
+                                                DeprecationWarning)
+                        except FileNotFoundError as e2:
+                            raise FileNotFoundError([e1, e2])
+
+                    # Assign to covariances.
+                    self.covs[cov_idx] = cov
+                    # Assign to output.
+                    output_means.append(np.atleast_2d(mean))
+                    output_std_devs.append(np.atleast_2d(std_dev))
                 else:
-                    all_mean.append(np.atleast_2d(0.0))
-                    all_std_dev.append(np.atleast_2d(1.0))
+                    output_means.append(np.atleast_2d(0.0))
+                    output_std_devs.append(np.atleast_2d(1.0))
 
-            # Save the concatenated normalisation parameters locally.
-            self.norm_params = np.concatenate(all_mean, axis=1), np.concatenate(all_std_dev, axis=1)
-        else:
-            full_file_name = "{}{}".format(file_name + "-" if file_name is not None else "",
-                                           MeanCovarianceExtractor.file_name_appendix)
-
-            # Load the normalisation parameters.
-            output_means = list()
-            output_std_devs = list()
-            if self.load_sp:
-                mean_coded_sp, self.cov_coded_sp, std_dev_coded_sp = MeanCovarianceExtractor.load(
-                    os.path.join(dir_out, self.dir_deltas, full_file_name + "_" + self.dir_coded_sps + ".bin"))
-                output_means.append(mean_coded_sp)
-                output_std_devs.append(std_dev_coded_sp)
-            if self.load_lf0:
-                mean_lf0, self.cov_lf0, std_dev_lf0 = MeanCovarianceExtractor.load(
-                    os.path.join(dir_out, self.dir_deltas, full_file_name + "_" + self.dir_lf0 + ".bin"))
-                output_means.append(mean_lf0)
-                output_std_devs.append(std_dev_lf0)
-            if self.load_vuv:
-                output_means.append(np.atleast_1d(0.0))
-                output_std_devs.append(np.atleast_1d(1.0))
-            if self.load_bap:
-                mean_bap, self.cov_bap, std_dev_bap = MeanCovarianceExtractor.load(
-                    os.path.join(dir_out, self.dir_deltas, full_file_name + "_" + self.dir_bap + ".bin"))
-                output_means.append(mean_bap)
-                output_std_devs.append(std_dev_bap)
-
-            self.norm_params = (np.concatenate(output_means), np.concatenate(output_std_devs))
+        self.norm_params = np.concatenate(output_means, axis=1)[0], np.concatenate(output_std_devs, axis=1)[0]
 
         return self.norm_params
 
@@ -500,36 +499,35 @@ class WorldFeatLabelGen(LabelGen):
             bap = bap[:, None]
         return np.concatenate((coded_sp, lf0, vuv, bap), axis=1)
 
-    # @staticmethod
-    # def _framing(signal, sample_rate, frame_size_ms=None, frame_hop_ms=5):
-    #
-    #     if frame_size_ms is None:
-    #         frame_length = WorldFeatLabelGen.fs_to_frame_length(sample_rate)
-    #     else:
-    #         frame_size = frame_size_ms / 1000.
-    #         frame_length = frame_size * sample_rate  # Convert from seconds to samples.
-    #
-    #     frame_stride = frame_hop_ms / 1000.
-    #     frame_step = frame_stride * sample_rate
-    #
-    #     # Framing.
-    #     signal_length = len(signal)
-    #     frame_length = int(round(frame_length))
-    #     frame_step = int(round(frame_step))
-    #     num_frames = int(np.ceil(
-    #         float(np.abs(signal_length - frame_length)) / frame_step))  # Make sure that we have at least 1 frame.
-    #
-    #     pad_signal_length = num_frames * frame_step + frame_length
-    #     z = np.zeros((pad_signal_length - signal_length))
-    #     # Pad Signal to make sure that all frames have equal number of samples
-    #     # without truncating any samples from the original signal.
-    #     pad_signal = np.append(signal, z)
-    #
-    #     indices = np.tile(np.arange(0, frame_length), (num_frames, 1)) + np.tile(
-    #         np.arange(0, num_frames * frame_step, frame_step), (frame_length, 1)).T
-    #     frames = pad_signal[indices.astype(np.int32, copy=False)]
-    #
-    #     return frames
+    @staticmethod
+    def framing(signal, sample_rate, frame_size_ms=None, frame_hop_ms=5):
+
+        if frame_size_ms is None:
+            frame_length = WorldFeatLabelGen.fs_to_frame_length(sample_rate)
+        else:
+            frame_size = frame_size_ms / 1000.
+            frame_length = frame_size * sample_rate  # Convert from seconds to samples.
+
+        frame_stride = frame_hop_ms / 1000.
+        frame_step = frame_stride * sample_rate
+
+        # Framing.
+        signal_length = len(signal)
+        frame_length = int(round(frame_length))
+        frame_step = int(round(frame_step))
+        num_frames = int(np.ceil(float(np.abs(signal_length - frame_length)) / frame_step))  # Make sure that we have at least 1 frame.
+
+        pad_signal_length = num_frames * frame_step + frame_length
+        z = np.zeros((pad_signal_length - signal_length))
+        # Pad Signal to make sure that all frames have equal number of samples
+        # without truncating any samples from the original signal.
+        pad_signal = np.append(signal, z)
+
+        indices = np.tile(np.arange(0, frame_length), (num_frames, 1)) + np.tile(
+            np.arange(0, num_frames * frame_step, frame_step), (frame_length, 1)).T
+        frames = pad_signal[indices.astype(np.int32, copy=False)]
+
+        return frames
 
     @staticmethod
     def get_raw(audio_name: str, preemphasis: float = 0.97):
@@ -781,7 +779,7 @@ class WorldFeatLabelGen(LabelGen):
 
         extr_features_msg = ""
         lf0, vuv, bap = None, None, None
-        if sp_type == "mcep" or load_lf0 or load_vuv or load_bap:
+        if sp_type in ["mcep", "mgc", "amp_sp"] or load_lf0 or load_vuv or load_bap:
             amp_sp, lf0, vuv, bap = WorldFeatLabelGen.world_extract_features(raw,
                                                                              fs,
                                                                              hop_size_ms,
@@ -807,16 +805,15 @@ class WorldFeatLabelGen(LabelGen):
         if load_sp:
             if sp_type == "mcep":
                 coded_sp = WorldFeatLabelGen.extract_mcep(amp_sp,
-                                                          num_coded_sps,
-                                                          WorldFeatLabelGen.fs_to_mgc_alpha(fs))
+                                                          num_coded_sps=num_coded_sps,
+                                                          mgc_alpha=WorldFeatLabelGen.fs_to_mgc_alpha(fs))
                 assert len(coded_sp) == len(lf0), "Requires testing. Possibly trimming is a solution."
                 extr_features_msg = "WORLD {}{},{}".format(num_coded_sps, sp_type, extr_features_msg)
             elif sp_type == "mgc":
-                coded_sp = WorldFeatLabelGen.extract_mgc(raw,
+                coded_sp = WorldFeatLabelGen.extract_mgc(amp_sp,
                                                          fs=fs,
-                                                         num_coded_sps=num_coded_sps,
-                                                         frame_hop_ms=hop_size_ms)
-                extr_features_msg = "PySPTK {}{},{}".format(num_coded_sps, sp_type, extr_features_msg)
+                                                         num_coded_sps=num_coded_sps)
+                extr_features_msg = "WORLD {}{},{}".format(num_coded_sps, sp_type, extr_features_msg)
             elif sp_type == "mfbanks":
                 coded_sp = WorldFeatLabelGen.extract_mfbanks(raw,
                                                              fs=fs,
@@ -824,11 +821,14 @@ class WorldFeatLabelGen(LabelGen):
                                                              hop_size_ms=hop_size_ms,
                                                              num_coded_sps=num_coded_sps)
                 extr_features_msg = "Librosa {}{},{}".format(num_coded_sps, sp_type, extr_features_msg)
+            elif sp_type == "amp_sp":
+                coded_sp = amp_sp
+                extr_features_msg = "WORLD {}{},{}".format(amp_sp.shape[1], sp_type, extr_features_msg)
 
         # Log some debug information.
         file_name = os.path.basename(file_name)  # Remove speaker.
-        logging.debug("Extract ({}) features from {} at {} Hz with {} ms frame hop."
-                      .format(extr_features_msg.strip().strip(','), file_name, fs, hop_size_ms))
+        logging.info("Extracted ({}) features from {} at {} Hz with {} ms frame hop."
+                     .format(extr_features_msg.strip().strip(','), file_name, fs, hop_size_ms))
 
         # # DEBUG
         # import matplotlib.pyplot as plt
@@ -881,7 +881,7 @@ class WorldFeatLabelGen(LabelGen):
         else:
             raise NotImplementedError("Unknown feature type {}. No decoding method available.".format(sp_type))
 
-    def gen_data(self, dir_in, dir_out=None, file_id_list=None, file_ext="wav", id_list=None, return_dict=False):
+    def gen_data(self, dir_in, dir_out=None, file_id_list="", file_ext="wav", id_list=None, return_dict=False):
         """
         Prepare acoustic features from audio files. Which features are extracted are determined by the parameters
         given in the constructor. The self.load_* flags determine if that features is extracted and the self.sp_type
@@ -984,15 +984,17 @@ class WorldFeatLabelGen(LabelGen):
                         (norm_params_ext_coded_sp, norm_params_ext_lf0, norm_params_ext_vuv, norm_params_ext_bap)):
                 if load:  # Check if feature should be loaded.
                     if self.add_deltas:  # Add deltas if requested.
-                        deltas, double_deltas = compute_deltas(feature)
-                        feature = np.concatenate((feature, deltas, double_deltas), axis=1)
+                        if feature_ext != "vuv":
+                            deltas, double_deltas = compute_deltas(feature)
+                            feature = np.concatenate((feature, deltas, double_deltas), axis=1)
                         if dir_out is not None and not save_as_cmp:
                             # Not all features for cmp are present so save the labels separately in deltas directory.
                             feature.tofile(os.path.join(dir_out,
                                                         feature_dir,
-                                                        "{}.{}{}".format(file_name,
-                                                                         feature_ext,
-                                                                         "_deltas" if feature_ext != self.ext_vuv else "")))
+                                                        "{}.{}{}".format(
+                                                            file_name,
+                                                            feature_ext,
+                                                            "_deltas" if feature_ext != self.ext_vuv else "")))
                     else:
                         # Save features without deltas in their respective subdirectory.
                         feature.tofile(os.path.join(dir_out, feature_dir, "{}.{}".format(file_name, feature_ext)))
@@ -1000,15 +1002,15 @@ class WorldFeatLabelGen(LabelGen):
                     # Add sample to normalisation computation unit.
                     normaliser.add_sample(feature)
 
-                    # Fill return dictionary.
-                    if return_dict:
-                        output.append(feature)
+                    # Add to list of output features.
+                    output.append(feature)
 
             # Save into a single file if all features are present (only when deltas are added).
             if dir_out is not None and save_as_cmp:
                 # Combine them to a single feature sample.
-                labels = np.concatenate((coded_sp, lf0, vuv, bap), axis=1)
-                labels.tofile(os.path.join(dir_out, self.dir_deltas, "{}.{}".format(file_name, self.ext_deltas)))
+                labels = np.concatenate(output, axis=1)
+                labels.tofile(os.path.join(dir_out, self.dir_deltas, "{}.{}".format(os.path.basename(file_name),
+                                                                                    self.ext_deltas)))
 
             if return_dict:
                 # Save into return dictionary.
@@ -1032,22 +1034,26 @@ class WorldFeatLabelGen(LabelGen):
                 if dir_out:
                     # Select the correct output directory to save the normalisation parameters.
                     if self.add_deltas:
+                        modified_file_id_list_name = file_id_list_name if (file_id_list_name is None
+                                                                           or file_id_list_name == "")\
+                                                                       else file_id_list_name + "-"
                         if save_as_cmp:
-                            norm_file_path = os.path.join(dir_out,
-                                                          self.dir_deltas,
-                                                          "{}_{}".format(file_id_list_name, ext))
+                            norm_file_path = os.path.join(
+                                dir_out,
+                                self.dir_deltas,
+                                "{}{}".format(modified_file_id_list_name, ext))
                         else:
                             if ext == self.ext_vuv:  # Special case; VUV should never be saved with deltas ending.
                                 norm_file_path = os.path.join(dir_out,
                                                               feature_dir,
-                                                              "{}_{}".format(file_id_list_name, ext))
+                                                              "{}{}".format(modified_file_id_list_name, ext))
                             else:
                                 norm_file_path = os.path.join(dir_out,
                                                               feature_dir,
-                                                              "{}_{}_deltas".format(file_id_list_name, ext))
+                                                              "{}{}_deltas".format(modified_file_id_list_name, ext))
                     else:
                         norm_file_path = os.path.join(dir_out, feature_dir, file_id_list_name)
-                    self.logger.info("Write norm_prams to{}".format(norm_file_path))
+                    self.logger.info("Write norm_prams to {}".format(norm_file_path))
                     normaliser.save(norm_file_path)
 
         if not self.add_deltas:
@@ -1100,10 +1106,8 @@ def main():
             id_list = f.readlines()
         # Trim entries in-place.
         id_list[:] = [s.strip(' \t\n\r') for s in id_list]
-        file_id_list_name = os.path.splitext(os.path.basename(file_id_list_path))[0]
     else:
         id_list = None
-        file_id_list_name = "all"
 
     # Execute main functionality.
     world_feat_gen = WorldFeatLabelGen(dir_out,

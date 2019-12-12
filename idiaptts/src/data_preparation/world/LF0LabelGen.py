@@ -207,7 +207,7 @@ class LF0LabelGen(LabelGen):
 
         return self.norm_params
 
-    def gen_data(self, dir_in, dir_out=None, file_id_list=None, id_list=None, add_deltas=False, return_dict=False):
+    def gen_data(self, dir_in, dir_out=None, file_id_list="", id_list=None, add_deltas=False, return_dict=False):
         """
         Prepare LF0 and V/UV features from audio files. If add_delta is false each numpy array has the dimension
         num_frames x 2 [f0, vuv], otherwise the deltas and double deltas are added between
