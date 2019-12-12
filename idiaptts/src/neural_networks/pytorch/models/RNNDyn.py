@@ -163,7 +163,7 @@ class RNNDyn(nn.Module):
 
                     if layer_type in ['LSTM', 'GRU']:
                         layer_group.append(getattr(nn, layer_type)(in_dim, out_dim, layer_group.n_layers,
-                                                                   dropout=self.dropout,
+                                                                   dropout=self.dropout if layer_group.n_layers > 1 else 0.0,
                                                                    bidirectional=bidirectional))
                     else:
                         rnn_opt = {'RNNTANH': 'tanh', 'RNNRELU': 'relu'}[layer_type]
@@ -226,7 +226,8 @@ class RNNDyn(nn.Module):
                     output = torch.cat((output, emb(input_embs[:, :, emb_idx].long())), dim=2)
 
             if group.is_rnn:
-                output, group.hidden = group[0](output, group.hidden)  # If group.hidden is not set here, init_hidden was not called.
+                assert hasattr(group, "hidden"), "If group.hidden is not set here, init_hidden was not called."
+                output, group.hidden = group[0](output, group.hidden)
                 if group.hidden is not None:  # Keep last not None hidden state.
                     last_hidden = group.hidden
 
@@ -242,7 +243,7 @@ class RNNDyn(nn.Module):
                         else:
                             output = self.drop(group.nonlin(layer(output)))
 
-            layer_idx += group.n_layers
+            layer_idx += group.n_layers if hasattr(group, "n_layers") else 1  # Backwards compatibility.
             # Only save the output of each group.
             if hasattr(self, "save_intermediate_outputs") and self.save_intermediate_outputs:
                 group.output = output
@@ -291,7 +292,7 @@ class RNNDyn(nn.Module):
                     # Apply dropout.
                     output = self.drop(output)
 
-            layer_idx += group.n_layers
+            layer_idx += group.n_layers if hasattr(group, "n_layers") else 1  # Backwards compatibility.
             # Only save the output of each group.
             if hasattr(self, "save_intermediate_outputs") and self.save_intermediate_outputs:
                 group.output = output
