@@ -140,7 +140,6 @@ main()
     $festival_dir/bin/festival $input_file_festready || true
     echo "done."
 
-    exit 0
     # Create labels from utts
     echo -n "Create labels from utts ... "
     (

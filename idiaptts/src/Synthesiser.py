@@ -45,18 +45,24 @@ class Synthesiser(object):
             coded_sp, lf0, vuv, bap = WorldFeatLabelGen.convert_to_world_features(output,
                                                                                   contains_deltas=False,
                                                                                   num_coded_sps=hparams.num_coded_sps)
-            sp = WorldFeatLabelGen.decode_sp(coded_sp, hparams.sp_type, hparams.synth_fs,
-                                             post_filtering=hparams.do_post_filtering).astype(np.double, copy=False)
+            amp_sp = WorldFeatLabelGen.decode_sp(coded_sp, hparams.sp_type, hparams.synth_fs,
+                                                 post_filtering=hparams.do_post_filtering).astype(np.double, copy=False)
+            args = dict()
+            for attr in "preemphasize", "f0_silence_threshold", "lf0_zero":
+                if hasattr(hparams, attr):
+                    args[attr] = getattr(hparams, attr)
+            waveform = WorldFeatLabelGen.world_features_to_raw(amp_sp, lf0, vuv, bap,
+                                                               fs=hparams.synth_fs, n_fft=fft_size, **args)
 
-            f0 = np.exp(lf0, dtype=np.float64)
-            vuv[f0 < WorldFeatLabelGen.f0_silence_threshold] = 0  # WORLD throws an error for too small f0 values.
-            f0[vuv == 0] = 0.0
-            ap = pyworld.decode_aperiodicity(np.ascontiguousarray(bap.reshape(-1, 1), np.float64),
-                                             hparams.synth_fs,
-                                             fft_size)
-
-            waveform = pyworld.synthesize(f0, sp, ap, hparams.synth_fs)
-            waveform = waveform.astype(np.float32, copy=False)  # Does inplace conversion, if possible.
+            # f0 = np.exp(lf0, dtype=np.float64)
+            # vuv[f0 < WorldFeatLabelGen.f0_silence_threshold] = 0  # WORLD throws an error for too small f0 values.
+            # f0[vuv == 0] = 0.0
+            # ap = pyworld.decode_aperiodicity(np.ascontiguousarray(bap.reshape(-1, 1), np.float64),
+            #                                  hparams.synth_fs,
+            #                                  fft_size)
+            #
+            # waveform = pyworld.synthesize(f0, amp_sp, ap, hparams.synth_fs)
+            # waveform = waveform.astype(np.float32, copy=False)  # Does inplace conversion, if possible.
 
             # Always save as wav file first and convert afterwards if necessary.
             file_path = os.path.join(save_dir, "{}{}{}{}".format(os.path.basename(id_name),

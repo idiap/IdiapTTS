@@ -30,10 +30,10 @@ with open(file_id_list) as f:
 # Trim entries in-place.
 id_list[:] = [s.strip(' \t\n\r') for s in id_list]
 
-makedirs_safe(os.path.dirname(dir_out))
 for file_id in id_list:
     full_path_in = os.path.join(dir_audio, file_id + ".wav")
     full_path_out = os.path.join(dir_out, file_id + ".wav")
+    makedirs_safe(os.path.dirname(full_path_out))
     print("Downsample " + full_path_in)
     y, s = librosa.load(full_path_in, sr=target_sampling_rate)
     librosa.output.write_wav(full_path_out, y, target_sampling_rate)
