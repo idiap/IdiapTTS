@@ -554,6 +554,26 @@ class TestWorldFeatLabelGen(unittest.TestCase):
 
         shutil.rmtree(out_dir)
 
+    def test_gen_data_48kHz(self):
+        """
+        Extract features from 48 kHz audio.
+        """
+
+        # Hyper-parameters and id list split.
+        out_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), type(self).__name__)
+        makedirs_safe(out_dir)
+        dir_wav = os.path.join("integration", "fixtures", "database", "wav48")
+
+        # Generate features without deltas and check if normalisation parameters for each list are created.
+        generator = WorldFeatLabelGen(out_dir, add_deltas=False)
+        generator.gen_data(dir_in=dir_wav, dir_out=out_dir, return_dict=True)
+
+        # Generate features with deltas and check if normalisation parameters for each list are created.
+        generator = WorldFeatLabelGen(out_dir, add_deltas=True)
+        generator.gen_data(dir_in=dir_wav, dir_out=out_dir)
+
+        shutil.rmtree(out_dir)
+
     @staticmethod
     def _plot_power_sp(ground_truth, reconstruction, sp_type=None, num_coded_sps=None, label_ground_truth=None, label_reconstruction=None):
 
@@ -614,10 +634,12 @@ class TestWorldFeatLabelGen(unittest.TestCase):
         #     os.mkdir(out_dir)
         hop_size_ms = 5
         preemphasis = 0.97
+        dir_wav = self.dir_wav
+        # dir_wav = os.path.join("integration", "fixtures", "database", "wav22050")
 
         # Load raw audio data.
         file_name = self.id_list[0]
-        audio_name = os.path.join(self.dir_wav, file_name + ".wav")
+        audio_name = os.path.join(dir_wav, file_name + ".wav")
         raw, fs = WorldFeatLabelGen.get_raw(audio_name, preemphasis)
         raw_no_preemphasis, fs = WorldFeatLabelGen.get_raw(audio_name, preemphasis=0.0)
 
@@ -627,7 +649,7 @@ class TestWorldFeatLabelGen(unittest.TestCase):
         # TestWorldFeatLabelGen._plot_power_sp(world_amp_sp**2, librosa_amp_sp**2,
         #                                      label_ground_truth="WORLD amp sp in dB",
         #                                      label_reconstruction="Librosa amp sp in dB")
-        self.assertGreater(5000, ((librosa_amp_sp - world_amp_sp) ** 2).sum(),
+        self.assertGreater(5000, ((librosa_amp_sp[:len(world_amp_sp)] - world_amp_sp) ** 2).sum(),
                            msg="Librosa and WORLD amplitude spectrum don't seem to be in the same domain.")
 
         # Compare respective reconstruction.
@@ -637,8 +659,8 @@ class TestWorldFeatLabelGen(unittest.TestCase):
         world_raw_world_vocoder = WorldFeatLabelGen.world_features_to_raw(world_amp_sp, lf0, vuv, bap, fs)
         world_raw_world_vocoder /= max(world_raw_world_vocoder.max(), abs(world_raw_world_vocoder.min()))  # To [-1, 1]
 
-        # # DEBUG: Reconstructing waveform from librosa amp sp with World vocder and
-        # #        reconstructing wavefrom from world amp sp with GL. Both doesn't work.
+        # # DEBUG: Reconstructing waveform from librosa amp sp with World vocoder and
+        # #        reconstructing waveform from world amp sp with GL. Both doesn't work.
         # librosa_raw_world_vocoder = WorldFeatLabelGen.world_features_to_raw(librosa_amp_sp, lf0, vuv, bap, fs)
         # librosa_raw_world_vocoder /= max(librosa_raw_world_vocoder.max(), abs(librosa_raw_world_vocoder.min()))
         # world_raw_gl = WorldFeatLabelGen.amp_sp_to_raw(world_amp_sp, fs, hop_size_ms, preemphasis)
@@ -669,16 +691,18 @@ class TestWorldFeatLabelGen(unittest.TestCase):
     def test_coded_sp_reconstruction(self):
         # import librosa
 
-        out_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), type(self).__name__)
-        if not os.path.isdir(out_dir):
-            os.mkdir(out_dir)
+        # out_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), type(self).__name__)
+        # if not os.path.isdir(out_dir):
+        #     os.mkdir(out_dir)
         num_coded_sps = 80
         hop_size_ms = 5
         preemphasis = 0.97
+        dir_wav = self.dir_wav
+        # dir_wav = os.path.join("integration", "fixtures", "database", "wav22050")
 
         # Load raw audio data.
         file_name = self.id_list[0]
-        audio_name = os.path.join(self.dir_wav, file_name + ".wav")
+        audio_name = os.path.join(dir_wav, file_name + ".wav")
         raw, fs = WorldFeatLabelGen.get_raw(audio_name, preemphasis)
         raw_no_preemphasis, fs = WorldFeatLabelGen.get_raw(audio_name, preemphasis=0.0)
 
@@ -722,18 +746,19 @@ class TestWorldFeatLabelGen(unittest.TestCase):
         # TestWorldFeatLabelGen._plot_power_sp(world_amp_sp**2, reconstruction**2, sp_type="mcep",
         #                                      num_coded_sps=num_coded_sps,
         #                                      label_ground_truth="World amplitude spectrum in dB")
-        self.assertGreater(50, ((world_amp_sp - reconstruction) ** 2).sum(),
-                           msg="Mfbanks reconstruction doesn't seem to be in the same domain.")
+        self.assertGreater(100, ((world_amp_sp - reconstruction) ** 2).sum(),
+                           msg="MCep reconstruction doesn't seem to be in the same domain.")
 
         # Check mcep reconstruction.
         mgc = WorldFeatLabelGen.extract_mgc(amp_sp=world_amp_sp,
                                             num_coded_sps=num_coded_sps,
                                             mgc_alpha=WorldFeatLabelGen.fs_to_mgc_alpha(fs))
         reconstruction = WorldFeatLabelGen.mgc_to_amp_sp(mgc, fs)
+        # soundfile.write(os.path.join(out_dir, "{}_{}_mgc.wav".format(file_name, "test")), WorldFeatLabelGen.world_features_to_raw(reconstruction, lf0, vuv, bap, fs), fs)
         # TestWorldFeatLabelGen._plot_power_sp(librosa_amp_sp ** 2, reconstruction ** 2, sp_type="mgc",
         #                                      num_coded_sps=num_coded_sps,
         #                                      label_ground_truth="Librosa amplitude spectrum in dB")
-        self.assertGreater(1000, ((librosa_amp_sp - reconstruction) ** 2).sum(),
+        self.assertGreater(1500, ((librosa_amp_sp[:len(reconstruction)] - reconstruction) ** 2).sum(),
                            msg="MGC reconstruction doesn't seem to be in the same domain.")
 
         # # Compare MGC and MCep which should be in the same domain.

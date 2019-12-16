@@ -71,6 +71,7 @@ class AcousticModelTrainer(ModelTrainer):
         self.OutputGen = WorldFeatLabelGen(dir_world_features,
                                            add_deltas=hparams.add_deltas,
                                            num_coded_sps=hparams.num_coded_sps,
+                                           num_bap=hparams.num_bap,
                                            sp_type=hparams.sp_type)
         self.OutputGen.get_normalisation_params(dir_world_features, hparams.output_norm_params_file_prefix)
 
@@ -118,18 +119,21 @@ class AcousticModelTrainer(ModelTrainer):
         labels_post = self.OutputGen.postprocess_sample(label)
         coded_sp, lf0, vuv, bap = WorldFeatLabelGen.convert_to_world_features(labels_post,
                                                                               contains_deltas=False,
-                                                                              num_coded_sps=hparams.num_coded_sps)
+                                                                              num_coded_sps=hparams.num_coded_sps,
+                                                                              num_bap=hparams.num_bap)
         lf0, _ = interpolate_lin(lf0)
 
         # Load original lf0.
         org_labels_post = WorldFeatLabelGen.load_sample(id_name,
                                                         self.OutputGen.dir_labels,
                                                         add_deltas=self.OutputGen.add_deltas,
-                                                        num_coded_sps=hparams.num_coded_sps)
+                                                        num_coded_sps=hparams.num_coded_sps,
+                                                        num_bap=hparams.num_bap)
         original_mgc, original_lf0, original_vuv, *_ = WorldFeatLabelGen.convert_to_world_features(
                                                                             org_labels_post,
                                                                             contains_deltas=self.OutputGen.add_deltas,
-                                                                            num_coded_sps=hparams.num_coded_sps)
+                                                                            num_coded_sps=hparams.num_coded_sps,
+                                                                            num_bap=hparams.num_bap)
         original_lf0, _ = interpolate_lin(original_lf0)
 
         # Get a data plotter.
@@ -188,7 +192,8 @@ class AcousticModelTrainer(ModelTrainer):
             dict_original_post[id_name] = WorldFeatLabelGen.load_sample(id_name,
                                                                         dir_out=self.OutputGen.dir_labels,
                                                                         add_deltas=True,
-                                                                        num_coded_sps=hparams.num_coded_sps)
+                                                                        num_coded_sps=hparams.num_coded_sps,
+                                                                        num_bap=hparams.num_bap)
 
         f0_rmse = 0.0
         f0_rmse_max_id = "None"
@@ -211,14 +216,16 @@ class AcousticModelTrainer(ModelTrainer):
             output_coded_sp, output_lf0, output_vuv, output_bap = self.OutputGen.convert_to_world_features(
                                                                                     sample=labels,
                                                                                     contains_deltas=False,
-                                                                                    num_coded_sps=hparams.num_coded_sps)
+                                                                                    num_coded_sps=hparams.num_coded_sps,
+                                                                                    num_bap=hparams.num_bap)
             output_vuv = output_vuv.astype(bool)
 
             # Get data for comparision.
             org_coded_sp, org_lf0, org_vuv, org_bap = self.OutputGen.convert_to_world_features(
                                                                         sample=dict_original_post[id_name],
                                                                         contains_deltas=self.OutputGen.add_deltas,
-                                                                        num_coded_sps=hparams.num_coded_sps)
+                                                                        num_coded_sps=hparams.num_coded_sps,
+                                                                        num_bap=hparams.num_bap)
 
             # Compute f0 from lf0.
             org_f0 = np.exp(org_lf0.squeeze())[:len(output_lf0)]  # Fix minor negligible length mismatch.
@@ -295,7 +302,8 @@ class AcousticModelTrainer(ModelTrainer):
                 world_dir = hparams.world_dir if hasattr(hparams, "world_dir") and hparams.world_dir is not None\
                                               else os.path.join(self.OutputGen.dir_labels,
                                                                 self.dir_extracted_acoustic_features)
-                labels = WorldFeatLabelGen.load_sample(id_name, world_dir, num_coded_sps=hparams.num_coded_sps)
+                labels = WorldFeatLabelGen.load_sample(id_name, world_dir, num_coded_sps=hparams.num_coded_sps,
+                                                       num_bap=hparams.num_bap)
                 len_diff = len(labels) - len(synth_output[id_name])
                 if len_diff > 0:
                     labels = WorldFeatLabelGen.trim_end_sample(labels, int(len_diff / 2), reverse=True)
@@ -311,7 +319,10 @@ class AcousticModelTrainer(ModelTrainer):
                     synth_output[id_name][:len(labels), -2] = labels[:, -2]
 
                 if hparams.synth_load_org_bap:
-                    synth_output[id_name][:len(labels), -1] = labels[:, -1]
+                    if hparams.num_bap == 1:
+                        synth_output[id_name][:len(labels), -1] = labels[:, -1]
+                    else:
+                        synth_output[id_name][:len(labels), -hparams.num_bap:] = labels[:, -hparams.num_bap:]
 
         # Run the vocoder.
         ModelTrainer.synthesize(self, id_list, synth_output, hparams)

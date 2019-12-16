@@ -44,7 +44,8 @@ class Synthesiser(object):
 
             coded_sp, lf0, vuv, bap = WorldFeatLabelGen.convert_to_world_features(output,
                                                                                   contains_deltas=False,
-                                                                                  num_coded_sps=hparams.num_coded_sps)
+                                                                                  num_coded_sps=hparams.num_coded_sps,
+                                                                                  num_bap=hparams.num_bap)
             amp_sp = WorldFeatLabelGen.decode_sp(coded_sp, hparams.sp_type, hparams.synth_fs,
                                                  post_filtering=hparams.do_post_filtering).astype(np.double, copy=False)
             args = dict()
@@ -91,15 +92,18 @@ class Synthesiser(object):
             for id_name in file_id_list:
                 # Load reference audio features.
                 try:
-                    output = WorldFeatLabelGen.load_sample(id_name, feature_dir, num_coded_sps=hparams.num_coded_sps)
+                    output = WorldFeatLabelGen.load_sample(id_name, feature_dir, num_coded_sps=hparams.num_coded_sps,
+                                                           num_bap=hparams.num_bap)
                 except FileNotFoundError as e1:
                     try:
                         output = WorldFeatLabelGen.load_sample(id_name, feature_dir, add_deltas=True,
-                                                               num_coded_sps=hparams.num_coded_sps)
+                                                               num_coded_sps=hparams.num_coded_sps,
+                                                               num_bap=hparams.num_bap)
                         coded_sp, lf0, vuv, bap = WorldFeatLabelGen.convert_to_world_features(
                                                        output,
                                                        contains_deltas=True,
-                                                       num_coded_sps=hparams.num_coded_sps)
+                                                       num_coded_sps=hparams.num_coded_sps,
+                                                       num_bap=hparams.num_bap)
                         length = len(output)
                         lf0 = lf0.reshape(length, 1)
                         vuv = vuv.reshape(length, 1)
@@ -188,7 +192,8 @@ class Synthesiser(object):
                 coded_sp, lf0, vuv, bap = WorldFeatLabelGen.convert_to_world_features(
                                                                 output,
                                                                 contains_deltas=False,
-                                                                num_coded_sps=hparams.num_coded_sps)
+                                                                num_coded_sps=hparams.num_coded_sps,
+                                                                num_bap=hparams.num_bap)
                 coded_sp = merlin_post_filter(coded_sp, WorldFeatLabelGen.fs_to_mgc_alpha(hparams.synth_fs))
                 synth_output[id_name] = WorldFeatLabelGen.convert_from_world_features(coded_sp, lf0, vuv, bap)
 
@@ -229,7 +234,9 @@ class Synthesiser(object):
                                       add_deltas=False,
                                       sampling_fn=partial(sample_linearly,
                                                           in_to_out_multiplier=in_to_out_multiplier,
-                                                          dtype=np.float32))
+                                                          dtype=np.float32),
+                                      num_coded_sps=hparams.num_coded_sps,
+                                      num_bap=hparams.num_bap)
         # Load normalisation parameters for wavenet input.
         try:
             norm_params_path = os.path.splitext(hparams.synth_vocoder_path)[0] + "_norm_params.npy"

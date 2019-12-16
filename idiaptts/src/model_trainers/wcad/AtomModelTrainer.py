@@ -127,8 +127,12 @@ class AtomModelTrainer(ModelTrainer):
         # Load original lf0 and vuv.
         world_dir = hparams.world_dir if hasattr(hparams, "world_dir") and hparams.world_dir is not None\
                                       else os.path.join(self.OutputGen.dir_labels, self.dir_extracted_acoustic_features)
-        org_labels = WorldFeatLabelGen.load_sample(id_name, world_dir, num_coded_sps=hparams.num_coded_sps)
-        _, original_lf0, original_vuv, _ = WorldFeatLabelGen.convert_to_world_features(org_labels, num_coded_sps=hparams.num_coded_sps)
+        org_labels = WorldFeatLabelGen.load_sample(id_name, world_dir, num_coded_sps=hparams.num_coded_sps,
+                                                   num_bap=hparams.num_bap)
+        _, original_lf0, original_vuv, _ = WorldFeatLabelGen.convert_to_world_features(
+                                                org_labels,
+                                                num_coded_sps=hparams.num_coded_sps,
+                                                num_bap=hparams.num_bap)
         original_lf0, _ = interpolate_lin(original_lf0)
         original_vuv = original_vuv.astype(np.bool)
 
@@ -265,8 +269,13 @@ class AtomModelTrainer(ModelTrainer):
         org_output = dict()
         for id_name in synth_output.keys():
             world_dir = hparams.world_dir if hasattr(hparams, "world_dir") and hparams.world_dir is not None\
-                                          else os.path.realpath(os.path.join(self.OutputGen.dir_labels, self.dir_extracted_acoustic_features))
-            org_output[id_name] = WorldFeatLabelGen.load_sample(id_name, world_dir, add_deltas=False, num_coded_sps=hparams.num_coded_sps)  # Load extracted data.
+                                          else os.path.realpath(os.path.join(self.OutputGen.dir_labels,
+                                                                             self.dir_extracted_acoustic_features))
+            org_output[id_name] = WorldFeatLabelGen.load_sample(id_name,
+                                                                world_dir,
+                                                                add_deltas=False,
+                                                                num_coded_sps=hparams.num_coded_sps,
+                                                                num_bap=hparams.num_bap)  # Load extracted data.
 
         return org_output
 

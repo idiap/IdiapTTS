@@ -79,7 +79,8 @@ class VTLNSpeakerAdaptionModelTrainer(AcousticModelTrainer):
         labels_post = self.OutputGen.postprocess_sample(label)
         coded_sp, lf0, vuv, bap = WorldFeatLabelGen.convert_to_world_features(labels_post,
                                                                               contains_deltas=False,
-                                                                              num_coded_sps=hparams.num_coded_sps)
+                                                                              num_coded_sps=hparams.num_coded_sps,
+                                                                              num_bap=hparams.num_bap)
         sp = WorldFeatLabelGen.mcep_to_amp_sp(coded_sp, hparams.synth_fs)
         lf0, _ = interpolate_lin(lf0)
 
@@ -87,11 +88,13 @@ class VTLNSpeakerAdaptionModelTrainer(AcousticModelTrainer):
         org_labels_post = WorldFeatLabelGen.load_sample(id_name,
                                                         dir_out=self.OutputGen.dir_labels,
                                                         add_deltas=self.OutputGen.add_deltas,
-                                                        num_coded_sps=hparams.num_coded_sps)
+                                                        num_coded_sps=hparams.num_coded_sps,
+                                                        num_bap=hparams.num_bap)
         original_mgc, original_lf0, original_vuv, *_ = WorldFeatLabelGen.convert_to_world_features(
                                                                             sample=org_labels_post,
                                                                             contains_deltas=self.OutputGen.add_deltas,
-                                                                            num_coded_sps=hparams.num_coded_sps)
+                                                                            num_coded_sps=hparams.num_coded_sps,
+                                                                            num_bap=hparams.num_bap)
         original_lf0, _ = interpolate_lin(original_lf0)
 
         sp = sp[:, :150]  # Zoom into spectral features.
@@ -177,7 +180,8 @@ class VTLNSpeakerAdaptionModelTrainer(AcousticModelTrainer):
             dict_original_post[id_name] = WorldFeatLabelGen.load_sample(id_name,
                                                                         dir_out=self.OutputGen.dir_labels,
                                                                         add_deltas=True,
-                                                                        num_coded_sps=hparams.num_coded_sps)
+                                                                        num_coded_sps=hparams.num_coded_sps,
+                                                                        num_bap=hparams.num_bap)
 
         # Create a warping layer for manual warping.
         wl = self._get_dummy_warping_layer(hparams)
@@ -197,7 +201,8 @@ class VTLNSpeakerAdaptionModelTrainer(AcousticModelTrainer):
                     output_mgc_post, *_ = self.OutputGen.convert_to_world_features(
                                                            labels,
                                                            False,
-                                                           num_coded_sps=hparams.num_coded_sps)
+                                                           num_coded_sps=hparams.num_coded_sps,
+                                                           num_bap=hparams.num_bap)
                     # Reverse the warping.
                     pre_net_output, _ = wl.forward_sample(labels, -output_alphas)
                     # Postprocess sample manually.

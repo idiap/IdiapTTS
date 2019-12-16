@@ -386,7 +386,8 @@ class AtomNeuralFilterModelTrainer(ModelTrainer):
                                               else os.path.join(self.OutputGen.dir_labels, self.dir_extracted_acoustic_features)
                 full_sample: np.ndarray = WorldFeatLabelGen.load_sample(id_name, world_dir,
                                                                         add_deltas=False,
-                                                                        num_coded_sps=hparams.num_coded_sps)  # Load extracted data.
+                                                                        num_coded_sps=hparams.num_coded_sps,
+                                                                        num_bap=hparams.num_bap)  # Load extracted data.
                 len_diff = len(full_sample) - len(lf0)
                 trim_front = len_diff // 2
                 trim_end = len_diff - trim_front

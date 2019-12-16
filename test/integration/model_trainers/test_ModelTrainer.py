@@ -321,7 +321,7 @@ class TestModelTrainer(unittest.TestCase):
         trainer.train(hparams)
 
         ModelFactory.deregister_architecture(TestArchitecture.IDENTIFIER)
-        shutil.rmtree(hparams.out_dir)
+        shutil.rmtree(hparams.out_dir, ignore_errors=True)
 
     def test_train_e4_save_best(self):
         # logging.basicConfig(level=logging.INFO)

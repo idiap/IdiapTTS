@@ -224,6 +224,7 @@ class ExtendedHParams(HParams):
             synth_fs=16000,
             sp_type="mcep",
             num_coded_sps=60,  # Number of coded spectral features.
+            num_bap=1,  # Number of band aperiodicities, depends on sampling frequency.
             synth_dir=None,  # Output directory to save the synthesised audio.
             synth_acoustic_model_path=None,
             synth_file_suffix='',  # Suffix of synthesised files name.

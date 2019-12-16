@@ -478,8 +478,12 @@ class PhraseAtomNeuralFilterModelTrainer(ModelTrainer):
                                           else os.path.join(hparams.out_dir, self.dir_extracted_acoustic_features)
             org_labels = WorldFeatLabelGen.load_sample(id_name,
                                                        world_dir,
-                                                       num_coded_sps=hparams.num_coded_sps)[:len(output_lf0)]
-            _, original_lf0, original_vuv, _ = WorldFeatLabelGen.convert_to_world_features(org_labels, num_coded_sps=hparams.num_coded_sps)
+                                                       num_coded_sps=hparams.num_coded_sps,
+                                                       num_bap=hparams.num_bap)[:len(output_lf0)]
+            _, original_lf0, original_vuv, _ = WorldFeatLabelGen.convert_to_world_features(
+                                                    org_labels,
+                                                    num_coded_sps=hparams.num_coded_sps,
+                                                    num_bap=hparams.num_bap)
             original_lf0, _ = interpolate_lin(original_lf0)
             original_vuv = original_vuv.astype(np.bool)
 
@@ -537,7 +541,8 @@ class PhraseAtomNeuralFilterModelTrainer(ModelTrainer):
                 full_sample: np.ndarray = WorldFeatLabelGen.load_sample(id_name,
                                                                         world_dir,
                                                                         add_deltas=False,
-                                                                        num_coded_sps=hparams.num_coded_sps)  # Load extracted data.
+                                                                        num_coded_sps=hparams.num_coded_sps,
+                                                                        num_bap=hparams.num_bap)  # Load extracted data.
                 len_diff = len(full_sample) - len(lf0)
                 trim_front = len_diff // 2
                 trim_end = len_diff - trim_front

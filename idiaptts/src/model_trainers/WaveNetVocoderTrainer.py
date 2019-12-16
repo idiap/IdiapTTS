@@ -63,6 +63,7 @@ class WaveNetVocoderTrainer(ModelTrainer):
                                                               in_to_out_multiplier=in_to_out_multiplier,
                                                               dtype=np.float32),
                                           num_coded_sps=hparams.num_coded_sps,
+                                          num_bap=hparams.num_bap,
                                           sp_type=hparams.sp_type,
                                           load_sp=hparams.load_sp,
                                           load_lf0=hparams.load_lf0,

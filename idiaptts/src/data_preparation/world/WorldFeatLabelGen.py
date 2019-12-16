@@ -57,7 +57,7 @@ class WorldFeatLabelGen(LabelGen):
 
     logger = logging.getLogger(__name__)
 
-    def __init__(self, dir_labels, add_deltas=False, sampling_fn=None, num_coded_sps=60, sp_type="mcep", hop_size_ms=5,
+    def __init__(self, dir_labels, add_deltas=False, sampling_fn=None, num_coded_sps=60, num_bap=1, sp_type="mcep", hop_size_ms=5,
                  load_sp=True, load_lf0=True, load_vuv=True, load_bap=True):
         """
         Constructor to use the class as a database.
@@ -82,6 +82,7 @@ class WorldFeatLabelGen(LabelGen):
         self.add_deltas = add_deltas
         self.sampling_fn = sampling_fn
         self.num_coded_sps = num_coded_sps
+        self.num_bap = num_bap
         self.sp_type = sp_type
         self.hop_size_ms = hop_size_ms
         self.load_sp = load_sp
@@ -104,6 +105,7 @@ class WorldFeatLabelGen(LabelGen):
                                   self.dir_labels,
                                   add_deltas=self.add_deltas,
                                   num_coded_sps=self.num_coded_sps,
+                                  num_bap=self.num_bap,
                                   sp_type=self.sp_type,
                                   load_sp=self.load_sp,
                                   load_lf0=self.load_lf0,
@@ -151,7 +153,7 @@ class WorldFeatLabelGen(LabelGen):
         else:
             num_processed_norm_params += 1
 
-        num_bap_features = 3 if self.add_deltas else 1
+        num_bap_features = self.num_bap * (3 if self.add_deltas else 1)
         if not self.load_bap:
             mean = mean[num_processed_norm_params:num_processed_norm_params + num_bap_features]
             std_dev = std_dev[num_processed_norm_params:num_processed_norm_params + num_bap_features]
@@ -241,12 +243,12 @@ class WorldFeatLabelGen(LabelGen):
                 output_list.append(vuv)
 
             if self.load_bap:
-                bap_full = sample[:, -3:]
+                bap_full = sample[:, -self.num_bap * 3:]
 
                 if apply_mlpg:
                     bap = mlpg.generation(bap_full, self.covs[3], self.covs[3].shape[0] // 3)
                 else:
-                    bap = bap_full[:, 0:1]
+                    bap = bap_full[:, 0:self.num_bap]
                 output_list.append(bap)
 
             sample = np.concatenate(output_list, axis=1)
@@ -254,7 +256,7 @@ class WorldFeatLabelGen(LabelGen):
         return sample
 
     @staticmethod
-    def load_sample(id_name, dir_out, add_deltas=False, num_coded_sps=60, sp_type="mcep",
+    def load_sample(id_name, dir_out, add_deltas=False, num_coded_sps=60, num_bap=1, sp_type="mcep",
                     load_sp=True, load_lf0=True, load_vuv=True, load_bap=True):
         """
         Load world features from dir_out. It does not pre-process, use __getitem__ method instead.
@@ -277,7 +279,7 @@ class WorldFeatLabelGen(LabelGen):
         dim_coded_sp = num_coded_sps * deltas_factor
         dim_lf0 = 1 * deltas_factor
         dim_vuv = 1
-        dim_bap = 1 * deltas_factor
+        dim_bap = num_bap * deltas_factor
 
         # If not all features are present also deltas features are saved separately.
         saved_as_cmp = add_deltas and load_sp and load_lf0 and load_vuv and load_bap
@@ -319,7 +321,7 @@ class WorldFeatLabelGen(LabelGen):
             try:
                 cmp = np.fromfile(f, dtype=np.float32)
                 # cmp files always contain deltas.
-                labels = np.reshape(cmp, [-1, 3 * (num_coded_sps + 1 + 1) + dim_vuv])
+                labels = np.reshape(cmp, [-1, 3 * (num_coded_sps + 1 + num_bap) + dim_vuv])
             except ValueError as e:
                 logging.error("Cannot load labels from {}.".format(path))
                 raise e
@@ -331,13 +333,13 @@ class WorldFeatLabelGen(LabelGen):
             output_list.append(labels[:, 3*num_coded_sps:3*num_coded_sps + dim_lf0])
 
         if load_vuv:
-            output_list.append(labels[:, -3-dim_vuv:-3])
+            output_list.append(labels[:, -3*num_bap-dim_vuv:-3*num_bap])
 
         if load_bap:
-            if dim_bap == 3:
-                output_list.append(labels[:, -3:])
+            if dim_bap == 3 * num_bap:
+                output_list.append(labels[:, -3*num_bap:])
             else:
-                output_list.append(labels[:, -3:-3 + dim_bap])
+                output_list.append(labels[:, -3*num_bap:-3*num_bap + dim_bap])
 
         assert len(output_list) > 0, "At least one type of acoustic feature has to be loaded."
         labels = np.concatenate(output_list, axis=1)
@@ -467,24 +469,28 @@ class WorldFeatLabelGen(LabelGen):
 
         if fs == 16000 or fs == 22050:
             return 1024
-        elif fs == 44100 or fs == 44800:
+        elif fs == 44100 or fs == 48000:
             return 2048
         else:
             raise NotImplementedError()
 
     @staticmethod
-    def convert_to_world_features(sample, contains_deltas=False, num_coded_sps=60):
+    def convert_to_world_features(sample, contains_deltas=False, num_coded_sps=60, num_bap=1):
         """Convert world acoustic features w/ or w/o deltas to WORLD understandable features."""
 
         deltas_factor = 3 if contains_deltas else 1
-        assert sample.shape[1] == (num_coded_sps + 2) * deltas_factor + 1, "WORLD requires all features to be present."
+        assert sample.shape[1] == (num_coded_sps + 1 + num_bap) * deltas_factor + 1,\
+            "WORLD requires all features to be present."
 
         coded_sp = sample[:, :num_coded_sps]
         lf0 = sample[:, num_coded_sps * deltas_factor]
         vuv = np.copy(sample[:, num_coded_sps * deltas_factor + deltas_factor])
         vuv[vuv < 0.5] = 0.0
         vuv[vuv >= 0.5] = 1.0
-        bap = sample[:, -deltas_factor]
+        if contains_deltas:
+            bap = sample[:, -num_bap * 3:-num_bap * 2]
+        else:
+            bap = sample[:, -num_bap:]
 
         return coded_sp, lf0, vuv, bap
 
@@ -722,7 +728,10 @@ class WorldFeatLabelGen(LabelGen):
             assert f0.shape[1:] == (1,) * (f0.ndim - 1), "F0 should have only one dimension at this stage."
             f0 = f0.squeeze()
 
-        ap = pyworld.decode_aperiodicity(np.ascontiguousarray(bap.reshape(-1, 1), np.float64), fs, n_fft)
+        if bap.ndim < 2:
+            bap = bap.reshape(-1, 1)
+
+        ap = pyworld.decode_aperiodicity(np.ascontiguousarray(bap, np.float64), fs, n_fft)
 
         raw = pyworld.synthesize(f0, pow_sp, ap, fs).astype(np.float32, copy=False)  # Inplace conversion, if possible.
         return scipy.signal.lfilter([1], [1, -preemphasis], raw)  # de-preemphasis
@@ -983,6 +992,7 @@ class WorldFeatLabelGen(LabelGen):
                         (self.sp_type, self.ext_lf0, self.ext_vuv, self.ext_bap),
                         (norm_params_ext_coded_sp, norm_params_ext_lf0, norm_params_ext_vuv, norm_params_ext_bap)):
                 if load:  # Check if feature should be loaded.
+                    file_name = os.path.basename(file_name)
                     if self.add_deltas:  # Add deltas if requested.
                         if feature_ext != "vuv":
                             deltas, double_deltas = compute_deltas(feature)
@@ -1113,6 +1123,7 @@ def main():
     world_feat_gen = WorldFeatLabelGen(dir_out,
                                        add_deltas=args.add_deltas,
                                        num_coded_sps=args.num_coded_sps,
+                                       # num_bap=args.num_bap  # Is not needed here because it is not used in gen_data.
                                        sp_type=args.sp_type,
                                        hop_size_ms=args.hop_size_ms)
     world_feat_gen.gen_data(dir_audio,

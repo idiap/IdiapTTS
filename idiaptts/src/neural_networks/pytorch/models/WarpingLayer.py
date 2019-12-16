@@ -500,7 +500,10 @@ def main():
     dir_world_labels = os.path.join("experiments", hparams.voice, "WORLD")
 
     from idiaptts.src.data_preparation.world.WorldFeatLabelGen import WorldFeatLabelGen
-    gen_in = WorldFeatLabelGen(dir_world_labels, add_deltas=hparams.add_deltas, num_coded_sps=hparams.num_coded_sps)
+    gen_in = WorldFeatLabelGen(dir_world_labels,
+                               add_deltas=hparams.add_deltas,
+                               num_coded_sps=hparams.num_coded_sps,
+                               num_bap=hparams.num_bap)
     gen_in.get_normalisation_params(gen_in.dir_labels)
 
     from idiaptts.src.model_trainers.AcousticModelTrainer import AcousticModelTrainer
@@ -522,7 +525,8 @@ def main():
             makedirs_safe(out_dir)
 
             sample = WorldFeatLabelGen.load_sample(id_name, os.path.join("experiments", hparams.voice, "WORLD"),
-                                                   add_deltas=True, num_coded_sps=hparams.num_coded_sps)
+                                                   add_deltas=True, num_coded_sps=hparams.num_coded_sps,
+                                                   num_bap=hparams.num_bap)
             sample_pre = gen_in.preprocess_sample(sample)
             coded_sps = sample_pre[:, :hparams.num_coded_sps * (3 if hparams.add_deltas else 1)]
 
