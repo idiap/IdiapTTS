@@ -447,16 +447,17 @@ class WorldFeatLabelGen(LabelGen):
 
         Code base on: Merlin's /misc/scripts/vocoder/world/extract_features_for_merlin.sh
         """
-        if fs == 16000:
-            return 0.58
-        elif fs == 22050:
-            return 0.65
-        elif fs == 44100:
-            return 0.76
-        elif fs == 48000:
-            return 0.77
-        else:
-            raise NotImplementedError()
+        return pysptk.util.mcepalpha(fs)
+        # if fs == 16000:
+        #     return 0.58
+        # elif fs == 22050:
+        #     return 0.65
+        # elif fs == 44100:
+        #     return 0.76
+        # elif fs == 48000:
+        #     return 0.77
+        # else:
+        #     raise NotImplementedError()
 
     @staticmethod
     def fs_to_frame_length(fs):
@@ -465,14 +466,18 @@ class WorldFeatLabelGen(LabelGen):
 
         Code base on: Merlin's /misc/scripts/vocoder/world/extract_features_for_merlin.sh
         """
-        # return pyworld.get_cheaptrick_fft_size(fs)  # TODO: Is this a better alternative?
+        return pyworld.get_cheaptrick_fft_size(fs)  # Better alternative.
+        #
+        # if fs == 16000 or fs == 22050 or fs == 24000:
+        #     return 1024
+        # elif fs == 44100 or fs == 48000:
+        #     return 2048
+        # else:
+        #     raise NotImplementedError("The fs_to_frame_length method does not know how to handle {} Hz.".format(fs))
 
-        if fs == 16000 or fs == 22050:
-            return 1024
-        elif fs == 44100 or fs == 48000:
-            return 2048
-        else:
-            raise NotImplementedError()
+    @staticmethod
+    def fs_to_num_bap(fs: int):
+        return pyworld.get_num_aperiodicities(fs)
 
     @staticmethod
     def convert_to_world_features(sample, contains_deltas=False, num_coded_sps=60, num_bap=1):
