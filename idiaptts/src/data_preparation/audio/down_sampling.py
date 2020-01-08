@@ -8,6 +8,7 @@
 import sys
 import os
 import librosa
+from shutil import copy
 from pydub import AudioSegment
 
 # Local source tree imports.
@@ -34,9 +35,15 @@ for file_id in id_list:
     full_path_in = os.path.join(dir_audio, file_id + ".wav")
     full_path_out = os.path.join(dir_out, file_id + ".wav")
     makedirs_safe(os.path.dirname(full_path_out))
-    print("Downsample " + full_path_in)
-    y, s = librosa.load(full_path_in, sr=target_sampling_rate)
-    librosa.output.write_wav(full_path_out, y, target_sampling_rate)
+
+    current_sampling_rate = librosa.get_samplerate(full_path_in)
+    if current_sampling_rate != target_sampling_rate:
+        print("Downsample {} from {} to {}.".format(full_path_in, current_sampling_rate, target_sampling_rate))
+        y, s = librosa.load(full_path_in, sr=target_sampling_rate)
+        librosa.output.write_wav(full_path_out, y, target_sampling_rate)
+    else:
+        print("Already at target frame rate, so copy " + full_path_in)
+        copy(full_path_in, full_path_out)
     # sound = AudioSegment.from_file(full_path_in)
     # sound = sound.set_frame_rate(target_sampling_rate)
     # sound.export(full_path_out, format="wav")
