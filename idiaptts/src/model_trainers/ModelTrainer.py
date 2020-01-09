@@ -196,10 +196,8 @@ class ModelTrainer(object):
         elif hparams.model_name is None:
             hparams.model_name = os.path.basename(hparams.model_path)
 
-        model_path_out = os.path.join(hparams.out_dir, hparams.networks_dir, hparams.model_name)
-        if hparams.epochs <= 0:
-            # Try to load the model. If it doesn't exist, create a new one and save it.
-            # Return the loaded/created model, because no training was requested.
+        if hparams.load_checkpoint:
+            # Return the loaded model, because no training was requested.
             try:
                 self.total_epoch = self.model_handler.load_checkpoint(hparams.model_path,
                                                                       hparams,
@@ -207,27 +205,14 @@ class ModelTrainer(object):
                                                                                                      and "lr" in hparams.optimiser_args
                                                                                                      else None)
             except FileNotFoundError:
-                if hparams.model_type is None:
-                    self.logger.error("Model does not exist at {} and you didn't give model_type to create a new one.".format(hparams.model_path))
-                    raise  # This will rethrow the last exception.
-                else:
-                    self.logger.warning('Model does not exist at {}. Creating a new one instead and saving it.'.format(hparams.model_path))
-                    dim_in, dim_out = self.dataset_train.get_dims()
-                    self.model_handler.create_model(hparams, dim_in, dim_out)
-                    self.total_epoch = 0
-                    self.model_handler.save_checkpoint(model_path_out, self.total_epoch)
-
-            self.logger.info("Model ready.")
-            return
-
-        if hparams.model_type is None:
-            self.total_epoch = self.model_handler.load_checkpoint(hparams.model_path,
-                                                                  hparams,
-                                                                  hparams.optimiser_args["lr"] if hasattr(hparams, "optimiser_args")
-                                                                                                 and "lr" in hparams.optimiser_args
-                                                                                                 else None)
+                self.logger.error("Model does not exist at {}.".format(hparams.model_path))
+                raise
         else:
-            dim_in, dim_out = self.dataset_train.get_dims()
+            # if hparams.epochs <= 0:
+            #     self.logger.warning("Created an untrained model, because epochs equals zero.")
+            assert hparams.model_type is not None, "Cannot create a new model because model_type is None."
+
+            dim_in, dim_out = self.dataset_train.get_dims()  # Get variable in/out dimensions from the dataset.
             self.model_handler.create_model(hparams, dim_in, dim_out)
             self.total_epoch = 0
 

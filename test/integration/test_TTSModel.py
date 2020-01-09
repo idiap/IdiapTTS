@@ -89,12 +89,14 @@ class TestTTSModel(unittest.TestCase):
         hparams_duration.out_dir = os.path.join(hparams_duration.out_dir, "test_run_DM_AM")
         duration_trainer = self._get_duration_trainer(hparams_duration)
         duration_trainer.init(hparams_duration)
+        duration_trainer.model_handler.save_checkpoint(hparams_duration.model_path, 0)
 
         # Create an acoustic model.
         hparams_acoustic = self._get_acoustic_hparams()
         hparams_acoustic.out_dir = hparams_duration.out_dir  # Use the same out directory.
         acoustic_trainer = self._get_acoustic_trainer(hparams_acoustic)
         acoustic_trainer.init(hparams_acoustic)
+        acoustic_trainer.model_handler.save_checkpoint(hparams_acoustic.model_path, 0)
 
         # Run TTS synthesis.
         hparams = TTSModel.create_hparams()

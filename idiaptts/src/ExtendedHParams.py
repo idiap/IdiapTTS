@@ -176,8 +176,9 @@ class ExtendedHParams(HParams):
             model_type=None,
             model_name=None,
             model_path=None,  # Full path to load model from, otherwise dir_out/networks_dir/model_name.
-            ignore_layers=["type dummy"],  # List of layers which are ignored when loading the model from model_path.
-            # Giving the dummy ensures that hparams expects a list of strings.
+            load_checkpoint=False,  # Try to load from model_path.
+            ignore_layers=["string type dummy"],  # List of layers which are ignored when loading from model_path.
+                                                  # Giving the dummy ensures that hparams expects a list of strings.
             dropout=0.0,
             hidden_init=0.0,  # Hidden state init value
             train_hidden_init=False,  # Is the hidden state init value trainable  # TODO: Unused?

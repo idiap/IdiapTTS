@@ -71,6 +71,7 @@ class TestPhraseAtomNeuralFilterModelTrainer(unittest.TestCase):
         hparams_flat = copy.deepcopy(hparams)
         # Training parameters.
         hparams_flat.epochs = 0
+        hparams_flat.load_checkpoint = True
         hparams_flat.model_type = "NeuralFilters"
         # hparams_flat.model_type = None
         hparams_flat.model_name = hparams.model_name + "_flat"
@@ -86,7 +87,8 @@ class TestPhraseAtomNeuralFilterModelTrainer(unittest.TestCase):
         hparams_atom.model_path = os.path.join("integration", "fixtures", "test_model_in409_out7.nn")
         hparams_atom.optimiser_args["lr"] = 0.0002
         hparams_atom.batch_size_train = 2
-        hparams_atom.epochs = 0  # If 0, model is loaded by name.
+        hparams_atom.epochs = 0
+        hparams_atom.load_checkpoint = True
 
         # Register hyper-parameter containers of subtrainers.
         hparams.hparams_atom = hparams_atom
@@ -176,7 +178,9 @@ class TestPhraseAtomNeuralFilterModelTrainer(unittest.TestCase):
 
         hparams = self._get_hparams("test_train_both")
         hparams.hparams_flat.hparams_atom.epochs = 1
+        hparams.hparams_flat.hparams_atom.load_checkpoint = False
         hparams.hparams_flat.epochs = 1
+        hparams.hparams_flat.load_checkpoint = False
         hparams.epochs = 3
 
         hparams.hparams_flat.atom_model_path = None
@@ -222,7 +226,7 @@ class TestPhraseAtomNeuralFilterModelTrainer(unittest.TestCase):
         scores = trainer.flat_trainer.benchmark(hparams)
         numpy.testing.assert_almost_equal((212.879, 0.624), scores, 3)
 
-        hparams.epochs = 0  # Load model.
+        hparams.load_checkpoint = True  # Load model.
         trainer.init(hparams)
         scores = trainer.benchmark(hparams)
         numpy.testing.assert_almost_equal((1679.056, 0.604), scores, 3)

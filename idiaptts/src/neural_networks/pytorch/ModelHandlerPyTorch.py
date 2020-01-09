@@ -14,6 +14,7 @@ import sys
 import os
 import resource
 import importlib
+import warnings
 from datetime import datetime
 from operator import itemgetter
 import logging
@@ -318,8 +319,10 @@ class ModelHandlerPyTorch(ModelHandler):
             expected_model_type = hparams.model_type if hasattr(hparams, "model_type") else None
             model_type = checkpoint['model_type']
             if expected_model_type and expected_model_type != model_type:  # None when model should be loaded by name.
-                raise TypeError("Expected type in hparams ({}) and loaded type ({}) should match."
-                                .format(expected_model_type, model_type))
+                warnings.warn("Expected type in hparams ({}) and loaded type ({}) do not match."
+                              .format(expected_model_type, model_type))
+                # raise TypeError("Expected type in hparams ({}) and loaded type ({}) should match."
+                #                 .format(expected_model_type, model_type))
             hparams.model_type = model_type  # Use the loaded model type during creation in factory.
             dim_in = checkpoint['dim_in']
             dim_out = checkpoint['dim_out']
@@ -455,7 +458,7 @@ class ModelHandlerPyTorch(ModelHandler):
             self.save_model(file_path + "_ema", self.ema.model, self.model_type, self.dim_in, self.dim_out, verbose=True)
 
     def forward(self, in_tensor, hparams, batch_seq_lengths=None, target=None):
-        """Forward one example through the model.
+        """Forward one sample through the model.
 
         :param in_tensor:           PyTorch tensor or numpy array.
         :param hparams:             Hyper-parameter container.

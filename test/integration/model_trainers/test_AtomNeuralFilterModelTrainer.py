@@ -186,7 +186,7 @@ class TestAtomNeuralFilterModelTrainer(unittest.TestCase):
         scores = trainer.atom_trainer.benchmark(hparams.hparams_atom)
         numpy.testing.assert_almost_equal((87.312, 0.624), scores, 3)
 
-        hparams.epochs = 0  # Load model.
+        hparams.load_checkpoint = True  # Load model.
         trainer.init(hparams)
         # trainer.model_handler.save_checkpoint("integration/fixtures/phrase_neural_filters_model_in409_out2.nn", trainer.total_epoch)
         scores = trainer.benchmark(hparams)
