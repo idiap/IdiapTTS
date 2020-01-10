@@ -43,7 +43,7 @@ class WorldFeatLabelGen(LabelGen):
     f0_silence_threshold = 30
     lf0_zero = 0
     mgc_gamma = -1./3.
-    preemphasis = 0.97
+    preemphasis = 0.0
 
     dir_lf0 = "lf0"
     dir_vuv = "vuv"
@@ -541,7 +541,7 @@ class WorldFeatLabelGen(LabelGen):
         return frames
 
     @staticmethod
-    def get_raw(audio_name: str, preemphasis: float = 0.97):
+    def get_raw(audio_name: str, preemphasis: float = 0.0):
         """Extract the raw audio in [-1, 1] and apply pre-emphasis. 0.0 pre-emphasis means no pre-emphasis."""
         # librosa_raw = librosa.load(audio_name, sr=16000)  # raw in [-1, 1]
         # fs, raw = wavfile.read(audio_name)  # raw in [-32768, 32768]
@@ -704,7 +704,7 @@ class WorldFeatLabelGen(LabelGen):
         return np.exp(amp_sp.real.astype(np.float32, copy=False))
 
     @staticmethod
-    def amp_sp_to_raw(amp_sp: np.array, fs: int, hop_size_ms: int = 5, preemphasis: float = 0.97):
+    def amp_sp_to_raw(amp_sp: np.array, fs: int, hop_size_ms: int = 5, preemphasis: float = 0.00):
         """
         Transform the amplitude spectrum into the waveform with Griffin-Lim.
         The amplitude spectrum has to have the pitch information. Using amplitude spectrum which was extracted with
@@ -715,8 +715,8 @@ class WorldFeatLabelGen(LabelGen):
 
     @staticmethod
     def world_features_to_raw(amp_sp: np.array, lf0: np.array, vuv: np.array, bap: np.array, fs: int, n_fft: int = None,
-                              f0_silence_threshold: int = None, lf0_zero: float = None, preemphasis: float = 0.97):
-        """Using the world vocoder to generate the waveform."""
+                              f0_silence_threshold: int = None, lf0_zero: float = None, preemphasis: float = 0.0):
+        """Using the world vocoder to generate the waveform. Preemphasis causes artifacts here."""
         if f0_silence_threshold is None:
             f0_silence_threshold = WorldFeatLabelGen.f0_silence_threshold
         if lf0_zero is None:
@@ -779,7 +779,7 @@ class WorldFeatLabelGen(LabelGen):
 
     @staticmethod
     def extract_features(dir_in, file_name: str, file_ext: str = "wav",
-                         preemphasis: float = 0.97, sp_type: str = "mcep", num_coded_sps: int = 40,
+                         preemphasis: float = 0.0, sp_type: str = "mcep", num_coded_sps: int = 40,
                          load_sp: bool = True, load_lf0: bool = True, load_vuv: bool = True, load_bap: bool = True,
                          hop_size_ms: int = 5, f0_silence_threshold: int = None, lf0_zero: float = None):
         """

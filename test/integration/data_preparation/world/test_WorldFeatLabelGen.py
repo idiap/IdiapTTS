@@ -656,7 +656,7 @@ class TestWorldFeatLabelGen(unittest.TestCase):
         librosa_raw_gl = WorldFeatLabelGen.amp_sp_to_raw(librosa_amp_sp, fs, hop_size_ms, preemphasis)
         librosa_raw_gl /= max(librosa_raw_gl.max(), abs(librosa_raw_gl.min()))  # Scale to [-1, 1]
 
-        world_raw_world_vocoder = WorldFeatLabelGen.world_features_to_raw(world_amp_sp, lf0, vuv, bap, fs)
+        world_raw_world_vocoder = WorldFeatLabelGen.world_features_to_raw(world_amp_sp, lf0, vuv, bap, fs, preemphasis=preemphasis)
         world_raw_world_vocoder /= max(world_raw_world_vocoder.max(), abs(world_raw_world_vocoder.min()))  # To [-1, 1]
 
         # # DEBUG: Reconstructing waveform from librosa amp sp with World vocoder and
