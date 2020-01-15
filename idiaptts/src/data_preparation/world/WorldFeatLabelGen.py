@@ -265,6 +265,7 @@ class WorldFeatLabelGen(LabelGen):
         :param dir_out:         Directory containing the sample.
         :param add_deltas:      Determines if deltas and double deltas are expected.
         :param num_coded_sps:   Number of bins used to represent the coded spectral features.
+        :param num_bap:         Number of bins used to represent the coded band aperiodicity.
         :param sp_type:         Type in which the coded spectral features are saved.
         :param load_sp:         Load spectral features defined by sp_type.
         :param load_lf0:        Load fundamental frequency.

@@ -70,8 +70,7 @@ class GenMFCC(object):
         self.id_list = id_list
         
         # Check if mfcc directory exists.
-        if not os.path.exists(self.dir_mfcc):
-            os.makedirs(self.dir_mfcc)
+        os.makedirs(self.dir_mfcc, exist_ok=True)
 
     def _HCopy(self, config_file):
         """

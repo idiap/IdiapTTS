@@ -185,19 +185,22 @@ class ModelHandlerPyTorch(ModelHandler):
 
     def set_dataset(self, hparams, dataset_train, dataset_val, collate_fn=None):
         common_divisor = hparams.num_gpus  # Will be 1 if used on CPU.
+        collate_fn = self.prepare_batch if collate_fn is None else collate_fn
+        num_workers = hparams.dataset_num_workers_gpu if hparams.use_gpu else hparams.dataset_num_workers_cpu
+
         self.dataloader_train = DataLoader(dataset=dataset_train,
                                            batch_size=hparams.batch_size_train,
                                            shuffle=hparams.shuffle_train_set,
-                                           num_workers=hparams.dataset_num_workers_gpu if hparams.use_gpu else hparams.dataset_num_workers_cpu,
-                                           collate_fn=partial(self.prepare_batch if collate_fn is None else collate_fn,
+                                           num_workers=num_workers,
+                                           collate_fn=partial(collate_fn,
                                                               common_divisor=common_divisor,
                                                               batch_first=hparams.batch_first),
                                            pin_memory=hparams.dataset_pin_memory)
         self.dataloader_val = DataLoader(dataset_val,
                                          batch_size=hparams.batch_size_val,  # Used to be batch_size_test, please change it in your My* class.
                                          shuffle=hparams.shuffle_val_set,
-                                         num_workers=hparams.dataset_num_workers_gpu if hparams.use_gpu else hparams.dataset_num_workers_cpu,
-                                         collate_fn=partial(self.prepare_batch if collate_fn is None else collate_fn,
+                                         num_workers=num_workers,
+                                         collate_fn=partial(collate_fn,
                                                             common_divisor=common_divisor,
                                                             batch_first=hparams.batch_first),
                                          pin_memory=hparams.dataset_pin_memory)
@@ -206,17 +209,18 @@ class ModelHandlerPyTorch(ModelHandler):
         """Initialise a PyTorch optimiser here."""
         if self.optimiser is None:
             if hparams.optimiser is None:
+                self.logger.info("Create {} optimiser.".format(hparams.optimiser_type))
+
                 if "lr" not in hparams.optimiser_args:  # Backwards compatible.
                     hparams.optimiser_args["lr"] = hparams.learning_rate
                 # Model is new.
                 if hparams.optimiser_type == "Adam":
                     self.optimiser = torch.optim.Adam(self.model.parameters(), **hparams.optimiser_args)
-                    return
-                if hparams.optimiser_type == "SGD":
+                elif hparams.optimiser_type == "SGD":
                     self.optimiser = torch.optim.SGD(self.model.parameters(), **hparams.optimiser_args)
-                    return
                 # TODO: Implement the others here.
-                raise NotImplementedError("Optimiser type {} is not implemented.".format(hparams.optimiser_type))
+                else:
+                    raise NotImplementedError("Optimiser type {} is not implemented.".format(hparams.optimiser_type))
             else:
                 self.optimiser = hparams.optimiser(self.model.parameters())
 
@@ -231,6 +235,8 @@ class ModelHandlerPyTorch(ModelHandler):
             if hparams.scheduler_type == "None":
                 return
             assert hparams.scheduler_type != "default", "Please define a default scheduler type in the trainer class."
+
+            self.logger.info("Create {} scheduler.".format(hparams.scheduler_type))
 
             if hparams.scheduler_type == "Plateau":
                 self.scheduler = ReduceLROnPlateau(self.optimiser, **hparams.scheduler_args)
@@ -289,7 +295,6 @@ class ModelHandlerPyTorch(ModelHandler):
         self.dim_out = dim_out
 
         if hparams.model_name is not None:
-            self.logger.info("Selected network name: " + hparams.model_name)
             self.model_name = hparams.model_name
 
     @staticmethod
@@ -624,25 +629,13 @@ class ModelHandlerPyTorch(ModelHandler):
             current_batch = next(dataloader)
             current_batch_index = 0
             # Move the first batch to GPU.
-            inputs, target, seq_lengths_input, seq_lengths_target, mask, _ = current_batch
-            inputs = inputs.cuda(async=hparams.dataset_load_async) if inputs is not None else None
-            seq_lengths_input = seq_lengths_input.cuda(async=hparams.dataset_load_async)
-            target = target.cuda(async=hparams.dataset_load_async)
-            seq_lengths_target = seq_lengths_target.cuda(async=hparams.dataset_load_async)
-            mask = mask.cuda(async=hparams.dataset_load_async) if mask is not None else None
-            current_batch = inputs, target, seq_lengths_input, seq_lengths_target, mask, _
+            current_batch = self._batch_to_gpu(current_batch, hparams.dataset_load_async)
 
         # Iterate on the batches.
         for next_batch_index, next_batch in enumerate(dataloader, current_batch_index + 1):
             # Move the next batch to GPU.
             if hparams.use_gpu:
-                next_inputs, next_target, next_seq_lengths_input, next_seq_lengths_target, next_mask, _ = next_batch
-                next_inputs = next_inputs.cuda(async=hparams.dataset_load_async) if next_inputs is not None else None
-                next_seq_lengths_input = next_seq_lengths_input.cuda(async=hparams.dataset_load_async)
-                next_target = next_target.cuda(async=hparams.dataset_load_async)
-                next_seq_lengths_target = next_seq_lengths_target.cuda(async=hparams.dataset_load_async)
-                next_mask = next_mask.cuda(async=hparams.dataset_load_async) if next_mask is not None else None
-                next_batch = next_inputs, next_target, next_seq_lengths_input, next_seq_lengths_target, next_mask, _
+                next_batch = self._batch_to_gpu(next_batch, hparams.dataset_load_async)
 
             # If there is no current batch either experiment is on CPU or hparams.preload_next_batch_to_gpu is False.
             # In any case use the "next" batch for the current iteration.
@@ -650,7 +643,7 @@ class ModelHandlerPyTorch(ModelHandler):
                 current_batch_index = next_batch_index
                 current_batch = next_batch
 
-            # Get data and move it to gpu if necessary.
+            # Get data.
             inputs, target, seq_lengths_input, seq_lengths_target, mask, _ = current_batch
             # self.logger.info(str(torch.max(seq_lengths_input)) + " " + str(torch.max(seq_lengths_target)))
 
@@ -684,7 +677,8 @@ class ModelHandlerPyTorch(ModelHandler):
 
             # Compute loss of the output.
             loss_full = loss_function(output, target)
-            assert(loss_full.nelement() > 1)  # Don't reduce the loss, so that the mask can be applied. Use reduction='none' in loss function.
+            assert loss_full.nelement() > 1, "Don't reduce the loss, so that the mask can be applied. " \
+                                             "Use reduction='none' in loss function."
             if mask is not None:
                 loss_full = loss_full * mask  # Don't do inplace multiplication because both tensors could be expanded.
 
@@ -694,7 +688,8 @@ class ModelHandlerPyTorch(ModelHandler):
 
                 # Automatically determine the time dimension and sum over it.
                 time_dim = 0 if loss_full.shape[0] == seq_lengths_target.max() else 1
-                sample_loss_features = (loss_full.sum(dim=time_dim) / seq_lengths_target.unsqueeze(-1).float()).mean(0)  # Take mean over batch dimension.
+                # Take mean over batch dimension.
+                sample_loss_features = (loss_full.sum(dim=time_dim) / seq_lengths_target.unsqueeze(-1).float()).mean(0)
                 loss = sample_loss_features.mean()
             else:
                 # Default: Average the loss over all frames, then compute the mean of all loss channels.
@@ -818,6 +813,21 @@ class ModelHandlerPyTorch(ModelHandler):
         del total_loss, loss_features
 
         return np_total_loss, np_loss_features
+
+    def _batch_to_gpu(self, batch, load_async):
+        return [element.cuda(async=load_async) if element is not None
+                                                  and hasattr(element, "cuda")
+                                                  and callable(element.cuda)
+                else element for element in batch]
+
+        # next_inputs, next_target, next_seq_lengths_input, next_seq_lengths_target, next_mask, _ = next_batch
+        #
+        # next_inputs = next_inputs.cuda(async=load_async) if next_inputs is not None else None
+        # next_seq_lengths_input = next_seq_lengths_input.cuda(async=load_async)
+        # next_target = next_target.cuda(async=load_async)
+        # next_seq_lengths_target = next_seq_lengths_target.cuda(async=load_async)
+        # next_mask = next_mask.cuda(async=load_async) if next_mask is not None else None
+        # next_batch = next_inputs, next_target, next_seq_lengths_input, next_seq_lengths_target, next_mask, _
 
     def test(self, hparams, total_epoch, current_epoch, loss_function):
         if hparams.use_gpu:
