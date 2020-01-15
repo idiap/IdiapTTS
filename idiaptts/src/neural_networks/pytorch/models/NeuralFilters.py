@@ -45,7 +45,7 @@ class NeuralFilters(nn.Module):
             lr = hparams.optimiser_args["lr"]
         else:
             lr = None
-        self.model_handler_atoms.load_checkpoint(hparams.atom_model_path, hparams.hparams_atom, lr)
+        self.model_handler_atoms.load_checkpoint(hparams.atom_model_path, hparams.hparams_atom, initial_lr=lr)
         self.add_module("atom_model", self.model_handler_atoms.model)  # Add atom model as submodule so that parameters are properly registered.
 
         if hparams.complex_poles:

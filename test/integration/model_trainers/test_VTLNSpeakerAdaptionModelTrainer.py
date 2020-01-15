@@ -108,7 +108,7 @@ class TestVTLNSpeakerAdaptionModelTrainer(unittest.TestCase):
         trainer.model_handler.save_checkpoint(model_path, total_epochs)
 
         # Create a new model and test load.
-        hparams.load_checkpoint = True
+        hparams.load_from_checkpoint = True
         hparams.model_type = None
         trainer = VTLNSpeakerAdaptionModelTrainer(self.dir_world_features,
                                                   self.dir_question_labels,

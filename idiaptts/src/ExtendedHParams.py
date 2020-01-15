@@ -176,7 +176,8 @@ class ExtendedHParams(HParams):
             model_type=None,
             model_name=None,
             model_path=None,  # Full path to load model from, otherwise dir_out/networks_dir/model_name.
-            load_checkpoint=False,  # Try to load from model_path.
+            load_from_checkpoint=False,  # Try to load from model_path.
+            load_optimiser=True,  # If load_from_checkpoint=True determines whether optimiser state_dict is loaded from the checkpoint.
             ignore_layers=["string type dummy"],  # List of layers which are ignored when loading from model_path.
                                                   # Giving the dummy ensures that hparams expects a list of strings.
             dropout=0.0,

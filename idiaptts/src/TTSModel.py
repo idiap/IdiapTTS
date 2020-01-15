@@ -120,10 +120,12 @@ class TTSModel(object):
             duration_model_trainer = DurationModelTrainer(os.path.join(tmp_dir_name, "mono_no_align"),
                                                           hparams.duration_labels_dir, id_list,
                                                           hparams.file_symbol_dict, hparams)
+            assert hparams.duration_model is not None, "Path to duration model in hparams.duration_model is needed."
             hparams.model_path = hparams.duration_model
+            hparams.model_name = os.path.basename(hparams.duration_model)
 
             # Predict durations. Durations are already converted to multiples of hparams.min_phoneme_length.
-            hparams.load_checkpoint = True
+            hparams.load_from_checkpoint = True
             duration_model_trainer.init(hparams)
             _, output_dict_post = duration_model_trainer.forward(hparams, id_list)
             hparams.output_norm_params_file_prefix = None  # Reset again.
@@ -150,8 +152,10 @@ class TTSModel(object):
             # Run acoustic model and synthesise.
             shutil.copy2(hparams.question_labels_norm_file, tmp_dir_name + "/min-max.bin")  # Get normalisation parameters in same directory.
             acoustic_model_trainer = AcousticModelTrainer(hparams.world_features_dir, tmp_dir_name, id_list, hparams.num_questions, hparams)
+            assert hparams.acoustic_model is not None, "Path to acoustic model in hparams.acoustic_model is needed."
             hparams.model_path = hparams.acoustic_model
-            hparams.load_checkpoint = True
+            hparams.model_name = os.path.basename(hparams.acoustic_model)
+            hparams.load_from_checkpoint = True
             acoustic_model_trainer.init(hparams)
             hparams.model_name = ""  # No suffix in synthesised files.
             _, output_dict_post = acoustic_model_trainer.synth(hparams, id_list)

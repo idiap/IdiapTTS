@@ -54,6 +54,9 @@ class ModelHandlerPyTorch(ModelHandler):
         self.dim_in = None
         self.dim_out = None
 
+        self.optimiser = None
+        self.scheduler = None
+
         self._scheduler_step_fn = None
         self.ema = None  # Exponential moving average object.
 
@@ -307,56 +310,86 @@ class ModelHandlerPyTorch(ModelHandler):
             logging.info("Save full model to {}.".format(file_path))
 
     @staticmethod
-    def load_model(file_path, hparams, verbose=True):
+    def load_model(file_path, hparams, ignore_layers=True, verbose=True):
+        assert file_path is not None, "Path to model is None."
+
+        created_model_type = None
         dim_in = None
         dim_out = None
-        model_type = None
-
-        assert file_path is not None, "Path to model is None."
 
         checkpoint = torch.load(file_path, map_location=lambda storage, loc: storage)
         try:
-            expected_model_type = hparams.model_type if hasattr(hparams, "model_type") else None
-            model_type = checkpoint['model_type']
-            if expected_model_type and expected_model_type != model_type:  # None when model should be loaded by name.
-                warnings.warn("Expected type in hparams ({}) and loaded type ({}) do not match."
-                              .format(expected_model_type, model_type))
-                # raise TypeError("Expected type in hparams ({}) and loaded type ({}) should match."
-                #                 .format(expected_model_type, model_type))
-            hparams.model_type = model_type  # Use the loaded model type during creation in factory.
-            dim_in = checkpoint['dim_in']
-            dim_out = checkpoint['dim_out']
-            model = ModelFactory.create(model_type, dim_in, dim_out, hparams, verbose)
-            hparams.model_type = expected_model_type  # Can still be None.
+            model, created_model_type, (dim_in, dim_out) = ModelHandlerPyTorch._create_model(checkpoint, hparams)
+
             if verbose:
                 logging.info("Load model state dict from {}".format(file_path) +
-                             (" ignoring {}.".format(hparams.ignore_layers) if len(hparams.ignore_layers) > 0 else "."))
+                             (" ignoring {}.".format(hparams.ignore_layers) if ignore_layers
+                                                                               and len(hparams.ignore_layers) > 0
+                                                                            else "."))
+            ModelHandlerPyTorch._load_model_state_dict(checkpoint, model, hparams, ignore_layers=ignore_layers)
 
-            model_dict = checkpoint['model_state_dict']
-            if hasattr(hparams, "ignore_layers") and len(hparams.ignore_layers) > 0:
-                model_dict = {k: v for k, v in model_dict.items()
-                              if k not in hparams.ignore_layers}
-                org_dict = model.state_dict()
-                org_dict.update(model_dict)
-                model_dict = org_dict
-            model.load_state_dict(model_dict)
         except KeyError:  # Ensure backwards compatibility.
             model = checkpoint['model']
-            if hasattr(hparams, "ignore_layers") and len(hparams.ignore_layers) > 0:
+            if ignore_layers and hasattr(hparams, "ignore_layers") and len(hparams.ignore_layers) > 0:
                 logging.warning("Model was loaded as a whole. Cannot ignore {}".format(hparams.ignore_layers))
 
         if hparams.use_gpu:
             if hasattr(model, "set_gpu_flag") and callable(model.set_gpu_flag):
                 model.set_gpu_flag(hparams.use_gpu)
 
-        return model, model_type, dim_in, dim_out
+        return model, created_model_type, (dim_in, dim_out)
 
-    def load_checkpoint(self, file_path, hparams, initial_lr=None):
+    @staticmethod
+    def _create_model(checkpoint, hparams, verbose=True):
+
+        created_model_type = ModelHandlerPyTorch._get_valid_model_type(checkpoint, hparams)
+        dim_in = checkpoint['dim_in']
+        dim_out = checkpoint['dim_out']
+
+        model = ModelFactory.create(created_model_type, dim_in, dim_out, hparams, verbose)
+
+        return model, created_model_type, (dim_in, dim_out)
+
+    @staticmethod
+    def _get_valid_model_type(checkpoint, hparams):
+        expected_model_type = hparams.model_type
+        loaded_model_type = checkpoint['model_type']
+
+        if expected_model_type is None:
+            return loaded_model_type
+        elif expected_model_type != loaded_model_type:
+            warnings.warn("Expected type in hparams ({}) and loaded type ({}) do not match."
+                          .format(expected_model_type, loaded_model_type))
+            # raise TypeError("Expected type in hparams ({}) and loaded type ({}) should match."
+            #                 .format(expected_model_type, loaded_model_type))
+
+        return expected_model_type
+
+    @staticmethod
+    def _load_model_state_dict(checkpoint, model, hparams, ignore_layers=True):
+
+        loaded_model_dict = checkpoint['model_state_dict']
+        if ignore_layers:
+            loaded_model_dict = ModelHandlerPyTorch._remove_ignored_layers(loaded_model_dict, model, hparams)
+        model.load_state_dict(loaded_model_dict)
+
+    @staticmethod
+    def _remove_ignored_layers(model_dict, model, hparams):
+        if hasattr(hparams, "ignore_layers") and len(hparams.ignore_layers) > 0:
+            model_dict = {k: v for k, v in model_dict.items()
+                          if k not in hparams.ignore_layers}
+            org_dict = model.state_dict()
+            org_dict.update(model_dict)
+            model_dict = org_dict
+        return model_dict
+
+    def load_checkpoint(self, file_path, hparams, ignore_layers=True, load_optimiser=True, initial_lr=None):
         """
         Load a checkpoint, also transfers model and optimiser to GPU if hparams.use_gpu is True.
 
         :param file_path:         Full path to checkpoint.
         :param hparams:           Hyper-parameter container. Has to contain use_gpu key.
+        :param ignore_layers:     Flag to determine if layers specified in hparams.ignore_layers should be ignored.
         :param initial_lr:        Initial learning rate of the model. Required by some schedulers to compute the
                                   learning rate of the current epoch/iteration.
         :return:                  The number of epochs the loaded model was trained already.
@@ -364,76 +397,99 @@ class ModelHandlerPyTorch(ModelHandler):
         self.logger.info("Load checkpoint from {}.".format(file_path))
 
         # Load model from checkpoint (and to GPU).
-        self.model, self.model_type, self.dim_in, self.dim_out = self.load_model(file_path, hparams, verbose=True)
+        self.model, self.model_type, (self.dim_in, self.dim_out) = ModelHandlerPyTorch.load_model(file_path,
+                                                                                                  hparams,
+                                                                                                  ignore_layers,
+                                                                                                  verbose=True)
 
         if hparams.ema_decay:
-            try:
-                average_model, *_ = self.load_model(file_path + "_ema",
-                                                    hparams,
-                                                    verbose=True)
-                self.ema = ExponentialMovingAverage(average_model, hparams.ema_decay)
-            except FileNotFoundError:
-                self.logger.warning("EMA is enabled but no EMA model can be found at {}. ".format(file_path + "_ema") +
-                                    "A new one will be created for training.")
-                self.ema = None
+            self._load_ema_model(file_path, hparams)
 
         # The lambda expression makes it irrelevant if the checkpoint was saved from CPU or GPU.
         checkpoint = torch.load(file_path, map_location=lambda storage, loc: storage)
 
         # Load remaining checkpoint information.
         self.model_name = checkpoint['model_name']
+
+        if load_optimiser:
+            self._load_optimiser(checkpoint, hparams)
+
+        if hparams.use_gpu and self.optimiser is not None:
+            self._optimiser_to_gpu()
+
+        return checkpoint['epoch']
+
+    def _load_ema_model(self, file_path, hparams):
+        try:
+            average_model, *_ = ModelHandlerPyTorch.load_model(file_path + "_ema", hparams, verbose=True)
+            self.ema = ExponentialMovingAverage(average_model, hparams.ema_decay)
+        except FileNotFoundError:
+            self.logger.warning("EMA is enabled but no EMA model can be found at {}. ".format(file_path + "_ema") +
+                                "A new one will be created for training.")
+            self.ema = None
+
+    def _load_optimiser(self, checkpoint, hparams):
         try:
             self.optimiser = checkpoint['optimiser']
             self.logger.warning("Loaded a fully saved optimiser instead of its state dict", DeprecationWarning)
         except KeyError:
+            # Load the state_dict of the optimiser. This cannot ignore layers because they are stored with ids and not
+            # names. If you ignore some layers and have changed their dimension (e.g. embeddings) you have to created a
+            # new optimiser (see https://discuss.pytorch.org/t/load-optimizer-for-partial-parameters/2617).
             optimiser_state_dict = checkpoint['optimiser_state_dict']
             if optimiser_state_dict is not None:
+                self.optimiser = None  # Reset current optimiser which is linked to old weights.
                 self.set_optimiser(hparams)
                 try:
                     self.optimiser.load_state_dict(optimiser_state_dict)
                 except ValueError as e:
-                    self.logger.warning("State dict for optimiser {} miss matches checkpoint's optimiser state dict: {}"
-                                        .format(hparams.optimiser_type, e)
-                                        + "\nContinuing without loading optimiser instead.")
+                    self.logger.warning("State dict for optimiser {} miss matches checkpoint's optimiser "
+                                        "state dict: {}\nContinuing without loading optimiser instead."
+                                        .format(hparams.optimiser_type, e))
 
+        if self.optimiser is not None:
+            self._update_optimiser_initial_lr(hparams.optimiser_args["lr"] if "lr" in hparams.optimiser_args
+                                              else hparams.learning_rate)
+
+    def _update_optimiser_initial_lr(self, initial_lr):
         # Initial learning rate is required by some optimisers to compute the learning rate of the current epoch.
-        if self.optimiser is not None and initial_lr is not None:
+        if initial_lr is not None:
             for group in self.optimiser.param_groups:
                 if hasattr(group, 'initial_lr'):
                     group.setdefault('initial_lr', initial_lr)
 
-        # Move optimiser to GPU.
-        if hparams.use_gpu:
-            # self.optimiser.cuda()  # Not implemented in master, but here:
-            # https://github.com/andreh7/pytorch/blob/235ce5ba688a49f804422226ddc62a721bb811e0/torch/optim/optimizer.py
-            # Requires the following function.
-            def _transform_state(optimiser, transformation, filter_func, state=None):
-                """Applies ``transformation`` recursively to each item in ``self.state`` for which ``filter_func`` returns True.
-                Arguments:
-                    transformation (item -> item): function to be applied to each item passing ``filter_func``.
-                    filter_func (item -> `bool`): function which must return True for each item to which ``transformation`` should be applied.
-                """
-                if state is None:
-                    state = optimiser.state
-                for key, value in state.items():
-                    if isinstance(value, dict):
-                        _transform_state(optimiser, transformation, filter_func, value)
-                    else:
-                        if filter_func(value):
-                            state[key] = transformation(value)
+    def _optimiser_to_gpu(self):
+        # self.optimiser.cuda()  # Not implemented in master, but here:
+        # https://github.com/andreh7/pytorch/blob/235ce5ba688a49f804422226ddc62a721bb811e0/torch/optim/optimizer.py
+        # Requires the following function.
+        def _transform_state(optimiser, transformation, filter_func, state=None):
+            """Applies ``transformation`` recursively to each item in ``self.state`` for which ``filter_func`` returns True.
+            Arguments:
+                transformation (item -> item): function to be applied to each item passing ``filter_func``.
+                filter_func (item -> `bool`): function which must return True for each item to which ``transformation`` should be applied.
+            """
+            if state is None:
+                state = optimiser.state
+            for key, value in state.items():
+                if isinstance(value, dict):
+                    _transform_state(optimiser, transformation, filter_func, value)
+                else:
+                    if filter_func(value):
+                        state[key] = transformation(value)
 
-            if self.optimiser is not None:
-                _transform_state(self.optimiser, lambda t: t.cuda(), lambda t: torch.is_tensor(t))  # Doing it manually.
+        _transform_state(self.optimiser, lambda t: t.cuda(), lambda t: torch.is_tensor(t))  # Doing it manually.
 
-        return checkpoint['epoch']
 
     def save_checkpoint(self, file_path, total_epoch):
         """
         Save checkpoint which consists of epoch number, model type, in/out dimensions, model state dict, whole
         optimiser, etc. Also save the EMA separately when one exists.
         """
+        assert file_path is not None, "Given file_path is None."
         self.logger.info("Save checkpoint to " + file_path)
+
         makedirs_safe(os.path.dirname(file_path))  # Create directory if necessary.
+
         checkpoint_dict = {'epoch': total_epoch,
                            'model_name': self.model_name,
                            'optimiser_state_dict': self.optimiser.state_dict() if self.optimiser is not None else None,

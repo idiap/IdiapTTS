@@ -101,7 +101,7 @@ def equal_checkpoint(model1_path, model2_path):
 
     if optimiser1_state_dict is not None:
         if optimiser2_state_dict is not None:
-            return equal_iterable(optimiser1_state_dict, optimiser2_state_dict)
+            return equal_iterable(optimiser1_state_dict["state"], optimiser2_state_dict["state"])
         else:
             return False
     return True

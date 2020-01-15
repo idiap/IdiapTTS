@@ -10,6 +10,7 @@ import os
 import shutil
 
 import idiaptts
+from idiaptts.src.model_trainers.ModelTrainer import ModelTrainer
 from idiaptts.src.model_trainers.DurationModelTrainer import DurationModelTrainer
 from idiaptts.src.model_trainers.AcousticModelTrainer import AcousticModelTrainer
 from idiaptts.src.TTSModel import TTSModel
@@ -89,14 +90,14 @@ class TestTTSModel(unittest.TestCase):
         hparams_duration.out_dir = os.path.join(hparams_duration.out_dir, "test_run_DM_AM")
         duration_trainer = self._get_duration_trainer(hparams_duration)
         duration_trainer.init(hparams_duration)
-        duration_trainer.model_handler.save_checkpoint(hparams_duration.model_path, 0)
+        duration_trainer.model_handler.save_checkpoint(ModelTrainer.get_model_path(hparams_duration), 0)
 
         # Create an acoustic model.
         hparams_acoustic = self._get_acoustic_hparams()
         hparams_acoustic.out_dir = hparams_duration.out_dir  # Use the same out directory.
         acoustic_trainer = self._get_acoustic_trainer(hparams_acoustic)
         acoustic_trainer.init(hparams_acoustic)
-        acoustic_trainer.model_handler.save_checkpoint(hparams_acoustic.model_path, 0)
+        acoustic_trainer.model_handler.save_checkpoint(ModelTrainer.get_model_path(hparams_acoustic), 0)
 
         # Run TTS synthesis.
         hparams = TTSModel.create_hparams()
@@ -110,7 +111,7 @@ class TestTTSModel(unittest.TestCase):
         tools_dir = os.path.join(os.path.dirname(os.path.realpath(".")), "tools")
         hparams.festival_dir = os.path.join(tools_dir, "festival")
         hparams.duration_labels_dir = os.path.join(hparams.work_dir, "dur")
-        hparams.duration_model = hparams_duration.model_path
+        hparams.duration_model = ModelTrainer.get_model_path(hparams_duration)
         hparams.file_symbol_dict = os.path.join(hparams.work_dir, "labels", "mono_phone.list")
         hparams.min_phoneme_length = 10000
         hparams.num_phoneme_states = 5
@@ -119,7 +120,7 @@ class TestTTSModel(unittest.TestCase):
         hparams.question_labels_norm_file = os.path.join(hparams.work_dir, "questions", "min-max.bin")
         hparams.world_features_dir = os.path.join(hparams.work_dir, "WORLD")
         hparams.num_coded_sps = 20
-        hparams.acoustic_model = hparams_acoustic.model_path
+        hparams.acoustic_model = ModelTrainer.get_model_path(hparams_acoustic)
 
         test_utterances = ["This is a test.", "Hello World!"]
         TTSModel.run_DM_AM(hparams, test_utterances)

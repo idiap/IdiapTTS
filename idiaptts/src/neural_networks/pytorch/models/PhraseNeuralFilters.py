@@ -27,7 +27,7 @@ class PhraseNeuralFilters(nn.Module):
         self.dropout = hparams.dropout
 
         self.model_handler_flat = ModelHandlerPyTorch.ModelHandlerPyTorch()
-        self.model_handler_flat.load_checkpoint(hparams.flat_model_path, hparams.hparams_flat, hparams.hparams_flat.optimiser_args["lr"])
+        self.model_handler_flat.load_checkpoint(hparams.flat_model_path, hparams.hparams_flat, initial_lr=hparams.hparams_flat.optimiser_args["lr"])
         self.add_module("flat_model", self.model_handler_flat.model)  # Add atom model as submodule so that parameters are properly registered.
 
         self.register_parameter("phrase_bias", torch.nn.Parameter(torch.Tensor(1).fill_(hparams.phrase_bias_init)))

@@ -96,7 +96,7 @@ class TestModelTrainer(unittest.TestCase):
     def test_init_no_model_type_and_saved_model(self):
         hparams = self._get_hparams()
         hparams.out_dir = os.path.join(hparams.out_dir, "test_init_no_model_type_and_saved_model")  # Add function name to path.
-        hparams.load_checkpoint = True
+        hparams.load_from_checkpoint = True
         trainer = self._get_trainer(hparams)
         # Check fail when neither model_type is given nor a model exists with model_name.
         with unittest.mock.patch.object(trainer.logger, "error") as mock_logger:
@@ -194,7 +194,7 @@ class TestModelTrainer(unittest.TestCase):
         hparams.epochs = 0
         hparams.out_dir = os.path.join(hparams.out_dir, "test_init_e0_load")  # Add function name to path.
         hparams.model_type = None
-        hparams.load_checkpoint = True
+        hparams.load_from_checkpoint = True
 
         with unittest.mock.patch.object(ModelTrainer.logger, "warning") as mock_logger:
             trainer = self._get_trainer(hparams)
@@ -224,7 +224,7 @@ class TestModelTrainer(unittest.TestCase):
         hparams = self._get_hparams()
         hparams.out_dir = os.path.join(hparams.out_dir, "test_init_load")  # Add function name to path.
         # hparams.model_type = None
-        hparams.load_checkpoint = True
+        hparams.load_from_checkpoint = True
         target_dir = os.path.join(hparams.out_dir, hparams.networks_dir)
         makedirs_safe(target_dir)
         shutil.copyfile(os.path.join("integration", "fixtures", "test_model_in409_out67.nn"), os.path.join(target_dir, hparams.model_name))
@@ -240,13 +240,13 @@ class TestModelTrainer(unittest.TestCase):
         trainer = self._get_trainer(hparams)
 
         hparams.model_type = "RNNDYN-1_RELU_32-1_FC_97"
-        hparams.load_checkpoint = True
+        hparams.load_from_checkpoint = True
         with unittest.mock.patch.object(trainer.logger, "error") as mock_logger:
             file_name = os.path.join(hparams.out_dir, hparams.networks_dir, hparams.model_name)
             self.assertRaises(FileNotFoundError, trainer.init, hparams)
             mock_logger.assert_called_with("Model does not exist at {}.".format(file_name))
 
-        hparams.load_checkpoint = False
+        hparams.load_from_checkpoint = False
         trainer.init(hparams)
         all_loss, all_loss_train, _ = trainer.train(hparams)
         # Check if no training happened.
@@ -256,7 +256,8 @@ class TestModelTrainer(unittest.TestCase):
         shutil.rmtree(hparams.out_dir)
 
     # @patch.object(idiaptts.src.neural_networks.pytorch.ModelFactory.ModelFactory, '__init__', side_effect=)
-    def test_train_e4_plus2(self):
+    def test_train_e4_plus2x2(self):
+        # logging.basicConfig(level=logging.INFO)
         from idiaptts.src.neural_networks.pytorch.models.RNNDyn import RNNDyn
 
         class TestArchitecture(RNNDyn):
@@ -314,16 +315,23 @@ class TestModelTrainer(unittest.TestCase):
 
         # Try reloading and training.
         hparams.model_type = "TestArchitecture"
-        hparams.epochs = 0
+        hparams.load_from_checkpoint = True
+        hparams.load_optimiser = False
+        hparams.start_with_test = True
+        hparams.use_best_as_final_model = True
         trainer = self._get_trainer(hparams)
         trainer.init(hparams)
         hparams.epochs = 2
         trainer.train(hparams)
+        previous_weights = trainer.model_handler.model.layer_groups[0][0].weight.detach().cpu().numpy().copy()
+        trainer.train(hparams)
+        current_weights = trainer.model_handler.model.layer_groups[0][0].weight.detach().cpu().numpy()
+        self.assertTrue((previous_weights != current_weights).any(), "Weights did not change during training.")
 
         ModelFactory.deregister_architecture(TestArchitecture.IDENTIFIER)
         shutil.rmtree(hparams.out_dir, ignore_errors=True)
 
-    def test_train_e4_save_best(self):
+    def test_train_e4_save_best_plus2(self):
         # logging.basicConfig(level=logging.INFO)
         hparams = self._get_hparams()
         hparams.out_dir = os.path.join(hparams.out_dir, "test_train_e4_save_best")  # Add function name to path.
@@ -363,6 +371,12 @@ class TestModelTrainer(unittest.TestCase):
         self.assertFalse(filecmp.cmp(saved_model_path, last_checkpoint_path, False),
                          msg="Saved model is the same as final checkpoint which should not be the best model.")
 
+        hparams.epochs = 2
+        previous_weights = trainer.model_handler.model.layer_groups[0][0].weight.detach().cpu().numpy().copy()
+        trainer.train(hparams)
+        current_weights = trainer.model_handler.model.layer_groups[0][0].weight.detach().cpu().numpy()
+        self.assertTrue((previous_weights != current_weights).any(), "Weights did not change during training.")
+
         # break
         shutil.rmtree(hparams.out_dir)
 
@@ -376,7 +390,7 @@ class TestModelTrainer(unittest.TestCase):
         hparams.batch_size_train = 2
         hparams.batch_size_val = hparams.batch_size_train
         hparams.epochs = 1
-        hparams.load_checkpoint = True
+        hparams.load_from_checkpoint = True
         hparams.use_best_as_final_model = True
         hparams.optimiser_args["lr"] = 0.001
         hparams.scheduler_type = "Plateau"
@@ -454,7 +468,7 @@ class TestModelTrainer(unittest.TestCase):
 
         # Try continue training.
         # hparams.model_type = None
-        hparams.load_checkpoint = True
+        hparams.load_from_checkpoint = True
         trainer = self._get_trainer(hparams)
         trainer.init(hparams)
         trainer.train(hparams)
@@ -468,7 +482,7 @@ class TestModelTrainer(unittest.TestCase):
         hparams.out_dir = os.path.join(hparams.out_dir, "test_train_exponential_decay")  # Add function name to path.
         hparams.epochs = 1
         # hparams.model_type = None
-        hparams.load_checkpoint = True
+        hparams.load_from_checkpoint = True
         target_dir = os.path.join(hparams.out_dir, hparams.networks_dir)
         makedirs_safe(target_dir)
         shutil.copyfile(os.path.join("integration", "fixtures", "test_model_in409_out67.nn"), os.path.join(target_dir, hparams.model_name))
@@ -513,7 +527,7 @@ class TestModelTrainer(unittest.TestCase):
         hparams.out_dir = os.path.join(hparams.out_dir, "test_synth_wav")  # Add function name to path
         hparams.model_name = "test_model_in409_out67.nn"
         hparams.model_path = os.path.join("integration", "fixtures", hparams.model_name)
-        hparams.load_checkpoint = True
+        hparams.load_from_checkpoint = True
         hparams.synth_fs = 16000
         hparams.frame_size_ms = 5
         hparams.synth_ext = "wav"
@@ -548,7 +562,7 @@ class TestModelTrainer(unittest.TestCase):
         hparams.out_dir = os.path.join(hparams.out_dir, "test_synth_mp3")  # Add function name to path
         hparams.model_name = "test_model_in409_out67.nn"
         hparams.model_path = os.path.join("integration", "fixtures", hparams.model_name)
-        hparams.load_checkpoint = True
+        hparams.load_from_checkpoint = True
         hparams.synth_fs = 16000
         hparams.frame_size_ms = 5
         hparams.synth_ext = "mp3"
@@ -589,7 +603,7 @@ class TestModelTrainer(unittest.TestCase):
         hparams.out_dir = os.path.join(hparams.out_dir, "test_gen_figure")  # Add function name to path
         hparams.model_name = "test_model_in409_out67.nn"
         hparams.model_path = os.path.join("integration", "fixtures", hparams.model_name)
-        hparams.load_checkpoint = True
+        hparams.load_from_checkpoint = True
 
         trainer = self._get_trainer(hparams)
         trainer.init(hparams)
@@ -606,7 +620,7 @@ class TestModelTrainer(unittest.TestCase):
         hparams.out_dir = os.path.join(hparams.out_dir, "test_copy_synth")  # Add function name to path
         hparams.model_name = "test_model_in409_out67.nn"
         hparams.model_path = os.path.join("integration", "fixtures", hparams.model_name)
-        hparams.load_checkpoint = True
+        hparams.load_from_checkpoint = True
         hparams.synth_fs = 16000
         hparams.frame_size_ms = 5
         hparams.synth_ext = "mp3"

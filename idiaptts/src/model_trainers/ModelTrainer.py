@@ -55,17 +55,7 @@ class ModelTrainer(object):
         """
 
         self.logger.info("Running on host {}.".format(platform.node()))
-        try:
-            repo = git.Repo(search_parent_directories=True)
-            self.logger.info("Git: {} at {}".format(repo.git_dir, repo.head.object.hexsha))
-        except git.exc.InvalidGitRepositoryError:
-            pass
-        try:
-            framework_repo = git.Repo(path=os.environ['IDIAPTTS_ROOT'], search_parent_directories=True)
-            self.logger.info("IdiapTTS framework git: {} at {}"
-                             .format(framework_repo.git_dir, framework_repo.head.object.hexsha))
-        except git.exc.InvalidGitRepositoryError:
-            pass
+        self.log_git_hash()
 
         assert(hparams is not None)
 
@@ -141,6 +131,19 @@ class ModelTrainer(object):
 
         self.total_epoch = None  # Total number of epochs the current model was trained.
 
+    def log_git_hash(self):
+        try:
+            repo = git.Repo(search_parent_directories=True)
+            self.logger.info("Git: {} at {}".format(repo.git_dir, repo.head.object.hexsha))
+        except git.exc.InvalidGitRepositoryError:
+            pass
+        try:
+            framework_repo = git.Repo(path=os.environ['IDIAPTTS_ROOT'], search_parent_directories=True)
+            self.logger.info("IdiapTTS framework git: {} at {}"
+                             .format(framework_repo.git_dir, framework_repo.head.object.hexsha))
+        except git.exc.InvalidGitRepositoryError:
+            pass
+
     @staticmethod
     def create_hparams(hparams_string=None, verbose=False):
         """Create model hyper-parameters. Parse non-default from given string."""
@@ -182,41 +185,60 @@ class ModelTrainer(object):
 
     def init(self, hparams):
 
-        self.logger.info("CPU memory: " + str(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1e3) + " MB.")
-        if hparams.use_gpu:
-            self.logger.info("GPU memory: " + str(get_gpu_memory_map()) + " MB.")
+        self.log_memory(hparams.use_gpu)
 
         # Create the necessary directories.
         makedirs_safe(os.path.join(hparams.out_dir, hparams.networks_dir, hparams.checkpoints_dir))
 
-        # Create the default model path if not set or retrieve the name from the given path.
-        if hparams.model_path is None:
-            assert(hparams.model_name is not None)  # A model_path or model_name has to be given. No default exists.
-            hparams.model_path = os.path.join(hparams.out_dir, hparams.networks_dir, hparams.model_name)
-        elif hparams.model_name is None:
-            hparams.model_name = os.path.basename(hparams.model_path)
-
-        if hparams.load_checkpoint:
-            # Return the loaded model, because no training was requested.
-            try:
-                self.total_epoch = self.model_handler.load_checkpoint(hparams.model_path,
-                                                                      hparams,
-                                                                      hparams.optimiser_args["lr"] if hasattr(hparams, "optimiser_args")
-                                                                                                     and "lr" in hparams.optimiser_args
-                                                                                                     else None)
-            except FileNotFoundError:
-                self.logger.error("Model does not exist at {}.".format(hparams.model_path))
-                raise
+        if hparams.load_from_checkpoint:
+            self.load_checkpoint(hparams)
         else:
-            # if hparams.epochs <= 0:
-            #     self.logger.warning("Created an untrained model, because epochs equals zero.")
-            assert hparams.model_type is not None, "Cannot create a new model because model_type is None."
-
-            dim_in, dim_out = self.dataset_train.get_dims()  # Get variable in/out dimensions from the dataset.
-            self.model_handler.create_model(hparams, dim_in, dim_out)
-            self.total_epoch = 0
+            self.create_model(hparams)
 
         self.logger.info("Model ready.")
+
+    def log_memory(self, use_gpu):
+        self.logger.info("CPU memory: {} MB.".format(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss/1e3))
+        if use_gpu:
+            self.logger.info("GPU memory: {} MB.".format(get_gpu_memory_map()))
+
+    def save_checkpoint(self, hparams, model_path=None):
+        if model_path is None:
+            model_path = os.path.join(hparams.out_dir, hparams.networks_dir, hparams.model_name)
+        self.model_handler.save_checkpoint(model_path, self.total_epoch)
+
+    def load_checkpoint(self, hparams):
+        model_path = ModelTrainer.get_model_path(hparams)
+        try:
+            self.total_epoch = self.model_handler.load_checkpoint(
+                                    model_path,
+                                    hparams,
+                                    load_optimiser=hparams.load_optimiser,
+                                    initial_lr=hparams.optimiser_args["lr"] if hasattr(hparams, "optimiser_args")
+                                                                               and "lr" in hparams.optimiser_args
+                                                                            else None)
+        except FileNotFoundError:
+            self.logger.error("Model does not exist at {}.".format(model_path))
+            raise
+
+    def create_model(self, hparams):
+        # if hparams.epochs <= 0:
+        #     self.logger.warning("Created an untrained model, because epochs equals zero.")
+        assert hparams.model_type is not None, "Cannot create a new model because model_type is None."
+
+        dim_in, dim_out = self.dataset_train.get_dims()  # Get variable in/out dimensions from the dataset.
+        self.model_handler.create_model(hparams, dim_in, dim_out)
+        self.total_epoch = 0
+
+    @staticmethod
+    def get_model_path(hparams):
+        if hparams.model_path is None:
+            assert hparams.out_dir is not None
+            assert hparams.networks_dir is not None
+            assert hparams.model_name is not None, "A model_name has to be given. No default exists."
+            return os.path.join(hparams.out_dir, hparams.networks_dir, hparams.model_name)
+        else:
+            return hparams.model_path
 
     def train(self, hparams):
         """
@@ -226,83 +248,42 @@ class ModelTrainer(object):
         :param hparams:          Hyper-parameter container.
         :return:                 A tuple of (all test loss, all training loss, the model_handler object).
         """
-
-        hparams.verify()  # Verify that attributes were added correctly, print warning for wrongly initialized ones.
+        self.sanity_check_train(hparams)
         self.logger.info(hparams.get_debug_string())
-
-        assert(self.model_handler)  # The init function has be called before training.
 
         # Skip training if epochs is not greater 0.
         if hparams.epochs <= 0:
             self.logger.info("Number of training epochs is {}. Skipping training.".format(hparams.epochs))
             return list(), list(), self.model_handler
 
-        # Log evaluation ids.
         if len(self.id_list_val) > 0:
-            valset_keys = sorted(self.id_list_val)
-            self.logger.info("Validation set (" + str(len(valset_keys)) + "): "
-                             + " ".join([os.path.join(os.path.split(os.path.dirname(id_name))[-1],
-                                                      os.path.splitext(os.path.basename(id_name))[0]) for id_name in valset_keys]))
-        # Log test ids.
-        testset_keys = sorted(self.id_list_test)
-        self.logger.info("Test set (" + str(len(testset_keys)) + "): "
-                         + " ".join([os.path.join(os.path.split(os.path.dirname(id_name))[-1],
-                                                  os.path.splitext(os.path.basename(id_name))[0]) for id_name in testset_keys]))
+            self.log_validation_set()
+        self.log_test_set()
 
-        # Setup the dataloaders.
+        # Setup components.
         self.model_handler.set_dataset(hparams, self.dataset_train, self.dataset_val, self.batch_collate_fn)
-
-        self.logger.info("CPU memory: " + str(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss/1e3) + " MB.")
-        if hparams.use_gpu:
-            self.logger.info("GPU memory: " + str(get_gpu_memory_map()) + " MB.")
-
-        # Run model.
-        # if self.epochs_per_plot > 0:
-        #     outputs = list()
-        #     num_iterations = int(math.ceil(float(epochs) / float(self.epochs_per_plot)))
-        #     epochs_per_iter = min(epochs, self.epochs_per_plot)
-        #     for e in range(num_iterations):
-        #         epochs_this_iter = min(epochs_per_iter, epochs - e * epochs_per_iter)
-        #         nn_model.run(epochs_this_iter, e * epochs_per_iter)
-        #         outputs.append(nn_model.forward(dict_input_labels[self.plot_per_epoch_id_name]))
-        #     self.plot_outputs(epochs, self.plot_per_epoch_id_name, outputs, dict_output_labels[self.plot_per_epoch_id_name])
-
-        # Some sanity checks.
-        if hparams.epochs_per_scheduler_step:
-            if hparams.epochs_per_test > hparams.epochs_per_scheduler_step:
-                self.logger.warning("Model is validated only every {} epochs, ".format(hparams.epochs_per_test) +
-                                    "but scheduler is supposed to run every {} epochs.".format(hparams.epochs_per_scheduler_step))
-            if hparams.epochs_per_test % hparams.epochs_per_scheduler_step != 0:
-                self.logger.warning("hparams.epochs_per_test ({}) % hparams.epochs_per_scheduler_step ({}) != 0. "
-                                    .format(hparams.epochs_per_test, hparams.epochs_per_scheduler_step) +
-                                    "Note that the scheduler is only run when current_epoch % " +
-                                    "hparams.epochs_per_scheduler_step == 0. Therefore hparams.epochs_per_scheduler_step " +
-                                    "should be a factor of hparams.epochs_per_test.")
-
-        t_start = timer()
-        self.logger.info('Start training: {}'.format(datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
-
         self.model_handler.set_optimiser(hparams)
         self.model_handler.set_scheduler(hparams, self.total_epoch if hparams.use_saved_learning_rate else 0)
-
-        assert(self.loss_function)  # Please set self.loss_function in the trainer construction.
         loss_function = self.loss_function.cuda() if hparams.use_gpu else self.loss_function
 
-        all_loss = list()  # List which is returned, containing all loss so that progress is visible.
+        all_loss = list()  # List which is returned, containing all losses so that progress is visible.
         all_loss_train = list()
         best_loss = np.nan
         start_epoch = self.total_epoch
 
+        self.log_memory(hparams.use_gpu)
+
+        t_start = timer()
+        self.logger.info('Start training: {}'.format(datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+
         # Compute error before first iteration.
         if hparams.start_with_test:
             self.logger.info('Test epoch [{}/{}]:'.format(start_epoch, start_epoch + hparams.epochs))
-            loss, loss_features = self.model_handler.test(hparams, start_epoch, start_epoch, loss_function)
+            best_loss, loss_features = self.model_handler.test(hparams, start_epoch, start_epoch, loss_function)
             all_loss_train.append(-1.0)  # Set a placeholder at the train losses.
-            all_loss.append(loss)
-            best_loss = loss  # Variable to save the current best loss.
+            all_loss.append(best_loss)
 
         for current_epoch in range(1, hparams.epochs + 1):
-            # Increment epoch number.
             self.total_epoch += 1
 
             # Train one epoch.
@@ -350,28 +331,73 @@ class ModelTrainer(object):
         self.logger.info('Loss train progress: ' + ', '.join('{:.4f}'.format(l) for l in all_loss_train))
 
         if hparams.out_dir is not None:
-            # Check if best model should be used as final model. Only possible when it was save in out_dir.
-            if hparams.use_best_as_final_model:
-                best_model_path = os.path.join(hparams.out_dir, hparams.networks_dir, hparams.checkpoints_dir, hparams.model_name + "-best")
-                try:
-                    self.total_epoch = self.model_handler.load_checkpoint(best_model_path,
-                                                                          hparams,
-                                                                          hparams.optimiser_args["lr"] if hparams.optimiser_args["lr"]
-                                                                                                         else hparams.learning_rate)
-                    if self.model_handler.ema:  # EMA model should be used as best model.
-                        self.model_handler.model = self.model_handler.ema.model
-                        self.model_handler.ema = None  # Reset this one so that a new one is created for further training.
-                        self.logger.info("Using best EMA model (epoch {}) as final model.".format(self.total_epoch))
-                    else:
-                        self.logger.info("Using best (epoch {}) as final model.".format(self.total_epoch))
-                except FileNotFoundError:
-                    self.logger.warning("No best model exists yet. Continue with the current one.")
+            # Check if best model should be used as final model. Only possible when it was saved in out_dir.
+            if hparams.use_best_as_final_model:# and min(all_loss) != all_loss[-1]:
+                self.load_best_model(hparams)
 
             # Save the model if requested.
             if hparams.save_final_model:
-                self.model_handler.save_checkpoint(os.path.join(hparams.out_dir, hparams.networks_dir, hparams.model_name), self.total_epoch)
+                self.save_checkpoint(hparams)
 
         return all_loss, all_loss_train, self.model_handler
+
+    def sanity_check_train(self, hparams):
+        assert self.model_handler is not None, "The init function has be called before training."
+
+        hparams.verify()  # Verify that attributes were added correctly, print warning for wrongly initialized ones.
+
+        # Some sanity checks.
+        if hparams.epochs_per_scheduler_step:
+            if hparams.epochs_per_test > hparams.epochs_per_scheduler_step:
+                self.logger.warning("Model is validated only every {} epochs, ".format(hparams.epochs_per_test) +
+                                    "but scheduler is supposed to run every {} epochs.".format(
+                                        hparams.epochs_per_scheduler_step))
+            if hparams.epochs_per_test % hparams.epochs_per_scheduler_step != 0:
+                self.logger.warning("hparams.epochs_per_test ({}) % hparams.epochs_per_scheduler_step ({}) != 0. "
+                                    .format(hparams.epochs_per_test, hparams.epochs_per_scheduler_step) +
+                                    "Note that the scheduler is only run when current_epoch % " +
+                                    "hparams.epochs_per_scheduler_step == 0. Therefore hparams.epochs_per_scheduler_step " +
+                                    "should be a factor of hparams.epochs_per_test.")
+
+        assert self.loss_function, "Please set self.loss_function in the trainer construction."
+
+    def log_validation_set(self):
+        sorted_keys = sorted(self.id_list_val)
+        self.logger.info("Validation set ({}): {}".format(len(self.id_list_val),
+                                                          ModelTrainer.id_list_to_str(sorted_keys)))
+
+    def log_test_set(self):
+        sorted_keys = sorted(self.id_list_test)
+        self.logger.info("Test set ({}): {}".format(len(sorted_keys),
+                                                    ModelTrainer.id_list_to_str(sorted_keys)))
+
+    @staticmethod
+    def id_list_to_str(id_list):
+        return " ".join([os.path.join(os.path.split(os.path.dirname(id_name))[-1],
+                                      os.path.splitext(os.path.basename(id_name))[0]) for id_name in id_list])
+
+    def load_best_model(self, hparams):
+        try:
+            best_model_path = os.path.join(hparams.out_dir,
+                                           hparams.networks_dir,
+                                           hparams.checkpoints_dir,
+                                           hparams.model_name + "-best")
+
+            self.total_epoch = self.model_handler.load_checkpoint(
+                                   best_model_path,
+                                   hparams,
+                                   ignore_layers=False,  # Load all layers of the best model.
+                                   load_optimiser=True,  # Load the optimiser state of the best model.
+                                   initial_lr=hparams.optimiser_args["lr"] if "lr" in hparams.optimiser_args
+                                                                           else hparams.learning_rate)
+            if self.model_handler.ema:  # EMA model should be used as best model.
+                self.model_handler.model = self.model_handler.ema.model
+                self.model_handler.ema = None  # Reset this one so that a new one is created for further training.
+                self.logger.info("Using best EMA model (epoch {}) as final model.".format(self.total_epoch))
+            else:
+                self.logger.info("Using best (epoch {}) as final model.".format(self.total_epoch))
+        except FileNotFoundError:
+            self.logger.warning("No best model exists yet. Continue with the current one.")
 
     @staticmethod
     def _input_to_str_list(input):

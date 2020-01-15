@@ -107,7 +107,10 @@ class ModelFactory(object):
         """Create a new instance of the class with PyTorch parameter initialization."""
         model_class = ModelFactory._type_to_class(model_type)
 
+        user_defined_model_type = hparams.model_type
+        hparams.model_type = model_type  # Some classes require a valid model_type, which could be None otherwise.
         model = model_class(dim_in, dim_out, hparams)
+        hparams.model_type = user_defined_model_type
 
         # Send model to gpu, if requested.
         if hparams.use_gpu:

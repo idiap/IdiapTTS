@@ -54,12 +54,14 @@ class ModelHandler(object):
         """
         raise NotImplementedError("Class %s doesn't implement create_model()" % self.__class__.__name__)
 
-    def load_checkpoint(self, file_path, hparams, initial_lr):
+    def load_checkpoint(self, file_path, hparams, ignore_layers, load_optimiser, initial_lr):
         """
         Load a checkpoint, also transfers to GPU if hparams.use_gpu is True.
 
         :param file_path:         Full path to checkpoint.
         :param hparams:           Hyper-parameter container. Needs to have use_gpu.
+        :param ignore_layers:     A list of layer names which should not be loaded.
+        :param load_optimiser:    Whether to load the optimiser state.
         :param initial_lr:        Learning rate of first epoch. Necessary when continuing training by some optimisers.
         :return:                  Nothing. The model is loaded to self.model.
         """
