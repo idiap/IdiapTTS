@@ -223,7 +223,7 @@ class WaveNetVocoderTrainer(ModelTrainer):
     # def synthesize(self, file_id_list, synth_output, hparams):
     #     self.run_raw_synth(synth_output, hparams)
 
-    # def synth_ref(self, hparams, file_id_list):
+    # def copy_synth(self, hparams, file_id_list):
     #     self.logger.info("Synthesise references for [{0}].".format(", ".join([id_name for id_name in file_id_list])))  # Can be different from original by sampling frequency.
     #
     #     synth_output = dict()

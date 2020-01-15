@@ -194,21 +194,21 @@ class TestWaveNetVocoderTrainer(unittest.TestCase):
 
         shutil.rmtree(hparams.out_dir)
 
-    def test_synth_ref(self):
+    def test_copy_synth(self):
         num_test_files = 2
 
         hparams = self._get_hparams()
-        hparams.out_dir = os.path.join(hparams.out_dir, "test_synth_ref")  # Add function name to path
+        hparams.out_dir = os.path.join(hparams.out_dir, "test_copy_synth")  # Add function name to path
         hparams.synth_ext = "wav"
 
         trainer = WaveNetVocoderTrainer(self.dir_world_features, self.id_list, hparams)
         trainer.init(hparams)
         hparams.synth_dir = hparams.out_dir
-        trainer.synth_ref(hparams, self.id_list[:num_test_files])
+        trainer.copy_synth(hparams, self.id_list[:num_test_files])
 
         found_files = list([name for name in os.listdir(hparams.synth_dir)
                             if os.path.isfile(os.path.join(hparams.synth_dir, name))
-                            and name.endswith(hparams.model_name + "_ref." + hparams.synth_ext)])
+                            and name.endswith("_ref." + hparams.synth_ext)])
         # Check number of created files.
         self.assertEqual(len(self.id_list[:num_test_files]), len(found_files),
                          msg="Number of {} files in synth_dir directory does not match.".format(hparams.synth_ext))

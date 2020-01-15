@@ -645,14 +645,14 @@ class ModelTrainer(object):
         raise NotImplementedError("Class {} doesn't implement gen_figure_from_output(id_name, output, hidden, hparams)"
                                   .format(self.__class__.__name__))
 
-    def synth_ref(self, hparams, file_id_list):
+    def copy_synth(self, hparams, file_id_list):
         if hparams.synth_vocoder == "WORLD":
             world_dir = hparams.world_dir if hasattr(hparams, "world_dir") and hparams.world_dir is not None\
                                           else os.path.join(self.OutputGen.dir_labels, self.dir_extracted_acoustic_features)
-            Synthesiser.synth_ref(hparams, file_id_list, world_dir)
+            Synthesiser.copy_synth(hparams, file_id_list, world_dir)
             hparams.synth_file_suffix += str(hparams.num_coded_sps) + 'sp'
         else:
-            Synthesiser.synth_ref(hparams, file_id_list)
+            Synthesiser.copy_synth(hparams, file_id_list)
 
     def synthesize(self, file_id_list, synth_output, hparams):
 

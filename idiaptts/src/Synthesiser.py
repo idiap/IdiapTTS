@@ -31,7 +31,7 @@ from idiaptts.src.neural_networks.pytorch.models.WaveNetWrapper import WaveNetWr
 class Synthesiser(object):
 
     @staticmethod
-    def run_world_synth(synth_output, hparams):
+    def run_world_synth(synth_output, hparams, use_model_name=True):
         """Run the WORLD synthesize method."""
 
         fft_size = pyworld.get_cheaptrick_fft_size(hparams.synth_fs)
@@ -66,9 +66,13 @@ class Synthesiser(object):
             # waveform = waveform.astype(np.float32, copy=False)  # Does inplace conversion, if possible.
 
             # Always save as wav file first and convert afterwards if necessary.
-            file_path = os.path.join(save_dir, "{}{}{}{}".format(os.path.basename(id_name),
-                                                                 "_" + hparams.model_name if hparams.model_name is not None else "",
-                                                                 hparams.synth_file_suffix, "_WORLD"))
+            file_path = os.path.join(save_dir, "{}{}{}{}"
+                                     .format(os.path.basename(id_name),
+                                             "_" + hparams.model_name if use_model_name
+                                                                         and hparams.model_name is not None
+                                                                      else "",
+                                             hparams.synth_file_suffix,
+                                             "_WORLD"))
             makedirs_safe(hparams.synth_dir)
             soundfile.write(file_path + ".wav", waveform, hparams.synth_fs)
 
@@ -80,9 +84,9 @@ class Synthesiser(object):
                 os.remove(file_path + ".wav")
 
     @staticmethod
-    def synth_ref(hparams, file_id_list, feature_dir=None):
+    def copy_synth(hparams, file_id_list, feature_dir=None):
         # Create reference audio files containing only the vocoder degradation.
-        logging.info("Synthesise references with {} for [{}]."
+        logging.info("Copy synthesis with {} for [{}]."
                      .format(hparams.synth_vocoder, ", ".join([id_name for id_name in file_id_list])))
 
         synth_dict = dict()
@@ -92,13 +96,19 @@ class Synthesiser(object):
             for id_name in file_id_list:
                 # Load reference audio features.
                 try:
-                    output = WorldFeatLabelGen.load_sample(id_name, feature_dir, num_coded_sps=hparams.num_coded_sps,
-                                                           num_bap=hparams.num_bap)
+                    output = WorldFeatLabelGen.load_sample(id_name,
+                                                           feature_dir,
+                                                           num_coded_sps=hparams.num_coded_sps,
+                                                           num_bap=hparams.num_bap,
+                                                           sp_type=hparams.sp_type)
                 except FileNotFoundError as e1:
                     try:
-                        output = WorldFeatLabelGen.load_sample(id_name, feature_dir, add_deltas=True,
+                        output = WorldFeatLabelGen.load_sample(id_name,
+                                                               feature_dir,
+                                                               add_deltas=True,
                                                                num_coded_sps=hparams.num_coded_sps,
-                                                               num_bap=hparams.num_bap)
+                                                               num_bap=hparams.num_bap,
+                                                               sp_type=hparams.sp_type)
                         coded_sp, lf0, vuv, bap = WorldFeatLabelGen.convert_to_world_features(
                                                        output,
                                                        contains_deltas=True,
@@ -117,14 +127,14 @@ class Synthesiser(object):
 
             # Add identifier to suffix.
             old_synth_file_suffix = hparams.synth_file_suffix
-            hparams.synth_file_suffix += str(hparams.num_coded_sps) + 'sp'
-            Synthesiser.run_world_synth(synth_dict, hparams)
+            hparams.synth_file_suffix += str(hparams.num_coded_sps) + hparams.sp_type
+            Synthesiser.run_world_synth(synth_dict, hparams, use_model_name=False)
         elif hparams.synth_vocoder == "raw":
             for id_name in file_id_list:
                 # Use extracted data. Useful to create a reference.
                 raw = RawWaveformLabelGen.load_sample(id_name, hparams.frame_rate_output_Hz)
                 synth_dict[id_name] = raw
-            Synthesiser.run_raw_synth(synth_dict, hparams)
+            Synthesiser.run_raw_synth(synth_dict, hparams, use_model_name=False)
         else:
             raise NotImplementedError("Unknown vocoder type {}.".format(hparams.synth_vocoder))
 
@@ -132,13 +142,15 @@ class Synthesiser(object):
         hparams.synth_file_suffix = old_synth_file_suffix
 
     @staticmethod
-    def run_raw_synth(synth_output, hparams):
+    def run_raw_synth(synth_output, hparams, use_model_name=True):
         """Use Pydub to synthesis audio from raw data given in the synth_output dictionary."""
 
         for id_name, raw in synth_output.items():
             # Save the audio.
-            wav_file_path = os.path.join(hparams.synth_dir, "".join((os.path.basename(id_name).rsplit('.', 1)[0], "_",
-                                                                     hparams.model_name, hparams.synth_file_suffix, ".",
+            wav_file_path = os.path.join(hparams.synth_dir, "".join((os.path.basename(id_name).rsplit('.', 1)[0],
+                                                                     "_" + hparams.model_name if use_model_name else "",
+                                                                     hparams.synth_file_suffix,
+                                                                     ".",
                                                                      hparams.synth_ext)))
             Synthesiser.raw_to_file(wav_file_path, raw, hparams.synth_fs, hparams.bit_depth)
 

@@ -599,11 +599,11 @@ class TestModelTrainer(unittest.TestCase):
 
         shutil.rmtree(hparams.out_dir)
 
-    def test_synth_ref(self):
+    def test_copy_synth(self):
         num_test_files = 2
 
         hparams = self._get_hparams()
-        hparams.out_dir = os.path.join(hparams.out_dir, "test_synth_ref")  # Add function name to path
+        hparams.out_dir = os.path.join(hparams.out_dir, "test_copy_synth")  # Add function name to path
         hparams.model_name = "test_model_in409_out67.nn"
         hparams.model_path = os.path.join("integration", "fixtures", hparams.model_name)
         hparams.load_checkpoint = True
@@ -614,14 +614,14 @@ class TestModelTrainer(unittest.TestCase):
         trainer = self._get_trainer(hparams)
         trainer.init(hparams)
         hparams.synth_dir = hparams.out_dir
-        trainer.synth_ref(hparams, self.id_list[:num_test_files])
+        trainer.copy_synth(hparams, self.id_list[:num_test_files])
 
         found_files = list([name for name in os.listdir(hparams.synth_dir)
                             if os.path.isfile(os.path.join(hparams.synth_dir, name))
-                            and name.endswith("_ref{}sp_WORLD.{}".format(hparams.num_coded_sps, hparams.synth_ext))])
+                            and name.endswith("_ref{}{}_WORLD.{}".format(hparams.num_coded_sps, hparams.sp_type, hparams.synth_ext))])
         found_files_wav = list([name for name in os.listdir(hparams.synth_dir)
                                 if os.path.isfile(os.path.join(hparams.synth_dir, name))
-                                and name.endswith("_ref{}sp_WORLD.wav".format(hparams.num_coded_sps))])
+                                and name.endswith("_ref{}{}_WORLD.wav".format(hparams.num_coded_sps, hparams.sp_type))])
         # Check number of created files.
         self.assertEqual(len(self.id_list[:num_test_files]), len(found_files),
                          msg="Number of {} files in synth_dir directory does not match.".format(hparams.synth_ext))
