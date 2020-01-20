@@ -12,6 +12,7 @@
 """
 
 # System imports.
+import copy
 import logging
 import numpy as np
 import os
@@ -63,8 +64,12 @@ class VTLNSpeakerAdaptionModelTrainer(AcousticModelTrainer):
 
     def _get_dummy_warping_layer(self, hparams):
         """Create a warping layer for manual warping."""
+        hparams = copy.deepcopy(hparams)
         prev_add_deltas = hparams.add_deltas
         hparams.add_deltas = False
+        hparams.pre_net_model_name = None
+        hparams.pre_net_model_path = None
+        hparams.pre_net_model_type = None
         wl = WarpingLayer((hparams.num_coded_sps,), (hparams.num_coded_sps,), hparams)
         hparams.add_deltas = prev_add_deltas
         if hparams.use_gpu:

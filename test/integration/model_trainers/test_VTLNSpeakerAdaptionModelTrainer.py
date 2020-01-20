@@ -145,6 +145,30 @@ class TestVTLNSpeakerAdaptionModelTrainer(unittest.TestCase):
 
         shutil.rmtree(hparams.out_dir)
 
+    def test_train_double_embedding(self):
+        hparams = self._get_hparams()
+        hparams.out_dir = os.path.join(hparams.out_dir, "test_train")  # Add function name to path.
+        hparams.seed = 1234
+        hparams.use_best_as_final_model = False
+        hparams.pre_net_model_type = "RNNDYN-2x{}_EMB_(-1)-3x64_EMB_(-1)-1_RELU_32-1_FC_67".format(hparams.num_speakers)
+        hparams.pass_embs_to_pre_net = True
+        hparams.f_get_emb_index = (lambda id_name, length: numpy.zeros((length, 1)),
+                                   lambda id_name, length: numpy.zeros((length, 1)))
+
+        trainer = VTLNSpeakerAdaptionModelTrainer(self.dir_world_features,
+                                                  self.dir_question_labels,
+                                                  self.id_list,
+                                                  hparams.num_questions,
+                                                  hparams)
+        trainer.init(hparams)
+        _, all_loss_train, _ = trainer.train(hparams)
+
+        # Training loss decreases?
+        self.assertLess(all_loss_train[-1], all_loss_train[1 if hparams.start_with_test else 0],
+                        msg="Loss did not decrease over {} epochs".format(hparams.epochs))
+
+        shutil.rmtree(hparams.out_dir)
+
     def test_benchmark(self):
         hparams = self._get_hparams()
         hparams.out_dir = os.path.join(hparams.out_dir, "test_benchmark")  # Add function name to path.
