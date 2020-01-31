@@ -39,7 +39,8 @@ downsample() {
                     ${dir_data}/${name_file_id_list}_blockJOB \
                     ${target_frame_rate}
 
-    cp -R -u -p "${dir_audio}_org/*" "${dir_audio}"  # -u copy only when source is newer than destination file or if is missing, -p preserve mode, ownership, timestamps etc.
+    echo "Copy unchanged files in downsample step..."
+    cp -R -u -p "${dir_audio}_org/"* "${dir_audio}"  # -u copy only when source is newer than destination file or if is missing, -p preserve mode, ownership, timestamps etc.
     rm -r -f "${dir_audio}_org"/
 
     # Print errors and warnings.
@@ -57,7 +58,7 @@ remove_silence() {
     mv "${dir_audio}" "${dir_audio}_org_silence"/
     mkdir -p "${dir_audio}"
 
-    # python ${dir_src}/data_preparation/audio/silence_remove.py --dir_wav "${dir_audio}_org_silence"/ --dir_out "${dir_audio}/" --file_id_list "database/file_id_list_full.txt"
+    # python ${dir_src}/data_preparation/audio/silence_remove.py --dir_wav "${dir_audio}_org_silence"/ --dir_out "${dir_audio}/" --file_id_list "database/file_id_list_full.txt" --silence_db ${silence_db} --min_silence_ms ${min_silence_ms}
 
     ./${cpu_1d_cmd} JOB=1:${num_blocks} ${dir_logs}/${name_file_id_list}_silence_removal_blockJOB.log \
          ${dir_src}/data_preparation/audio/silence_remove.py \
@@ -68,7 +69,8 @@ remove_silence() {
                 --min_silence_ms ${min_silence_ms}
 
     # Copy files not touched in this remove silence step.
-    cp -R -u -p "${dir_audio}_org_silence/*" "${dir_audio}/"  # -u copy only when source is newer than destination file or if is missing, -p preserve mode, ownership, timestamps etc.
+    echo "Copy unchanged files in remove silence step..."
+    cp -R -u -p "${dir_audio}_org_silence/"* "${dir_audio}/"  # -u copy only when source is newer than destination file or if it is missing, -p preserve mode, ownership, timestamps etc.
 
     # Remove intermediate files.
     rm -r -f "${dir_audio}_org_silence"/
@@ -76,6 +78,65 @@ remove_silence() {
     # Print errors and save warnings.
     eval grep --ignore-case "WARNING" "${dir_logs}/${name_file_id_list}_silence_removal_block{1..${num_blocks}}.log" >| "${dir_logs}/${name_file_id_list}_silence_removal_WARNINGS.txt"
     eval grep --ignore-case "ERROR" "${dir_logs}/${name_file_id_list}_silence_removal_block{1..${num_blocks}}.log"
+}
+
+normalize_loudness() {
+    ref_rms=${1:-"0.1"}
+
+    echo "Normalize loudness..."
+
+    rm -r -f "${dir_audio}_org_loudness"/
+    mv "${dir_audio}" "${dir_audio}_org_loudness"/
+    mkdir -p "${dir_audio}"
+
+    ./${cpu_1d_cmd} JOB=1:${num_blocks} ${dir_logs}/loudness_normalization_${name_file_id_list}_blockJOB.log \
+         ${dir_src}/data_preparation/audio/normalize_loudness.py \
+                --dir_wav ${dir_audio}_org_loudness/ \
+                --dir_out ${dir_audio}/ \
+                --file_id_list ${dir_data}/${name_file_id_list}_blockJOB \
+                --ref_rms ${ref_rms}
+
+    echo "Copy unchanged files in normalize loudness step..."
+    cp -R -u -p "${dir_audio}_org_loudness/"* "${dir_audio}/"  # -u copy only when source is newer than destination file or if it is missing, -p preserve mode, ownership, timestamps etc.
+
+    # Remove intermediate files.
+    rm -r -f "${dir_audio}_org_loudness"/
+
+    # Print errors and save warnings.
+    eval grep --ignore-case "WARNING" "${dir_logs}/loudness_normalization_${name_file_id_list}_block{1..${num_blocks}}.log" >| "${dir_logs}/loudness_normalization_${name_file_id_list}_WARNINGS.txt"
+    eval grep --ignore-case "ERROR" "${dir_logs}/loudness_normalization_${name_file_id_list}_block{1..${num_blocks}}.log"
+}
+
+high_pass_filter() {
+
+    stop_freq_Hz=${1:-"70"}
+    pass_freq_Hz=${2:-"100"}
+    filter_order=${3:-"1001"}
+
+    echo "High pass filtering..."
+
+    rm -r -f "${dir_audio}_org_signal"/
+    mv "${dir_audio}" "${dir_audio}_org_signal"/
+    mkdir -p "${dir_audio}"
+
+    ./${cpu_1d_cmd} JOB=1:${num_blocks} ${dir_logs}/high_pass_filtering_${name_file_id_list}_blockJOB.log \
+         ${dir_src}/data_preparation/audio/high_pass_filter.py \
+                --dir_wav ${dir_audio}_org_signal/ \
+                --dir_out ${dir_audio}/ \
+                --file_id_list ${dir_data}/${name_file_id_list}_blockJOB \
+                --stop_freq_Hz ${stop_freq_Hz} \
+                --pass_freq_Hz ${pass_freq_Hz} \
+                --filter_order ${filter_order}
+
+    echo "Copy unchanged files in high pass filtering step..."
+    cp -R -u -p "${dir_audio}_org_signal/"* "${dir_audio}/"  # -u copy only when source is newer than destination file or if it is missing, -p preserve mode, ownership, timestamps etc.
+
+    # Remove intermediate files.
+#    rm -r -f "${dir_audio}_org_signal"/
+
+    # Print errors and save warnings.
+    eval grep --ignore-case "WARNING" "${dir_logs}/high_pass_filtering_${name_file_id_list}_block{1..${num_blocks}}.log" >| "${dir_logs}/high_pass_filtering_${name_file_id_list}_WARNINGS.txt"
+    eval grep --ignore-case "ERROR" "${dir_logs}/high_pass_filtering_${name_file_id_list}_block{1..${num_blocks}}.log"
 }
 
 remove_long_files() {
