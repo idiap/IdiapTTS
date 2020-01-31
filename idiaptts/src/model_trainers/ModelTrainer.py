@@ -525,8 +525,8 @@ class ModelTrainer(object):
         :return:               (Dictionary of network outputs, dictionary of post-processed (by self.OutputGen) network outputs)
         """
 
-        assert(self.model_handler is not None)  # Check if trainer.init() was called before.
-        assert(hparams.synth_dir is not None)  # Directory to store the generated audio files has to be set.
+        assert self.model_handler is not None, "Check if trainer.init() was called before."
+        assert hparams.synth_dir is not None, "Directory to store the generated audio files has to be set."
         makedirs_safe(hparams.synth_dir)
         id_list = ModelTrainer._input_to_str_list(ids_input)
 
@@ -673,8 +673,13 @@ class ModelTrainer(object):
 
     def copy_synth(self, hparams, file_id_list):
         if hparams.synth_vocoder == "WORLD":
-            world_dir = hparams.world_dir if hasattr(hparams, "world_dir") and hparams.world_dir is not None\
-                                          else os.path.join(self.OutputGen.dir_labels, self.dir_extracted_acoustic_features)
+            if hparams.has_value("world_dir"):
+                world_dir = hparams.world_dir
+            elif hasattr(self.OutputGen, "dir_labels") and self.OutputGen.dir_labels is not None:
+                world_dir = os.path.join(self.OutputGen.dir_labels, self.dir_extracted_acoustic_features)
+            else:
+                raise FileNotFoundError("Directory of WORLD labels is unkown. Please set it in hparams.world_dir.")
+
             Synthesiser.copy_synth(hparams, file_id_list, world_dir)
             hparams.synth_file_suffix += str(hparams.num_coded_sps) + 'sp'
         else:

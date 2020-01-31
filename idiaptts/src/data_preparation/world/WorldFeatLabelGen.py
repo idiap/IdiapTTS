@@ -237,8 +237,8 @@ class WorldFeatLabelGen(LabelGen):
             if self.load_vuv:
                 vuv = sample[:, num_processed_features]
                 num_processed_features += 1
-                vuv[vuv < 0.5] = 0.0
-                vuv[vuv >= 0.5] = 1.0
+                vuv[vuv <= 0.5] = 0.0
+                vuv[vuv > 0.5] = 1.0
                 vuv = vuv[:, None]
                 output_list.append(vuv)
 
@@ -360,7 +360,7 @@ class WorldFeatLabelGen(LabelGen):
         # If not all features are present also deltas features are saved separately.
         saved_as_cmp = self.add_deltas and self.load_sp and self.load_lf0 and self.load_vuv and self.load_bap
 
-        if not saved_as_cmp:# Collect all requested means and std_dev in a list.
+        if not saved_as_cmp:  # Collect all requested means and std_dev in a list.
             try:
                 all_mean = list()
                 all_std_dev = list()
@@ -428,9 +428,14 @@ class WorldFeatLabelGen(LabelGen):
                         except FileNotFoundError as e2:
                             raise FileNotFoundError([e1, e2])
 
-                    # Assign to covariances.
+                    if not self.add_deltas:
+                        no_deltas_feature_len = len(cov) // 3
+                        assert len(cov) / 3 == no_deltas_feature_len,\
+                            "Feature size {} is not dividable by 3. Are deltas features contained?"
+                        cov = cov[:no_deltas_feature_len, :no_deltas_feature_len]
+                        mean = mean[:no_deltas_feature_len]
+                        std_dev = std_dev[:no_deltas_feature_len]
                     self.covs[cov_idx] = cov
-                    # Assign to output.
                     output_means.append(np.atleast_2d(mean))
                     output_std_devs.append(np.atleast_2d(std_dev))
                 else:

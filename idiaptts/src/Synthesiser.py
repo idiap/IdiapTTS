@@ -55,16 +55,6 @@ class Synthesiser(object):
             waveform = WorldFeatLabelGen.world_features_to_raw(amp_sp, lf0, vuv, bap,
                                                                fs=hparams.synth_fs, n_fft=fft_size, **args)
 
-            # f0 = np.exp(lf0, dtype=np.float64)
-            # vuv[f0 < WorldFeatLabelGen.f0_silence_threshold] = 0  # WORLD throws an error for too small f0 values.
-            # f0[vuv == 0] = 0.0
-            # ap = pyworld.decode_aperiodicity(np.ascontiguousarray(bap.reshape(-1, 1), np.float64),
-            #                                  hparams.synth_fs,
-            #                                  fft_size)
-            #
-            # waveform = pyworld.synthesize(f0, amp_sp, ap, hparams.synth_fs)
-            # waveform = waveform.astype(np.float32, copy=False)  # Does inplace conversion, if possible.
-
             # Always save as wav file first and convert afterwards if necessary.
             file_path = os.path.join(save_dir, "{}{}{}{}"
                                      .format(os.path.basename(id_name),
@@ -129,7 +119,7 @@ class Synthesiser(object):
             old_synth_file_suffix = hparams.synth_file_suffix
             hparams.synth_file_suffix += str(hparams.num_coded_sps) + hparams.sp_type
             Synthesiser.run_world_synth(synth_dict, hparams, use_model_name=False)
-        elif hparams.synth_vocoder == "raw":
+        elif hparams.synth_vocoder == "raw" or hparams.synth_vocoder.starts_with("r9y9wavenet"):
             for id_name in file_id_list:
                 # Use extracted data. Useful to create a reference.
                 raw = RawWaveformLabelGen.load_sample(id_name, hparams.frame_rate_output_Hz)
@@ -179,6 +169,8 @@ class Synthesiser(object):
     @staticmethod
     def run_r9y9wavenet_mulaw_world_feats_synth(synth_output, hparams):
 
+        hparams = copy.deepcopy(hparams)
+
         # If no path is given, use pre-trained model.
         if not hasattr(hparams, "synth_vocoder_path") or hparams.synth_vocoder_path is None:
             parent_dirs = os.path.realpath(__file__).split(os.sep)
@@ -191,10 +183,8 @@ class Synthesiser(object):
             hparams.add_hparam("mu", 255)
 
         if hasattr(hparams, 'frame_rate_output_Hz'):
-            org_frame_rate_output_Hz = hparams.frame_rate_output_Hz
             hparams.frame_rate_output_Hz = 16000
         else:
-            org_frame_rate_output_Hz = None
             hparams.add_hparam("frame_rate_output_Hz", 16000)
 
         synth_output = copy.copy(synth_output)
@@ -210,17 +200,12 @@ class Synthesiser(object):
                 synth_output[id_name] = WorldFeatLabelGen.convert_from_world_features(coded_sp, lf0, vuv, bap)
 
         if hasattr(hparams, 'bit_depth'):
-            org_bit_depth = hparams.bit_depth
             hparams.bit_depth = 16
         else:
-            org_bit_depth = None
             hparams.add_hparam("bit_depth", 16)
 
         Synthesiser.run_wavenet_vocoder(synth_output, hparams)
 
-        # Restore identifier.
-        hparams.setattr_no_type_check("bit_depth", org_bit_depth)  # Can be None, thus no type check.
-        hparams.setattr_no_type_check("frame_rate_output_Hz", org_frame_rate_output_Hz)  # Can be None.
 
     @staticmethod
     def run_wavenet_vocoder(synth_output, hparams):
@@ -228,8 +213,11 @@ class Synthesiser(object):
         from idiaptts.src.neural_networks.pytorch.ModelHandlerPyTorch import ModelHandlerPyTorch
 
         assert hparams.synth_vocoder_path is not None, "Please set path to neural vocoder in hparams.synth_vocoder_path"
+
+        hparams = copy.deepcopy(hparams)
+        hparams.model_type = "r9y9WaveNet"
+
         # Add identifier to suffix.
-        old_synth_file_suffix = hparams.synth_file_suffix
         hparams.synth_file_suffix += '_' + hparams.synth_vocoder
 
         if not hasattr(hparams, 'bit_depth'):
@@ -291,7 +279,4 @@ class Synthesiser(object):
                                                   hparams.synth_ext)))
             Synthesiser.raw_to_file(wav_file_path, synth_output[id_name], hparams.synth_fs, hparams.bit_depth)
 
-        # Restore identifier.
-        hparams.setattr_no_type_check("synth_file_suffix", old_synth_file_suffix)  # Can be None, thus no type check.
-
-        # TODO: Convert to requested frame rate. if org_frame_rate_output_Hz != 16000:
+        # TODO: Convert to requested frame rate. if org_frame_rate_output_Hz != 16000. This only holds for 16kHz wavenet.

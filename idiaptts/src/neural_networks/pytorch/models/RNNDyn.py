@@ -301,54 +301,9 @@ class RNNDyn(nn.Module):
 
     def forward_var_seq_len_concat(self, input, hidden, seq_lengths_input, max_length_inputs, target=None, seq_lengths_output=None):
         """Forward one input through all layer groups, does not use the hidden parameter."""
-        raise NotImplementedError("This function is not longer supported.")
-    #     total_length = np.sum(seq_lengths_input, dtype=np.int)
-    #
-    #     # This one does not accept embeddings.
-    #     output = input
-    #
-    #     last_hidden = None
-    #     for group in self.layer_groups:
-    #         if group.is_rnn:
-    #             # Remove the batch dimension, split concatenated tensor, and pack it for RNN.
-    #             in_out_multiplier = int(output.size()[0] / total_length)
-    #             current_seq_length = tuple([in_out_multiplier * l for l in seq_lengths_input])
-    #
-    #             output = output[:, 0].split(current_seq_length, dim=0)
-    #             output = pack_sequence(output)
-    #
-    #             # Forward through RNN.
-    #             output, group.hidden = group[0](output, group.hidden)  # If group.hidden is not set here, init_hidden was not called.
-    #             last_hidden = group.hidden
-    #
-    #             # Reverse packing and concatenate again.
-    #             output, _ = pad_packed_sequence(output, total_length=max_length_inputs)
-    #             output = torch.cat([x[:current_seq_length[i], :] for i, x in enumerate(output.split(1, dim=1))])
-    #
-    #             output = self.drop(output)  # Dropout is by default not applied to last rnn layer.
-    #         else:
-    #             if group.nonlin is None:
-    #                 for layer in group:
-    #                     output = self.drop(layer(output))
-    #             else:
-    #                 for layer in group:
-    #                     if group.nonlin is F.softmax:
-    #                         output = self.drop(group.nonlin(layer(output), dim=2))
-    #                     else:
-    #                         output = self.drop(group.nonlin(layer(output)))
-    #         # Only save the output of each group.
-    #         if self.save_intermediate_outputs:
-    #             group.output = output
-    #
-    #     return output, last_hidden
+        raise NotImplementedError("This function is no longer supported.")
 
     def init_hidden(self, batch_size=1):
-        """
-        Initialize the hidden of every RNN layer.
-        The hidden is stored in group.hidden.
-
-        :return: None
-        """
         for group in self.layer_groups:
             if group.is_rnn:
                 group.hidden = self.group_init_hidden(group, batch_size)
@@ -380,6 +335,18 @@ class RNNDyn(nn.Module):
             else:
                 layer_idx += group.n_layers
         raise KeyError("The model contains only {} layers.".format(layer_idx))
+
+    def get_embeddings(self):
+        return self.emb_groups
+
+    def get_group_out_dim(self, group_idx):
+        group = self.layer_groups[group_idx]
+        return group.out_dim * (2 if group.is_rnn else 1)
+
+    def get_intermediate_output(self, group_idx=-1):
+        assert self.save_intermediate_outputs,\
+            "Cannot access intermediate output because hparams.save_intermediate_outputs is False."
+        return self.layer_groups[group_idx].output
 
 
 class MerlinAcoustic(RNNDyn):

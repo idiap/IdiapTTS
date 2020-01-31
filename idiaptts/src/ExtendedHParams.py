@@ -30,7 +30,7 @@ class ExtendedHParams(HParams):
         """Override to use super().__setattr_(...) function instead to prevent an infinite loop."""
         param_type, is_list = self._hparam_types[name]
         if isinstance(value, list):
-            if not is_list:
+            if not param_type is type(None) and not is_list:
                 raise ValueError('Must not pass a list for single-valued parameter: %s' % name)
             super().__setattr__(name, [self._cast_to_type_if_compatible(name, param_type, v) for v in value])
         else:
@@ -85,6 +85,9 @@ class ExtendedHParams(HParams):
         values = self.values()
         hp = ['  %s: %s' % (name, values[name]) for name in sorted(values)]
         return 'Hyperparameters:\n' + '\n'.join(hp)
+
+    def has_value(self, attribute):
+        return hasattr(self, attribute) and self.__getattribute__(attribute) is not None
 
     @staticmethod
     def create_hparams(hparams_string=None, verbose=False):
@@ -221,7 +224,10 @@ class ExtendedHParams(HParams):
             ################################
             # Synthesis Parameters         #
             ################################
-            synth_vocoder="WORLD",  # "WORLD", "r9y9wavenet_quantized_16k_world_feats"
+            synth_vocoder="WORLD",  # "WORLD", "r9y9wavenet", "r9y9wavenet_quantized_16k_world_feats"
+            synth_vocoder_path=None,  # Full path to saved vocoder model, otherwise the one at idiaptts/misc/pretrained/ is used.
+                                      # The folder also has to contain the normalisation parameters used during training
+                                      # named like the model but instead of the file extension ending with _norm_params.npy.
             synth_ext="wav",  # Extension of the output audio.
             synth_fs=16000,
             sp_type="mcep",

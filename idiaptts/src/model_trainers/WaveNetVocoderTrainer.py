@@ -220,28 +220,6 @@ class WaveNetVocoderTrainer(ModelTrainer):
         plotter.gen_plot()
         plotter.save_to_file(filename + '.Raw' + hparams.gen_figure_ext)
 
-    # def synthesize(self, file_id_list, synth_output, hparams):
-    #     self.run_raw_synth(synth_output, hparams)
-
-    # def copy_synth(self, hparams, file_id_list):
-    #     self.logger.info("Synthesise references for [{0}].".format(", ".join([id_name for id_name in file_id_list])))  # Can be different from original by sampling frequency.
-    #
-    #     synth_output = dict()
-    #     for id_name in file_id_list:
-    #         # Use extracted data. Useful to create a reference.
-    #         raw = RawWaveformLabelGen.load_sample(id_name, self.OutputGen.frame_rate_output_Hz)
-    #         synth_output[id_name] = raw
-    #
-    #     # Add identifier to suffix.
-    #     old_synth_file_suffix = hparams.synth_file_suffix
-    #     hparams.synth_file_suffix += '_ref'
-    #
-    #     # Run the WORLD synthesiser.
-    #     self.run_raw_synth(synth_output, hparams)
-    #
-    #     # Restore identifier.
-    #     hparams.synth_file_suffix = old_synth_file_suffix
-
     def save_for_vocoding(self, filename):
         # Save the full model so that hyper-parameters are already set.
         self.model_handler.save_full_model(filename, self.model_handler.model, verbose=True)

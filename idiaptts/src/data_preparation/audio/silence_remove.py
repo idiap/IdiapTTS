@@ -27,8 +27,6 @@ from idiaptts.src.data_preparation.world.WorldFeatLabelGen import WorldFeatLabel
 
 
 class SilenceRemover(object):
-    """Class description.
-    """
     logger = logging.getLogger(__name__)
 
     def __init__(self, min_silence_ms=200):
