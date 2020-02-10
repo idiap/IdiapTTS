@@ -104,11 +104,13 @@ class TestRNNDyn(unittest.TestCase):
     #     """
     #     precision = 0.05  # Precision used for steps in that range.
     #     delta = 0.05  # Allowed delta of error.
+    #     alpha_range = 0.2  # Range of alpha to test in.
     #
+    #     from idiaptts.src.model_trainers.vtln.VTLNSpeakerAdaptionModelTrainer import VTLNSpeakerAdaptionModelTrainer
+    #     from idiaptts.src.neural_networks.pytorch.layers.AllPassWarp import AllPassWarp
     #     hparams = VTLNSpeakerAdaptionModelTrainer.create_hparams()
     #     hparams.out_dir = os.path.join(self.out_dir, "test_compare_to_recursive_matrix")  # Add function name to path.
-    #     wl = WarpingLayer(10, 4, hparams)
-    #     alpha_range = wl.alpha_range  # Range of alpha to test in.
+    #     wl = AllPassWarp(10, hparams)
     #     assert (precision < 2 * alpha_range)  # Precision must fit in range.
     #
     #     for alpha_value in numpy.arange(-alpha_range, alpha_range + precision, precision):

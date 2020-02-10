@@ -13,10 +13,10 @@ import numpy
 
 from idiaptts.src.model_trainers.vtln.VTLNSpeakerAdaptionModelTrainer import VTLNSpeakerAdaptionModelTrainer
 from idiaptts.misc.utils import makedirs_safe
-from idiaptts.src.neural_networks.pytorch.models.WarpingLayer import WarpingLayer
+from idiaptts.src.neural_networks.pytorch.layers.AllPassWarp import AllPassWarp
 
 
-class TestWarpingLayer(unittest.TestCase):
+class TestAllPassWarp(unittest.TestCase):
 
     out_dir = None
 
@@ -34,14 +34,14 @@ class TestWarpingLayer(unittest.TestCase):
         Compare the element-wise computed gradient matrix with the recursively generate matrix for alphas in
         range(-alpha_range, alpha_range, precision).
         """
+        alpha_range = 0.2  # Range of alpha to test in.
         precision = 0.05  # Precision used for steps in that range.
         delta = 0.05  # Allowed delta of error.
 
         hparams = VTLNSpeakerAdaptionModelTrainer.create_hparams()
         hparams.out_dir = os.path.join(self.out_dir, "test_compare_to_recursive_matrix")  # Add function name to path.
-        hparams.num_speakers = 1
-        wl = WarpingLayer(10, 4, hparams)
-        alpha_range = wl.alpha_range  # Range of alpha to test in.
+        hparams.add_hparam("num_speakers", 1)
+        wl = AllPassWarp(10, hparams)
         assert (precision < 2 * alpha_range)  # Precision must fit in range.
 
         for alpha_value in numpy.arange(-alpha_range, alpha_range + precision, precision):

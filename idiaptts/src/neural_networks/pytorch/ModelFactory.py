@@ -18,6 +18,7 @@ import logging
 # Local source tree imports.
 from idiaptts.src.neural_networks.pytorch.models.RNNDyn import *
 from idiaptts.src.neural_networks.pytorch.models.WarpingLayer import WarpingLayer
+from idiaptts.src.neural_networks.pytorch.models.AllPassWarpModel import AllPassWarpModel
 
 
 class ModelFactory(object):

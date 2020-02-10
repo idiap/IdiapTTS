@@ -13,6 +13,7 @@ import warnings
 
 from idiaptts.src.model_trainers.vtln.VTLNSpeakerAdaptionModelTrainer import VTLNSpeakerAdaptionModelTrainer
 from idiaptts.src.neural_networks.pytorch.utils import equal_checkpoint
+from idiaptts.src.neural_networks.EmbeddingConfig import EmbeddingConfig
 
 
 class TestVTLNSpeakerAdaptionModelTrainer(unittest.TestCase):
@@ -44,7 +45,7 @@ class TestVTLNSpeakerAdaptionModelTrainer(unittest.TestCase):
         # Training parameters.
         hparams.epochs = 3
         hparams.use_gpu = False
-        hparams.model_type = "VTLN"
+        hparams.model_type = "AllPassWarp"
         hparams.model_name = "VTLN.nn"
         hparams.batch_size_train = 2
         hparams.batch_size_val = 50
@@ -54,8 +55,6 @@ class TestVTLNSpeakerAdaptionModelTrainer(unittest.TestCase):
         hparams.epochs_per_checkpoint = 2
 
         # hparams.pass_embs_to_pre_net = False
-        hparams.num_speakers = 2
-        hparams.f_get_emb_index = (lambda id_name, length: numpy.zeros((length, hparams.num_speakers)),)
         hparams.pre_net_model_type = "RNNDYN-1_RELU_32-1_FC_67"
         hparams.pre_net_model_name = "pre-net.nn"
 
@@ -150,10 +149,10 @@ class TestVTLNSpeakerAdaptionModelTrainer(unittest.TestCase):
         hparams.out_dir = os.path.join(hparams.out_dir, "test_train")  # Add function name to path.
         hparams.seed = 1234
         hparams.use_best_as_final_model = False
-        hparams.pre_net_model_type = "RNNDYN-2x{}_EMB_(-1)-3x64_EMB_(-1)-1_RELU_32-1_FC_67".format(hparams.num_speakers)
-        hparams.pass_embs_to_pre_net = True
-        hparams.f_get_emb_index = (lambda id_name, length: numpy.zeros((length, 1)),
-                                   lambda id_name, length: numpy.zeros((length, 1)))
+        hparams.pre_net_model_type = "RNNDYN-2x2_EMB_(-1)-3x64_EMB_(-1)-1_RELU_32-1_FC_67"
+        hparams.alpha_ranges.append(0.2)
+        hparams.add_hparam("embeddings", [(EmbeddingConfig(lambda id_name, length: numpy.zeros((length, 1)), 2, 2), True, True)])
+        hparams.embeddings += [(EmbeddingConfig(lambda id_name, length: numpy.zeros((length, 2)), 3, 64), True, True)]
 
         trainer = VTLNSpeakerAdaptionModelTrainer(self.dir_world_features,
                                                   self.dir_question_labels,
@@ -182,7 +181,7 @@ class TestVTLNSpeakerAdaptionModelTrainer(unittest.TestCase):
         trainer.init(hparams)
         scores = trainer.benchmark(hparams)
 
-        numpy.testing.assert_almost_equal((9.401, 78.124, 0.609, 38.964), scores, 3, "Wrong benchmark score.")
+        numpy.testing.assert_almost_equal((8.923, 78.4, 0.609, 37.352), scores, 3, "Wrong benchmark score.")
 
         shutil.rmtree(hparams.out_dir)
 

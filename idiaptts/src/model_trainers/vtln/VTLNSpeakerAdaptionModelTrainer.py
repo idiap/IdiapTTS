@@ -27,7 +27,7 @@ from idiaptts.src.model_trainers.AcousticModelTrainer import AcousticModelTraine
 from idiaptts.src.data_preparation.world.WorldFeatLabelGen import WorldFeatLabelGen
 from idiaptts.src.data_preparation.questions.QuestionLabelGen import QuestionLabelGen
 from idiaptts.src.DataPlotter import DataPlotter
-from idiaptts.src.neural_networks.pytorch.models.WarpingLayer import WarpingLayer
+from idiaptts.src.neural_networks.pytorch.models.AllPassWarpModel import AllPassWarpModel
 
 
 class VTLNSpeakerAdaptionModelTrainer(AcousticModelTrainer):
@@ -36,7 +36,11 @@ class VTLNSpeakerAdaptionModelTrainer(AcousticModelTrainer):
 
     def init(self, hparams):
         self.logger.info("Create VTLN model.")
+
         super().init(hparams)
+        self._load_norm_params(hparams)
+
+    def _load_norm_params(self, hparams):
         sp_mean = self.OutputGen.norm_params[0][:hparams.num_coded_sps * (3 if hparams.add_deltas else 1)]
         sp_std_dev = self.OutputGen.norm_params[1][:hparams.num_coded_sps * (3 if hparams.add_deltas else 1)]
         self.model_handler.model.set_norm_params(sp_mean, sp_std_dev)
@@ -48,14 +52,14 @@ class VTLNSpeakerAdaptionModelTrainer(AcousticModelTrainer):
         hparams = AcousticModelTrainer.create_hparams(hparams_string, verbose=False)
         hparams.add_hparams(
             f_get_emb_index=None,  # Computes an index from the id_name of a sample to index embedding vector.
+            load_pre_net_from_checkpoint=False,
             pre_net_model_type=None,  # Can be any type registered in ModelFactory.
             pre_net_model_name=None,  # Used to load a model when pre_net_model_type is None.
             pre_net_model_path=None,
             train_pre_net=True,
-            pass_embs_to_pre_net=False,
             num_coded_sps=30,
-            num_speakers=None,
-            speaker_emb_dim=128)
+            alpha_ranges=[0.2]
+        )
 
         if verbose:
             logging.info(hparams.get_debug_string())
@@ -63,24 +67,25 @@ class VTLNSpeakerAdaptionModelTrainer(AcousticModelTrainer):
         return hparams
 
     def _get_dummy_warping_layer(self, hparams):
-        """Create a warping layer for manual warping."""
+        """Create a model for manual warping."""
         hparams = copy.deepcopy(hparams)
-        prev_add_deltas = hparams.add_deltas
         hparams.add_deltas = False
-        hparams.pre_net_model_name = None
-        hparams.pre_net_model_path = None
-        hparams.pre_net_model_type = None
-        wl = WarpingLayer((hparams.num_coded_sps,), (hparams.num_coded_sps,), hparams)
-        hparams.add_deltas = prev_add_deltas
+        hparams.setattr_no_type_check("warping_matrix_size", hparams.num_coded_sps)
+        # hparams.load_pre_net_from_checkpoint = False
+        # hparams.pre_net_model_type = None
+        # hparams.pre_net_model_name = None
+        # hparams.pre_net_model_path = None
+
+        transform = AllPassWarpModel((hparams.num_coded_sps,), (hparams.num_coded_sps,), hparams)
         if hparams.use_gpu:
-            wl = wl.cuda()
+            transform = transform.cuda()
         norm_params_no_deltas = (self.OutputGen.norm_params[0][:hparams.num_coded_sps],
                                  self.OutputGen.norm_params[1][:hparams.num_coded_sps])
-        wl.set_norm_params(*norm_params_no_deltas)
-        return wl
+        transform.set_norm_params(*norm_params_no_deltas)
+        return transform
 
     def gen_figure_from_output(self, id_name, label, hidden, hparams):
-        _, alphas = hidden
+        _, (alphas,) = hidden
         labels_post = self.OutputGen.postprocess_sample(label)
         coded_sp, lf0, vuv, bap = WorldFeatLabelGen.convert_to_world_features(labels_post,
                                                                               contains_deltas=False,
@@ -195,7 +200,7 @@ class VTLNSpeakerAdaptionModelTrainer(AcousticModelTrainer):
 
                 for id_name, labels in dict_outputs_post.items():
                     # Split NN output.
-                    _, output_alphas = dict_hiddens[id_name]
+                    _, (output_alphas,) = dict_hiddens[id_name]
                     output_mgc_post, *_ = self.OutputGen.convert_to_world_features(
                                                            labels,
                                                            False,
