@@ -179,14 +179,7 @@ class VTLNSpeakerAdaptionModelTrainer(AcousticModelTrainer):
     def compute_score(self, dict_outputs_post, dict_hiddens, hparams):
         mcd, f0_rmse, vuv_error_rate, bap_mcd = super().compute_score(dict_outputs_post, dict_hiddens, hparams)
 
-        # Get data for comparision.
-        dict_original_post = dict()
-        for id_name in dict_outputs_post.keys():
-            dict_original_post[id_name] = WorldFeatLabelGen.load_sample(id_name,
-                                                                        dir_out=self.OutputGen.dir_labels,
-                                                                        add_deltas=True,
-                                                                        num_coded_sps=hparams.num_coded_sps,
-                                                                        num_bap=hparams.num_bap)
+        dict_original_post = self.get_output_dict(dict_outputs_post.keys(), hparams)
 
         # Create a warping layer for manual warping.
         wl = self._get_dummy_warping_layer(hparams)

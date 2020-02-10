@@ -24,6 +24,7 @@ from idiaptts.src.model_trainers.ModelTrainer import ModelTrainer
 from idiaptts.src.data_preparation.phonemes.PhonemeLabelGen import PhonemeLabelGen
 from idiaptts.src.data_preparation.phonemes.PhonemeDurationLabelGen import PhonemeDurationLabelGen
 from idiaptts.src.data_preparation.PyTorchLabelGensDataset import PyTorchLabelGensDataset
+from idiaptts.src.Metrics import Metrics
 
 
 class DurationModelTrainer(ModelTrainer):
@@ -78,8 +79,9 @@ class DurationModelTrainer(ModelTrainer):
         hparams = ModelTrainer.create_hparams(hparams_string, verbose=False)
         hparams.add_hparams(  # exclude_begin_and_end_silence=False,
                             min_phoneme_length=50000,
-                            phoneme_label_type="HTK full")  # Specifies the format in which the .lab files are stored.
-                                                            # Refer to PhonemeLabelGen.load_sample for a list of possible types.
+                            phoneme_label_type="HTK full",  # Specifies the format in which the .lab files are stored.
+                                                            # Refer to PhonemeLabelGen.load_sample for a list of types.
+                            metrics=[Metrics.Dur_RMSE, Metrics.Dur_pearson])
 
         if verbose:
             logging.info(hparams.get_debug_string())
@@ -110,40 +112,28 @@ class DurationModelTrainer(ModelTrainer):
 
     def compute_score(self, dict_outputs_post, dict_hiddens, hparams):
 
-        # Get data for comparision.
-        dict_original_post = dict()
-        for id_name in dict_outputs_post.keys():
-            dict_original_post[id_name] = PhonemeDurationLabelGen.load_sample(id_name, self.OutputGen.dir_labels)
+        dict_original_post = self.get_output_dict(dict_outputs_post.keys())
 
-        rmse = 0.0
-        rmse_max_id = "None"
-        rmse_max = 0.0
-        all_rmse = []
-        pearsonr = np.zeros(next(iter(dict_original_post.values())).shape[1], dtype=np.float32)
-
+        metric = Metrics(hparams.metrics)
         for id_name, output_dur in dict_outputs_post.items():
             org_dur = dict_original_post[id_name]
 
-            # Compute RMSE.
-            mse = (org_dur - output_dur) ** 2
-            current_rmse = math.sqrt(mse.sum())
-            if current_rmse > rmse_max:
-                rmse_max_id = id_name
-                rmse_max = current_rmse
-            rmse += current_rmse
-            all_rmse.append(current_rmse)
+            current_metrics = metric.get_metrics(hparams.metrics, org_dur=org_dur, output_dur=output_dur)
+            metric.accumulate(id_name, current_metrics)
 
-            # Compute pearson correlation.
-            for idx in range(org_dur.shape[1]):
-                pearsonr[idx] += scipy.stats.pearsonr(org_dur[:, idx], output_dur[:, idx])[0]
+        metric.log()
 
-        rmse /= len(dict_outputs_post)
-        pearsonr /= len(dict_original_post)
+        # self.logger.info("Worst RMSE: {} {:4.2f}".format(rmse_max_id, rmse_max))
+        # self.logger.info("Duration RMSE {:4.2f}Hz, Pearson correlation {}.".format(rmse, np.array_str(pearsonr, precision=2, suppress_small=True)))
 
-        self.logger.info("Worst RMSE: {} {:4.2f}".format(rmse_max_id, rmse_max))
-        self.logger.info("Duration RMSE {:4.2f}Hz, Pearson correlation {}.".format(rmse, np.array_str(pearsonr, precision=2, suppress_small=True)))
+        return metric.get_cum_values()[0]
 
-        return rmse
+    def get_output_dict(self, id_list):
+        dict_original_post = dict()
+        for id_name in id_list:
+            dict_original_post[id_name] = PhonemeDurationLabelGen.load_sample(id_name, self.OutputGen.dir_labels)
+
+        return dict_original_post
 
     def gen_figure_from_output(self, id_name, output, hidden, hparams):
         # Is there a reasonable way to plot duration prediction?

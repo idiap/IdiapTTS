@@ -17,13 +17,13 @@ import numpy as np
 import os
 
 # Third-party imports.
-from nnmnkwii import metrics
 import torch
 
 
 # Local source tree imports.
 from idiaptts.src.model_trainers.ModelTrainer import ModelTrainer
 from idiaptts.src.DataPlotter import DataPlotter
+from idiaptts.src.Metrics import Metrics
 from idiaptts.src.data_preparation.questions.QuestionLabelGen import QuestionLabelGen
 from idiaptts.src.data_preparation.world.WorldFeatLabelGen import WorldFeatLabelGen
 from idiaptts.src.data_preparation.world.WorldFeatLabelGen import interpolate_lin
@@ -39,9 +39,6 @@ class AcousticModelTrainer(ModelTrainer):
     """
     logger = logging.getLogger(__name__)
 
-    #########################
-    # Default constructor
-    #
     def __init__(self, dir_world_features, dir_question_labels, id_list, num_questions, hparams=None):
         """Default constructor.
 
@@ -107,7 +104,8 @@ class AcousticModelTrainer(ModelTrainer):
             synth_load_org_sp=False,
             synth_load_org_lf0=False,
             synth_load_org_vuv=False,
-            synth_load_org_bap=False)
+            synth_load_org_bap=False,
+            metrics=[Metrics.MCD, Metrics.F0_RMSE, Metrics.VDE, Metrics.BAP_distortion])  # "MCD", "F0 RMSE", "GPE", "FFE", "VDE", "BAP distortion"
 
         if verbose:
             logging.info(hparams.get_debug_string())
@@ -186,106 +184,36 @@ class AcousticModelTrainer(ModelTrainer):
 
     def compute_score(self, dict_outputs_post, dict_hiddens, hparams):
 
-        # Get data for comparision.
+        dict_original_post = self.get_output_dict(dict_outputs_post.keys(), hparams)
+
+        metric = Metrics(hparams.metrics)
+        for id_name, labels in dict_outputs_post.items():
+            output = self.OutputGen.convert_to_world_features(sample=labels,
+                                                              contains_deltas=False,
+                                                              num_coded_sps=hparams.num_coded_sps,
+                                                              num_bap=hparams.num_bap)
+
+            org = self.OutputGen.convert_to_world_features(sample=dict_original_post[id_name],
+                                                           contains_deltas=self.OutputGen.add_deltas,
+                                                           num_coded_sps=hparams.num_coded_sps,
+                                                           num_bap=hparams.num_bap)
+
+            current_metrics = metric.get_metrics(hparams.metrics, *org, *output)
+            metric.accumulate(id_name, current_metrics)
+
+        metric.log()
+
+        return metric.get_cum_values()
+
+    def get_output_dict(self, id_list, hparams):
         dict_original_post = dict()
-        for id_name in dict_outputs_post.keys():
+        for id_name in id_list:
             dict_original_post[id_name] = WorldFeatLabelGen.load_sample(id_name,
                                                                         dir_out=self.OutputGen.dir_labels,
                                                                         add_deltas=True,
                                                                         num_coded_sps=hparams.num_coded_sps,
                                                                         num_bap=hparams.num_bap)
-
-        f0_rmse = 0.0
-        f0_rmse_max_id = "None"
-        f0_rmse_max = 0.0
-        all_rmse = []
-        vuv_error_rate = 0.0
-        vuv_error_max_id = "None"
-        vuv_error_max = 0.0
-        all_vuv = []
-        mcd = 0.0
-        mcd_max_id = "None"
-        mcd_max = 0.0
-        all_mcd = []
-        bap_error = 0.0
-        bap_error_max_id = "None"
-        bap_error_max = 0.0
-        all_bap_error = []
-
-        for id_name, labels in dict_outputs_post.items():
-            output_coded_sp, output_lf0, output_vuv, output_bap = self.OutputGen.convert_to_world_features(
-                                                                                    sample=labels,
-                                                                                    contains_deltas=False,
-                                                                                    num_coded_sps=hparams.num_coded_sps,
-                                                                                    num_bap=hparams.num_bap)
-            output_vuv = output_vuv.astype(bool)
-
-            # Get data for comparision.
-            org_coded_sp, org_lf0, org_vuv, org_bap = self.OutputGen.convert_to_world_features(
-                                                                        sample=dict_original_post[id_name],
-                                                                        contains_deltas=self.OutputGen.add_deltas,
-                                                                        num_coded_sps=hparams.num_coded_sps,
-                                                                        num_bap=hparams.num_bap)
-
-            # Compute f0 from lf0.
-            org_f0 = np.exp(org_lf0.squeeze())[:len(output_lf0)]  # Fix minor negligible length mismatch.
-            output_f0 = np.exp(output_lf0)
-
-            # Compute MCD.
-            org_coded_sp = org_coded_sp[:len(output_coded_sp)]
-            current_mcd = metrics.melcd(output_coded_sp[:, 1:], org_coded_sp[:, 1:])  # TODO: Use aligned mcd.
-            if current_mcd > mcd_max:
-                mcd_max_id = id_name
-                mcd_max = current_mcd
-            mcd += current_mcd
-            all_mcd.append(current_mcd)
-
-            # Compute RMSE.
-            f0_mse = (org_f0 - output_f0) ** 2
-            current_f0_rmse = math.sqrt((f0_mse * org_vuv[:len(output_lf0)]).sum() / org_vuv[:len(output_lf0)].sum())
-            if current_f0_rmse != current_f0_rmse:
-                logging.error("Computed NaN for F0 RMSE for {}.".format(id_name))
-            else:
-                if current_f0_rmse > f0_rmse_max:
-                    f0_rmse_max_id = id_name
-                    f0_rmse_max = current_f0_rmse
-                f0_rmse += current_f0_rmse
-                all_rmse.append(current_f0_rmse)
-
-            # Compute error of VUV in percentage.
-            num_errors = (org_vuv[:len(output_lf0)] != output_vuv)
-            vuv_error_rate_tmp = float(num_errors.sum()) / len(output_lf0)
-            if vuv_error_rate_tmp > vuv_error_max:
-                vuv_error_max_id = id_name
-                vuv_error_max = vuv_error_rate_tmp
-            vuv_error_rate += vuv_error_rate_tmp
-            all_vuv.append(vuv_error_rate_tmp)
-
-            # Compute aperiodicity distortion.
-            org_bap = org_bap[:len(output_bap)]
-            if len(output_bap.shape) > 1 and output_bap.shape[1] > 1:
-                current_bap_error = metrics.melcd(output_bap, org_bap)  # TODO: Use aligned mcd?
-            else:
-                current_bap_error = math.sqrt(((org_bap - output_bap) ** 2).mean()) * (10.0 / np.log(10) * np.sqrt(2.0))
-            if current_bap_error > bap_error_max:
-                bap_error_max_id = id_name
-                bap_error_max = current_bap_error
-            bap_error += current_bap_error
-            all_bap_error.append(current_bap_error)
-
-        f0_rmse /= len(dict_outputs_post)
-        vuv_error_rate /= len(dict_outputs_post)
-        mcd /= len(dict_original_post)
-        bap_error /= len(dict_original_post)
-
-        self.logger.info("Worst MCD: {} {:4.2f}dB".format(mcd_max_id, mcd_max))
-        self.logger.info("Worst F0 RMSE: {} {:4.2f}Hz".format(f0_rmse_max_id, f0_rmse_max))
-        self.logger.info("Worst VUV error: {} {:2.2f}%".format(vuv_error_max_id, vuv_error_max * 100))
-        self.logger.info("Worst BAP error: {} {:4.2f}db".format(bap_error_max_id, bap_error_max))
-        self.logger.info("Benchmark score: MCD {:4.2f}dB, F0 RMSE {:4.2f}Hz, VUV {:2.2f}%, BAP error {:4.2f}db"
-                         .format(mcd, f0_rmse, vuv_error_rate * 100, bap_error))
-
-        return mcd, f0_rmse, vuv_error_rate, bap_error
+        return dict_original_post
 
     def synthesize(self, id_list, synth_output, hparams):
         """
