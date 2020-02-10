@@ -132,12 +132,44 @@ high_pass_filter() {
     cp -R -u -p "${dir_audio}_org_signal/"* "${dir_audio}/"  # -u copy only when source is newer than destination file or if it is missing, -p preserve mode, ownership, timestamps etc.
 
     # Remove intermediate files.
-#    rm -r -f "${dir_audio}_org_signal"/
+    rm -r -f "${dir_audio}_org_signal"/
 
     # Print errors and save warnings.
     eval grep --ignore-case "WARNING" "${dir_logs}/high_pass_filtering_${name_file_id_list}_block{1..${num_blocks}}.log" >| "${dir_logs}/high_pass_filtering_${name_file_id_list}_WARNINGS.txt"
     eval grep --ignore-case "ERROR" "${dir_logs}/high_pass_filtering_${name_file_id_list}_block{1..${num_blocks}}.log"
 }
+
+single_channel_noise_reduction() {
+
+    echo "Single channel noise reduction..."
+
+    rm -r -f "${dir_audio}_org_noisy"/
+    mv "${dir_audio}" "${dir_audio}_org_noisy"/
+    mkdir -p "${dir_audio}"
+
+    python ${dir_src}/data_preparation/audio/single_channel_noise_reduction.py \
+                  --dir_wav ${dir_audio}_org_noisy/ \
+                  --dir_out ${dir_audio}/ \
+                  --file_id_list ${dir_data}/${name_file_id_list}
+
+# # Matlab cannot be run easily on the grid.
+#    ./${cpu_1d_cmd} JOB=1:${num_blocks} ${dir_logs}/single_channel_noise_reduction_${name_file_id_list}_blockJOB.log \
+#         ${dir_src}/data_preparation/audio/single_channel_noise_reduction.py \
+#                --dir_wav ${dir_audio}_org_noisy/ \
+#                --dir_out ${dir_audio}/ \
+#                --file_id_list ${dir_data}/${name_file_id_list}_blockJOB
+
+    echo "Copy unchanged files in single channel noise reduction step..."
+    cp -R -u -p "${dir_audio}_org_noisy/"* "${dir_audio}/"  # -u copy only when source is newer than destination file or if it is missing, -p preserve mode, ownership, timestamps etc.
+
+    # Remove intermediate files.
+#    rm -r -f "${dir_audio}_org_noisy"/
+
+    # Print errors and save warnings.
+    eval grep --ignore-case "WARNING" "${dir_logs}/single_channel_noise_reduction_${name_file_id_list}_block{1..${num_blocks}}.log" >| "${dir_logs}/single_channel_noise_reduction_${name_file_id_list}_WARNINGS.txt"
+    eval grep --ignore-case "ERROR" "${dir_logs}/single_channel_noise_reduction_${name_file_id_list}_block{1..${num_blocks}}.log"
+}
+
 
 remove_long_files() {
     echo "Removing audio files longer than ${max_length_sec} seconds..."
