@@ -53,7 +53,8 @@ class WarpingLayer(nn.Module):
         self.hparams_prenet.model_path = hparams.pre_net_model_path
         # Remove embedding functions when they should not been passed.
         if not hparams.pass_embs_to_pre_net:
-            self.hparams_prenet.f_get_emb_index = None
+            self.hparams_prenet.setattr_no_type_check("f_get_emb_index", None)
+            # self.hparams_prenet.f_get_emb_index = None
 
         # Create pre-net from type if not None, or try to load it by given path, or default path plus name.
         from idiaptts.src.neural_networks.pytorch.ModelHandlerPyTorch import ModelHandlerPyTorch
@@ -87,9 +88,8 @@ class WarpingLayer(nn.Module):
                     param.requires_grad = False
 
         self.prenet_group_index_of_alpha = -2
-        self.embedding_dim = hparams.speaker_emb_dim
         if hparams.num_speakers is None:
-            self.logger.warning("Number of speaker is not defined. Assume only one speaker for embedding.")
+            self.logger.warning("Number of speakers is not defined. Assume only one speaker for embedding.")
             self.num_speakers = 1
         else:
             self.num_speakers = hparams.num_speakers
@@ -102,10 +102,11 @@ class WarpingLayer(nn.Module):
 
         # Reuse pre-net embeddings or create new ones if non exist yet.
         if not hparams.pass_embs_to_pre_net or not self.model_handler_prenet.model:
-            self.embeddings = nn.Embedding(self.num_speakers, self.embedding_dim)
+            self.embeddings = (nn.Embedding(self.num_speakers, hparams.speaker_emb_dim),)
         else:
-            self.embeddings = self.model_handler_prenet.model.emb_groups[0]
+            self.embeddings = self.model_handler_prenet.model.emb_groups
 
+        self.embedding_dim = sum(emb.weight.shape[1] for emb in self.embeddings)
         # Attach alpha layer to selected pre-net layer.
         if self.model_handler_prenet.model is not None:
             pre_net_layer_group = self.model_handler_prenet.model.layer_groups[self.prenet_group_index_of_alpha]
@@ -399,6 +400,20 @@ class WarpingLayer(nn.Module):
                             max_length_input=(len(in_tensor),),
                             alphas=alphas)
 
+    def _normalise(self, features):
+        if self.mean is not None:
+            features = features - self.mean
+        if self.std_dev is not None:
+            features = features / self.std_dev
+        return features
+
+    def _denormalise(self, features):
+        if self.std_dev is not None:
+            features = features * self.std_dev
+        if self.mean is not None:
+            features = features + self.mean
+        return features
+
     def forward(self, inputs, hidden, seq_length_input, max_length_input, target=None, seq_lengths_output=None, alphas=None):
 
         batch_size = inputs.shape[self.batch_dim]
@@ -411,17 +426,17 @@ class WarpingLayer(nn.Module):
             output = inputs.type(self.w_matrix_3d.dtype)
             group_output = inputs.type(self.w_matrix_3d.dtype)
         else:
-            inputs_emb = inputs[:, :, -1]
+            inputs_emb = inputs[:, :, -len(self.embeddings):]
             if not self.pass_embs_to_pre_net:
-                inputs = inputs[:, :, :-1]
+                inputs = inputs[:, :, :-len(self.embeddings)]
             output, hidden = self.model_handler_prenet.model(inputs, hidden, seq_length_input, max_length_input, target, seq_lengths_output)
             group_output = self.model_handler_prenet.model.layer_groups[self.prenet_group_index_of_alpha].output
 
             group_output = group_output.view(output.shape[self.time_dim], batch_size, -1) # View operation to get rid of possible bidirectional outputs.
 
-            emb = self.embeddings(inputs_emb.long()) #[None, ...]  # Use speaker 0 for everything for now.
+            embs = [emb(inputs_emb[:, :, idx].long()) for idx, emb in enumerate(self.embeddings)] #[None, ...]  # Use speaker 0 for everything for now.
             #emb = emb.expand(-1, group_output.shape[1], -1) if self.batch_first else emb.expand(group_output.shape[0], -1, -1)  # Expand the temporal dimension.
-            emb_out = torch.cat((emb, group_output), dim=2)
+            emb_out = torch.cat((*embs, group_output), dim=2)
 
             alphas = self.alpha_layer(emb_out)
             # alphas = self.alpha_layer(inputs[:, :, 86:347:5])
@@ -432,38 +447,30 @@ class WarpingLayer(nn.Module):
         warp_matrix = self.get_warp_matrix(alphas)
 
         if self.has_deltas:
-            warped_feature_list = list()
-            for start_index in range(0, 3):
-                feature = output[:, :, start_index*self.n:(start_index + 1)*self.n]  # Select spectral features.
+            spectral_features = output[:, :, 0:3 * self.n]
+            spectral_features = self._denormalise(spectral_features)
+            spectral_features[:, :, 0::self.n] /= 2.  # Adaptation for single-sided spectrogram.
+            new_output = torch.empty(output.shape, dtype=output.dtype, requires_grad=False)
 
-                # Denormalize before warping.
-                if self.std_dev is not None:
-                    feature = feature * self.std_dev[start_index*self.n:(start_index + 1)*self.n]
-                if self.mean is not None:
-                    feature = feature + self.mean[start_index*self.n:(start_index + 1)*self.n]
-                feature[:, :, 0::self.n] /= 2.  # Adaptation for single-sided spectrogram.
+            for start_index in range(0, 3):
+                feature = spectral_features[:, :, start_index*self.n:(start_index + 1)*self.n]
 
                 # Merge time and batch axis, do batched vector matrix multiplication with a (1 x N * N x N) matrix
                 # multiplication, split time and batch axis back again.
                 feature_warped = torch.bmm(feature.view(-1, 1, *feature.shape[2:]), warp_matrix).view(-1, batch_size, *feature.shape[2:])
 
-                feature_warped[:, :, 0::self.n] *= 2.  # Adaptation for single-sided spectrogram.
-                # Normalize again for further processing.
-                if self.mean is not None:
-                    feature_warped = feature_warped - self.mean[start_index * self.n:(start_index + 1) * self.n]
-                if self.std_dev is not None:
-                    feature_warped = feature_warped / self.std_dev[start_index*self.n:(start_index + 1)*self.n]
+                new_output[:, :, start_index*self.n:(start_index + 1)*self.n] = feature_warped
 
-                warped_feature_list.append(feature_warped)
-            output = torch.cat((*warped_feature_list, output[:, :, 3*self.n:]), dim=2)
+            new_output[:, :, 0:3*self.n:self.n] *= 2.  # Adaptation for single-sided spectrogram.
+            new_output[:, :, 0:3*self.n] = self._normalise(new_output[:, :, 0:3*self.n])
+
+            new_output[:, :, 3*self.n:] = output[:, :, 3*self.n:]
+            return new_output, (hidden, alphas.view(-1, batch_size))
         else:
             feature = output[:, :, :self.n]  # Select spectral features.
 
             # Denormalize before warping.
-            if self.std_dev is not None:
-                feature = feature * self.std_dev
-            if self.mean is not None:
-                feature = feature + self.mean
+            feature = self._denormalise(feature)
             feature[:, :, 0] /= 2.  # Adaptation for single-sided spectrogram.
 
             # Merge time and batch axis, do batched vector matrix multiplication with a (1 x N * N x N) matrix
@@ -471,11 +478,7 @@ class WarpingLayer(nn.Module):
             feature_warped = torch.bmm(feature.view(-1, 1, *feature.shape[2:]), warp_matrix).squeeze(1).view(-1, batch_size, *feature.shape[2:])
 
             feature_warped[:, :, 0] *= 2.  # Adaptation for single-sided spectrogram.
-            # Normalize again for further processing.
-            if self.mean is not None:
-                feature_warped = feature_warped - self.mean
-            if self.std_dev is not None:
-                feature_warped = feature_warped / self.std_dev
+            feature_warped = self._normalise(feature_warped)
 
             output = torch.cat((feature_warped, output[:, :, self.n:]), dim=2)
 
@@ -515,24 +518,23 @@ def main():
     wl.set_norm_params(sp_mean, sp_std_dev)
 
     # id_list = ["dorian/doriangray_16_00199"]
-    id_list = ["p225/p225_051"]
+    id_list = ["p225/p225_051", "p277/p277_012", "p278/p278_012", "p279/p279_012"]
     hparams.num_speakers = 1
 
     t_benchmark = 0
     for id_name in id_list:
-        for idx, alpha in enumerate(np.arange(-0.15, 0.2, 0.05)):
+        sample = WorldFeatLabelGen.load_sample(id_name, os.path.join("experiments", hparams.voice, "WORLD"),
+                                               add_deltas=True, num_coded_sps=hparams.num_coded_sps,
+                                               num_bap=hparams.num_bap)
+        sample_pre = gen_in.preprocess_sample(sample)
+        coded_sps = sample_pre[:, :hparams.num_coded_sps * (3 if hparams.add_deltas else 1)].copy()
+        coded_sps = coded_sps[:, None, ...].repeat(batch_size, 1)  # Copy data in batch dimension.
+
+        for idx, alpha in enumerate(np.arange(-0.15, 0.2, 0.001)):
             out_dir = hparams.out_dir + "alpha_{0:0.2f}/".format(alpha)
             makedirs_safe(out_dir)
 
-            sample = WorldFeatLabelGen.load_sample(id_name, os.path.join("experiments", hparams.voice, "WORLD"),
-                                                   add_deltas=True, num_coded_sps=hparams.num_coded_sps,
-                                                   num_bap=hparams.num_bap)
-            sample_pre = gen_in.preprocess_sample(sample)
-            coded_sps = sample_pre[:, :hparams.num_coded_sps * (3 if hparams.add_deltas else 1)]
-
             alpha_vec = np.ones((coded_sps.shape[0], 1)) * alpha
-
-            coded_sps = coded_sps[:len(alpha_vec), None, ...].repeat(batch_size, 1)  # Copy data in batch dimension.
             alpha_vec = alpha_vec[:, None, None].repeat(batch_size, 1)  # Copy data in batch dimension.
 
             t_start = timer()
@@ -541,25 +543,25 @@ def main():
                                             alphas=torch.from_numpy(alpha_vec))
             mfcc_warped.sum().backward()
             t_benchmark += timer() - t_start
-            assert((mfcc_warped[:, 0] == mfcc_warped[:, 1]).all())  # Compare results for cloned coded_sps within batch.
+            # assert((mfcc_warped[:, 0] == mfcc_warped[:, 1]).all())  # Compare results for cloned coded_sps within batch.
             if alpha == 0:
                 assert((mfcc_warped == coded_sps).all())  # Compare results for no warping.
-            sample_pre[:len(mfcc_warped), :hparams.num_coded_sps * (3 if hparams.add_deltas else 1)] = mfcc_warped[:, 0].detach()
+            # sample_pre[:len(mfcc_warped), :hparams.num_coded_sps * (3 if hparams.add_deltas else 1)] = mfcc_warped[:, 0].detach()
+            #
+            # sample_post = gen_in.postprocess_sample(sample_pre)
+            # # Manually create samples without normalisation but with deltas.
+            # sample_pre = (sample_pre * gen_in.norm_params[1] + gen_in.norm_params[0]).astype(np.float32)
+            #
+            # if np.isnan(sample_pre).any():
+            #     raise ValueError("Detected nan values in output features for {}.".format(id_name))
+            # # Save warped features.
+            # makedirs_safe(os.path.dirname(os.path.join(out_dir, id_name)))
+            # sample_pre.tofile(os.path.join(out_dir, id_name + WorldFeatLabelGen.ext_deltas))
+            #
+            # hparams.synth_dir = out_dir
+            # Synthesiser.run_world_synth({id_name: sample_post}, hparams)
 
-            sample_post = gen_in.postprocess_sample(sample_pre)
-            # Manually create samples without normalisation but with deltas.
-            sample_pre = (sample_pre * gen_in.norm_params[1] + gen_in.norm_params[0]).astype(np.float32)
-
-            if np.isnan(sample_pre).any():
-                raise ValueError("Detected nan values in output features for {}.".format(id_name))
-            # Save warped features.
-            makedirs_safe(os.path.dirname(os.path.join(out_dir, id_name)))
-            sample_pre.tofile(os.path.join(out_dir, id_name + WorldFeatLabelGen.ext_deltas))
-
-            hparams.synth_dir = out_dir
-            Synthesiser.run_world_synth({id_name: sample_post}, hparams)
-
-    print("Process time for {} runs: {}".format(len(id_list) * idx, timedelta(seconds=t_benchmark)))
+    print("Process time for {} runs: {}, average: {}".format(len(id_list) * idx, timedelta(seconds=t_benchmark), timedelta(seconds=t_benchmark) / (len(id_list) * idx)))
 
 
 if __name__ == "__main__":

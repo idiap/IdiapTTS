@@ -216,3 +216,16 @@ def parse_int_set(nputstr=""):
     if len(invalid) > 0:
         print("Invalid set: " + str(invalid))
     return selection
+
+
+def select_skip(iterable, select, skip, start_index=0):
+    """
+    Select a region of elements from an interable every skip steps.
+
+    :param iterable:             Iterable data representation.
+    :param select:               Size of the region which should be selected.
+    :param skip:                 Number of elements skipped between regions.
+    :param start_index:          Start index of first region.
+    :return:                     List of elements in selected regions.
+    """
+    return [x for i, x in enumerate(iterable) if (i - start_index) % (select+skip) < select]

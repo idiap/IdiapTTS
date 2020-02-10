@@ -672,16 +672,17 @@ class ModelTrainer(object):
                                   .format(self.__class__.__name__))
 
     def copy_synth(self, hparams, file_id_list):
+        hparams = copy.deepcopy(hparams)
         if hparams.synth_vocoder == "WORLD":
             if hparams.has_value("world_dir"):
                 world_dir = hparams.world_dir
             elif hasattr(self.OutputGen, "dir_labels") and self.OutputGen.dir_labels is not None:
                 world_dir = os.path.join(self.OutputGen.dir_labels, self.dir_extracted_acoustic_features)
             else:
-                raise FileNotFoundError("Directory of WORLD labels is unkown. Please set it in hparams.world_dir.")
+                raise FileNotFoundError("Directory of WORLD labels is unknown. Please set it in hparams.world_dir.")
 
             Synthesiser.copy_synth(hparams, file_id_list, world_dir)
-            hparams.synth_file_suffix += str(hparams.num_coded_sps) + 'sp'
+            hparams.synth_file_suffix += "{}{}".format(hparams.num_coded_sps, hparams.sp_type)
         else:
             Synthesiser.copy_synth(hparams, file_id_list)
 

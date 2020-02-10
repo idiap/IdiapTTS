@@ -48,15 +48,21 @@ class WaveNetWrapper(nn.Module):
                              use_speaker_embedding=hparams.use_speaker_embedding,
                              )
 
+        self.has_weight_norm = True
+
     def forward(self, inputs, hidden, seq_lengths_inputs, max_length_inputs, target=None, seq_lengths_target=None):
 
         if target is not None:  # During training and testing with teacher forcing.
+            assert self.has_weight_norm, "Model has been used for generation and weight norm was removed, " \
+                                         "cannot continue training. Remove the make_generation_fast_() call " \
+                                         "to continue training after generation."
             output = self.model(target, c=inputs, g=None, softmax=False)
             # output = self.model(target, c=inputs[:, :, :target.shape[2]], g=None, softmax=False)
             # Output shape is B x C x T. Don't permute here because CrossEntropyLoss requires the same shape.
         else:  # During inference.
             with torch.no_grad():
-                self.model.make_generation_fast_()
+                self.model.make_generation_fast_()  # After calling this the training cannot be continued.
+                self.has_weight_norm = False
                 assert(len(seq_lengths_inputs) == 1), "Batch synthesis is not supported yet."
                 num_frames_to_gen = seq_lengths_inputs[0] * self.len_in_out_multiplier
                 output = self.model.incremental_forward(c=inputs, T=num_frames_to_gen, softmax=True, quantize=True)

@@ -341,6 +341,7 @@ class ModelHandlerPyTorch(ModelHandler):
         if hparams.use_gpu:
             if hasattr(model, "set_gpu_flag") and callable(model.set_gpu_flag):
                 model.set_gpu_flag(hparams.use_gpu)
+            model = model.cuda()
 
         return model, created_model_type, (dim_in, dim_out)
 
@@ -484,7 +485,6 @@ class ModelHandlerPyTorch(ModelHandler):
 
         _transform_state(self.optimiser, lambda t: t.cuda(), lambda t: torch.is_tensor(t))  # Doing it manually.
 
-
     def save_checkpoint(self, file_path, total_epoch):
         """
         Save checkpoint which consists of epoch number, model type, in/out dimensions, model state dict, whole
@@ -560,19 +560,21 @@ class ModelHandlerPyTorch(ModelHandler):
 
     @staticmethod
     def _return_values_to_numpy(return_values, from_gpu):
-        """Convert all tensors in return_values to CPU. Return_values can be a tuple of tuples of tuples etc."""
+        """
+        Convert all tensors in return_values to CPU.
+        return_values can be a iterable collections.
+        Object which are not tensors are just returned.
+        """
         if return_values is None:
             return None
 
-        if isinstance(return_values, tuple):
-            return tuple(map(lambda x: ModelHandlerPyTorch._return_values_to_numpy(x, from_gpu), return_values))
-        # TODO: Handle list and dict here as well?
-
-        # Return value is tensor.
-        if from_gpu:
+        try:
             return return_values.detach().cpu().numpy()
-        else:
-            return return_values.detach().numpy()
+        except AttributeError:
+            try:
+                return tuple(map(lambda x: ModelHandlerPyTorch._return_values_to_numpy(x, from_gpu), return_values))
+            except TypeError:
+                return return_values
 
     def process_dataloader(self, dataloader, loss_function, hparams, total_epoch, current_epoch=None, training=True):
         """
@@ -819,15 +821,6 @@ class ModelHandlerPyTorch(ModelHandler):
                                                   and hasattr(element, "cuda")
                                                   and callable(element.cuda)
                 else element for element in batch]
-
-        # next_inputs, next_target, next_seq_lengths_input, next_seq_lengths_target, next_mask, _ = next_batch
-        #
-        # next_inputs = next_inputs.cuda(async=load_async) if next_inputs is not None else None
-        # next_seq_lengths_input = next_seq_lengths_input.cuda(async=load_async)
-        # next_target = next_target.cuda(async=load_async)
-        # next_seq_lengths_target = next_seq_lengths_target.cuda(async=load_async)
-        # next_mask = next_mask.cuda(async=load_async) if next_mask is not None else None
-        # next_batch = next_inputs, next_target, next_seq_lengths_input, next_seq_lengths_target, next_mask, _
 
     def test(self, hparams, total_epoch, current_epoch, loss_function):
         if hparams.use_gpu:

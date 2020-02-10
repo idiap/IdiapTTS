@@ -215,6 +215,7 @@ class Synthesiser(object):
         assert hparams.synth_vocoder_path is not None, "Please set path to neural vocoder in hparams.synth_vocoder_path"
 
         hparams = copy.deepcopy(hparams)
+        hparams.del_hparam("ignore_layers")
         hparams.model_type = "r9y9WaveNet"
 
         # Add identifier to suffix.
