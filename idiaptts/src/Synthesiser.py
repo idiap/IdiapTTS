@@ -8,13 +8,15 @@
 
 # System imports.
 import copy
-import logging
 from functools import partial
+import logging
+import math
 import numpy as np
 import os
-import math
+from typing import Dict
 
 # Third-party imports.
+import librosa
 import pydub
 import soundfile
 from nnmnkwii.postfilters import merlin_post_filter
@@ -24,46 +26,50 @@ from pyworld import pyworld
 # Local source tree imports.
 from idiaptts.src.data_preparation.world.WorldFeatLabelGen import WorldFeatLabelGen
 from idiaptts.misc.utils import makedirs_safe, sample_linearly
+from idiaptts.src.data_preparation.audio.AudioProcessing import AudioProcessing
 from idiaptts.src.data_preparation.audio.RawWaveformLabelGen import RawWaveformLabelGen
 from idiaptts.src.neural_networks.pytorch.models.WaveNetWrapper import WaveNetWrapper
+from idiaptts.src.ExtendedHParams import ExtendedHParams
 
 
 class Synthesiser(object):
+    SYNTH_SUB_DIR = "synth"
 
     @staticmethod
-    def run_world_synth(synth_output, hparams, use_model_name=True):
+    def run_world_synth(synth_output: Dict[str, np.ndarray],
+                        hparams: ExtendedHParams,
+                        epoch: int = None,
+                        step: int = None,
+                        use_model_name: bool = True,
+                        has_deltas: bool = False) -> None:
         """Run the WORLD synthesize method."""
 
         fft_size = pyworld.get_cheaptrick_fft_size(hparams.synth_fs)
 
-        save_dir = hparams.synth_dir if hparams.synth_dir is not None\
-                                     else hparams.out_dir if hparams.out_dir is not None\
-                                     else os.path.curdir
+        save_dir = Synthesiser._get_synth_dir(hparams, use_model_name, epoch=epoch, step=step)
+
         for id_name, output in synth_output.items():
             logging.info("Synthesise {} with the WORLD vocoder.".format(id_name))
 
             coded_sp, lf0, vuv, bap = WorldFeatLabelGen.convert_to_world_features(output,
-                                                                                  contains_deltas=False,
+                                                                                  contains_deltas=has_deltas,
                                                                                   num_coded_sps=hparams.num_coded_sps,
                                                                                   num_bap=hparams.num_bap)
-            amp_sp = WorldFeatLabelGen.decode_sp(coded_sp, hparams.sp_type, hparams.synth_fs,
-                                                 post_filtering=hparams.do_post_filtering).astype(np.double, copy=False)
+            amp_sp = AudioProcessing.decode_sp(coded_sp, hparams.sp_type, hparams.synth_fs,
+                                               post_filtering=hparams.do_post_filtering).astype(np.double, copy=False)
             args = dict()
-            for attr in "preemphasize", "f0_silence_threshold", "lf0_zero":
+            for attr in "preemphasis", "f0_silence_threshold", "lf0_zero":
                 if hasattr(hparams, attr):
                     args[attr] = getattr(hparams, attr)
             waveform = WorldFeatLabelGen.world_features_to_raw(amp_sp, lf0, vuv, bap,
                                                                fs=hparams.synth_fs, n_fft=fft_size, **args)
 
             # Always save as wav file first and convert afterwards if necessary.
-            file_path = os.path.join(save_dir, "{}{}{}{}"
-                                     .format(os.path.basename(id_name),
-                                             "_" + hparams.model_name if use_model_name
-                                                                         and hparams.model_name is not None
-                                                                      else "",
-                                             hparams.synth_file_suffix,
-                                             "_WORLD"))
-            makedirs_safe(hparams.synth_dir)
+            file_name = (os.path.basename(id_name)
+                         + hparams.synth_file_suffix
+                         + '_' + str(hparams.num_coded_sps) + hparams.sp_type
+                         + "_WORLD")
+            file_path = os.path.join(save_dir, file_name)
             soundfile.write(file_path + ".wav", waveform, hparams.synth_fs)
 
             # Use PyDub for special audio formats.
@@ -74,7 +80,34 @@ class Synthesiser(object):
                 os.remove(file_path + ".wav")
 
     @staticmethod
-    def copy_synth(hparams, file_id_list, feature_dir=None):
+    def _get_synth_dir(hparams: ExtendedHParams, use_model_name: bool = True, epoch: int = None, step: int = None) -> os.PathLike:
+        if hparams.has_value("synth_dir"):
+            save_dir = hparams.synth_dir
+        else:
+            if hparams.has_value("out_dir"):
+                save_dir = [hparams.out_dir]
+            else:
+                save_dir = [os.path.curdir]
+
+            if use_model_name and hparams.has_value("model_name"):
+                save_dir.append(hparams.model_name)
+
+            save_dir.append(Synthesiser.SYNTH_SUB_DIR)
+
+            if epoch is not None:
+                save_dir.append("e" + str(epoch))
+            elif step is not None:
+                save_dir.append("s" + str(step))
+
+            save_dir = os.path.join(*save_dir)
+
+        makedirs_safe(save_dir)
+        logging.info("Selected {} as synthesis directory.".format(save_dir))
+        return save_dir
+
+    @staticmethod
+    @DeprecationWarning
+    def copy_synth(hparams, file_id_list, epoch=None, step=None, feature_dir=None):
         # Create reference audio files containing only the vocoder degradation.
         logging.info("Copy synthesis with {} for [{}]."
                      .format(hparams.synth_vocoder, ", ".join([id_name for id_name in file_id_list])))
@@ -117,7 +150,7 @@ class Synthesiser(object):
 
             # Add identifier to suffix.
             old_synth_file_suffix = hparams.synth_file_suffix
-            hparams.synth_file_suffix += str(hparams.num_coded_sps) + hparams.sp_type
+            hparams.synth_file_suffix += '_' + str(hparams.num_coded_sps) + hparams.sp_type
             Synthesiser.run_world_synth(synth_dict, hparams, use_model_name=False)
         elif hparams.synth_vocoder == "raw" or hparams.synth_vocoder.starts_with("r9y9wavenet"):
             for id_name in file_id_list:
@@ -132,16 +165,17 @@ class Synthesiser(object):
         hparams.synth_file_suffix = old_synth_file_suffix
 
     @staticmethod
-    def run_raw_synth(synth_output, hparams, use_model_name=True):
+    def run_raw_synth(synth_output, hparams, epoch=None, step=None, use_model_name=True):
         """Use Pydub to synthesis audio from raw data given in the synth_output dictionary."""
 
+        save_dir = Synthesiser._get_synth_dir(hparams, use_model_name, epoch=epoch, step=step)
         for id_name, raw in synth_output.items():
             # Save the audio.
-            wav_file_path = os.path.join(hparams.synth_dir, "".join((os.path.basename(id_name).rsplit('.', 1)[0],
-                                                                     "_" + hparams.model_name if use_model_name else "",
-                                                                     hparams.synth_file_suffix,
-                                                                     ".",
-                                                                     hparams.synth_ext)))
+            file_name = (os.path.basename(id_name).rsplit('.', 1)[0]
+                         + "_" + hparams.model_name if use_model_name else ""
+                         + hparams.synth_file_suffix,
+                         + "." + hparams.synth_ext)
+            wav_file_path = os.path.join(save_dir, file_name)
             Synthesiser.raw_to_file(wav_file_path, raw, hparams.synth_fs, hparams.bit_depth)
 
     @staticmethod
@@ -150,7 +184,7 @@ class Synthesiser(object):
 
         # Load raw data into pydub AudioSegment.
         # raw /= raw.abs().max()
-        raw *= math.pow(2, bit_depth) / 2  # Expand to pydub range.
+        raw *= math.pow(2, bit_depth - 1)  # Expand to pydub range.
         raw = raw.astype(np.int16)
         audio_seg = AudioSegment(
             # raw audio data (bytes)
@@ -167,7 +201,7 @@ class Synthesiser(object):
         file.close()
 
     @staticmethod
-    def run_r9y9wavenet_mulaw_world_feats_synth(synth_output, hparams):
+    def run_r9y9wavenet_mulaw_world_feats_synth(synth_output, hparams, epoch=None, step=None):
 
         hparams = copy.deepcopy(hparams)
 
@@ -204,11 +238,11 @@ class Synthesiser(object):
         else:
             hparams.add_hparam("bit_depth", 16)
 
-        Synthesiser.run_wavenet_vocoder(synth_output, hparams)
+        Synthesiser.run_wavenet_vocoder(synth_output, hparams, epoch=epoch, step=step)
 
 
     @staticmethod
-    def run_wavenet_vocoder(synth_output, hparams):
+    def run_wavenet_vocoder(synth_output, hparams, epoch=None, step=None):
         # Import ModelHandlerPyTorch here to prevent circular dependencies.
         from idiaptts.src.neural_networks.pytorch.ModelHandlerPyTorch import ModelHandlerPyTorch
 
@@ -233,7 +267,7 @@ class Synthesiser(object):
         # # dir_world_features = os.path.join(self.OutputGen.dir_labels, self.dir_extracted_acoustic_features)
         input_gen = WorldFeatLabelGen(None,
                                       add_deltas=False,
-                                      sampling_fn=partial(sample_linearly,
+                                      preprocessing_fn=partial(sample_linearly,
                                                           in_to_out_multiplier=in_to_out_multiplier,
                                                           dtype=np.float32),
                                       num_coded_sps=hparams.num_coded_sps,
@@ -252,6 +286,7 @@ class Synthesiser(object):
                                                            hparams,
                                                            verbose=False)
 
+        save_dir = Synthesiser._get_synth_dir(hparams, epoch=epoch, step=step)
         for id_name, output in synth_output.items():
             logging.info("Synthesise {} with {} vocoder.".format(id_name, hparams.synth_vocoder_path))
 
@@ -274,10 +309,43 @@ class Synthesiser(object):
                 synth_output[id_name] = RawWaveformLabelGen.mu_law_companding_reversed(output, out_channels)
 
             # Save the audio.
-            wav_file_path = os.path.join(hparams.synth_dir,
-                                         "".join((os.path.basename(id_name).rsplit('.', 1)[0], "_",
-                                                  hparams.model_name, hparams.synth_file_suffix, ".",
-                                                  hparams.synth_ext)))
+            file_name = (os.path.basename(id_name).rsplit('.', 1)[0]
+                         + hparams.synth_file_suffix
+                         + "." + hparams.synth_ext)
+            wav_file_path = os.path.join(save_dir, file_name)
             Synthesiser.raw_to_file(wav_file_path, synth_output[id_name], hparams.synth_fs, hparams.bit_depth)
 
         # TODO: Convert to requested frame rate. if org_frame_rate_output_Hz != 16000. This only holds for 16kHz wavenet.
+
+    def run_griffin_lim_on_log(synth_output, *args, **kwargs):
+        synth_output = {k: AudioProcessing.db_to_amp(v) for k, v in synth_output.items()}
+        Synthesiser.run_griffin_lim(synth_output, *args, **kwargs)
+
+    def run_griffin_lim(synth_output, hparams, epoch=None, step=None, use_model_name=True):
+        save_dir = Synthesiser._get_synth_dir(hparams, use_model_name, epoch=epoch, step=step)
+        for id_name, output in synth_output.items():
+            file_name = "{}{}{}.{}".format(
+                os.path.basename(id_name).rsplit('.', 1)[0],
+                "_" + hparams.model_name if use_model_name else "",
+                hparams.synth_file_suffix,
+                hparams.synth_ext)
+
+            wav_file_path = os.path.join(save_dir, file_name)
+
+            hop_length = int(hparams.hop_size_ms / 1000. * hparams.synth_fs)
+            if hparams.win_length_ms is None:
+                win_length = None
+            else:
+                win_length = int(hparams.win_length_ms / 1000. * hparams.synth_fs)
+
+            raw = librosa.griffinlim(
+                output.T ** hparams.get_value("griffin_lim_power", 1.2),
+                n_iter=hparams.get_value("griffin_lim_iters", 60),
+                hop_length=hop_length,
+                win_length=win_length)
+
+            preemphasis = hparams.get_value("preemphasis", 0.0)
+            if preemphasis != 0:
+                raw = AudioProcessing.depreemphasis(raw, preemphasis)
+
+            Synthesiser.raw_to_file(wav_file_path, raw, hparams.synth_fs, hparams.bit_depth)

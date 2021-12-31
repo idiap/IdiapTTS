@@ -89,8 +89,10 @@ class LabelNormalisation(object):
             # path = os.path.dirname(out_file_name)
             # if not os.path.exists(path):
             #     os.makedirs(path)
-            with open(out_file_name, 'w') as file:
-                labels.tofile(file)
+            # with open(out_file_name, 'w') as file:
+            #     labels.tofile(file)
+            numpy.savez(os.path.splitext(out_file_name)[0],
+                        **{"questions": labels})
 
         return labels
 
@@ -271,7 +273,7 @@ class HTSLabelNormalisation(LabelNormalisation):
                     line = utt_labels[current_index + i + 1].strip()
                     temp_list = re.split('\s+', line)
                     phone_duration += int((int(temp_list[1]) - int(temp_list[0]))/50000)
-                
+
                 syllable_duration+=phone_duration
                 word_duration+=phone_duration
 
@@ -280,12 +282,12 @@ class HTSLabelNormalisation(LabelNormalisation):
                 label_continuous_vector = self.pattern_matching_continous_position(full_label)
 
                 ### syllable ending information ###
-                syl_end = 0        
+                syl_end = 0
                 if(label_continuous_vector[0, 1]==1 or current_phone in list_of_silences): ##pos-bw and c-silences
                     syl_end = 1
 
                 ### word ending information ###
-                word_end = 0        
+                word_end = 0
                 if(syl_end and label_continuous_vector[0, 9]==1 or current_phone in list_of_silences):
                     word_end = 1
 
@@ -306,7 +308,7 @@ class HTSLabelNormalisation(LabelNormalisation):
                         current_block_array =  current_dur_array.transpose()
                     if feat_size == "frame":
                         current_block_array = numpy.tile(current_dur_array.transpose(), (frame_number, 1))
-                elif state_index == state_number: 
+                elif state_index == state_number:
                     if unit_size == "phoneme":
                         current_block_array = numpy.array([phone_duration])
                     elif unit_size == "syllable":
@@ -355,7 +357,7 @@ class HTSLabelNormalisation(LabelNormalisation):
                 current_block_array = numpy.reshape(numpy.array(MLU_dur[seg_indx]), (-1, 1))
                 dur_feature_matrix[dur_feature_index:dur_feature_index+seg_len, ] = current_block_array
                 dur_feature_index = dur_feature_index + seg_len
-        
+
         dur_feature_matrix = dur_feature_matrix[0:dur_feature_index,]
         logger.debug('made duration matrix of %d frames x %d features' % dur_feature_matrix.shape )
         return  dur_feature_matrix
@@ -363,7 +365,7 @@ class HTSLabelNormalisation(LabelNormalisation):
     def extract_dur_from_phone_alignment_labels(self, file_name, feature_type, unit_size, feat_size):
         logger = logging.getLogger("dur")
 
-        dur_dim = 1 # hard coded here 
+        dur_dim = 1 # hard coded here
 
         if feature_type=="binary":
             dur_feature_matrix = numpy.empty((100000, dur_dim))
@@ -450,7 +452,7 @@ class HTSLabelNormalisation(LabelNormalisation):
             if len(line) < 1:
                 continue
             temp_list = re.split('\s+', line)
-            
+
             if len(temp_list)==1:
                 frame_number = 0
                 full_label = temp_list[0]
@@ -559,7 +561,7 @@ class HTSLabelNormalisation(LabelNormalisation):
                 end_time = int(temp_list[1])
                 frame_number = int((end_time - start_time)/50000)  # TODO: Frame size should not be hardcoded.
                 full_label = temp_list[2]
-            
+
                 full_label_length = len(full_label) - 3  # remove state information [k]
                 state_index = full_label[full_label_length + 1]
 
@@ -689,7 +691,7 @@ class HTSLabelNormalisation(LabelNormalisation):
                     frame_index+=1
 
             elif self.subphone_feats == 'full':
-                state_number = 5 # hard coded here 
+                state_number = 5 # hard coded here
                 phone_duration = sum(dur_data[i, :])
                 state_duration_base = 0
                 for state_index in xrange(1, state_number+1):
@@ -701,13 +703,13 @@ class HTSLabelNormalisation(LabelNormalisation):
                         duration_feature_array[frame_index, 2] = float(frame_number)  ## length of state in frames
                         duration_feature_array[frame_index, 3] = float(state_index)   ## state index (counting forwards)
                         duration_feature_array[frame_index, 4] = float(state_index_backward) ## state index (counting backwards)
-    
+
                         duration_feature_array[frame_index, 5] = float(phone_duration)   ## length of phone in frames
                         duration_feature_array[frame_index, 6] = float(frame_number) / float(phone_duration)   ## fraction of the phone made up by current state
                         duration_feature_array[frame_index, 7] = float(phone_duration - j - state_duration_base) / float(phone_duration) ## fraction through phone (forwards)
                         duration_feature_array[frame_index, 8] = float(state_duration_base + j + 1) / float(phone_duration)  ## fraction through phone (backwards)
                         frame_index+=1
-                    
+
                     state_duration_base += frame_number
 
         return duration_feature_array
@@ -965,10 +967,10 @@ if __name__ == '__main__':
                         dest="file_id_list", required=True)
     # parser.add_argument("-c", "--config_file", help="File used as config for the _HCopy function of htk/hts.", type=str,
     #                     dest="config_file", required=False)
-    
+
     # Parse arguments
     args = parser.parse_args()
-        
+
     # Read which files to process.
     print(args.file_id_list)
     with open(args.file_id_list) as f:

@@ -13,7 +13,7 @@ cd $tools_dir
 
 install_speech_tools=true
 install_festival=true
-install_festvox=true
+install_festvox=false
 install_tts_frontend=true
 install_wcad=false
 
@@ -64,7 +64,8 @@ if [ "$install_festival" = true ]; then  # TODO: Update to speech-tools 2.5 and 
     (
         cd festival;
         ./configure;
-        make CXX=gcc-4.8;
+        make CXX=gcc-4.8; # Building with >4.8 will work, but at
+                          # execution time creates seg faults.
         make install
     )
 
@@ -116,7 +117,7 @@ if [ "$install_festival" = true ]; then  # TODO: Update to speech-tools 2.5 and 
         (
             cd idiaptts/scripts/tts_frontend;
             ./install "${festival_dir}"
-        )        
+        )
     fi
 fi
 
@@ -172,4 +173,3 @@ elif [ "$install_wcad" == true ] && [ ! -d wcad ]; then
 else
     echo "All tools successfully compiled!!"
 fi
-

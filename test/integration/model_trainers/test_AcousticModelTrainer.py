@@ -4,13 +4,13 @@
 #
 
 
-import unittest
-
 import os
 import shutil
+import warnings
+
 import numpy
 import soundfile
-import warnings
+import unittest
 
 from idiaptts.src.model_trainers.AcousticModelTrainer import AcousticModelTrainer
 
@@ -49,8 +49,9 @@ class TestAcousticModelTrainer(unittest.TestCase):
         hparams.batch_size_val = 50
         hparams.use_saved_learning_rate = True
         hparams.optimiser_args["lr"] = 0.001
-        hparams.model_name = "test_model.nn"
+        hparams.model_name = "test_model"
         hparams.epochs_per_checkpoint = 2
+        hparams.world_dir = self.dir_world_features
 
         return hparams
 
@@ -66,7 +67,8 @@ class TestAcousticModelTrainer(unittest.TestCase):
         hparams = self._get_hparams()
         hparams.out_dir = os.path.join(hparams.out_dir, "test_init")  # Add function name to path.
 
-        trainer = AcousticModelTrainer(self.dir_world_features, self.dir_question_labels, self.id_list, hparams.num_questions, hparams)
+        trainer = AcousticModelTrainer(**AcousticModelTrainer.legacy_support_init(
+            self.dir_world_features, self.dir_question_labels, self.id_list, hparams.num_questions, hparams))
         trainer.init(hparams)
 
         shutil.rmtree(hparams.out_dir)
@@ -77,9 +79,11 @@ class TestAcousticModelTrainer(unittest.TestCase):
         hparams.seed = 1234
         hparams.use_best_as_final_model = False
 
-        trainer = AcousticModelTrainer(self.dir_world_features, self.dir_question_labels, self.id_list, hparams.num_questions, hparams)
+        trainer = AcousticModelTrainer(**AcousticModelTrainer.legacy_support_init(
+            self.dir_world_features, self.dir_question_labels, self.id_list, hparams.num_questions, hparams))
         trainer.init(hparams)
         _, all_loss_train, _ = trainer.train(hparams)
+        all_loss_train = all_loss_train["MSELoss_acoustic_features"]
 
         # Training loss decreases?
         self.assertLess(all_loss_train[-1], all_loss_train[1 if hparams.start_with_test else 0],
@@ -92,11 +96,12 @@ class TestAcousticModelTrainer(unittest.TestCase):
         hparams.out_dir = os.path.join(hparams.out_dir, "test_benchmark")  # Add function name to path.
         hparams.seed = 1
 
-        trainer = AcousticModelTrainer(self.dir_world_features, self.dir_question_labels, self.id_list, hparams.num_questions, hparams)
+        trainer = AcousticModelTrainer(**AcousticModelTrainer.legacy_support_init(
+            self.dir_world_features, self.dir_question_labels, self.id_list, hparams.num_questions, hparams))
         trainer.init(hparams)
         scores = trainer.benchmark(hparams)
 
-        numpy.testing.assert_almost_equal((8.616, 78.4, 0.609, 37.352), scores, 3, "Wrong benchmark score.")
+        numpy.testing.assert_almost_equal((8.616, 78.4, 0.609, 37.352), scores["pred_acoustic_features"], 3, "Wrong benchmark score.")
 
         shutil.rmtree(hparams.out_dir)
 
@@ -105,19 +110,21 @@ class TestAcousticModelTrainer(unittest.TestCase):
 
         hparams = self._get_hparams()
         hparams.out_dir = os.path.join(hparams.out_dir, "test_gen_figure")  # Add function name to path
-        hparams.model_name = "test_model_in409_out67.nn"
-        hparams.model_path = os.path.join("integration", "fixtures", hparams.model_name)
+        hparams.model_name = "test_model_in409_out67"
+        hparams.model_path = os.path.join("integration", "fixtures", hparams.model_name, hparams.networks_dir)
+        hparams.load_checkpoint_epoch = -1
 
-        trainer = AcousticModelTrainer(self.dir_world_features, self.dir_question_labels, self.id_list, hparams.num_questions, hparams)
+        trainer = AcousticModelTrainer(**AcousticModelTrainer.legacy_support_init(
+            self.dir_world_features, self.dir_question_labels, self.id_list, hparams.num_questions, hparams))
         trainer.init(hparams)
 
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", category=UserWarning, module="matplotlib")
             trainer.gen_figure(hparams, self.id_list[:num_test_files])
         # Check number of created files.
-        found_files = list([name for name in os.listdir(hparams.out_dir)
-                            if os.path.isfile(os.path.join(hparams.out_dir, name))
-                            and name.endswith(hparams.model_name + ".Org-PyTorch" + hparams.gen_figure_ext)])
+        found_files = list([name for name in os.listdir(os.path.join(hparams.out_dir, hparams.model_name, "figures"))
+                            if os.path.isfile(os.path.join(hparams.out_dir, hparams.model_name, "figures", name))
+                            and name.endswith(".Org-PyTorch" + hparams.gen_figure_ext)])
         self.assertEqual(len(self.id_list[:num_test_files]), len(found_files),
                          msg="Number of {} files in out_dir directory does not match.".format(hparams.gen_figure_ext))
 
@@ -128,8 +135,8 @@ class TestAcousticModelTrainer(unittest.TestCase):
 
         hparams = self._get_hparams()
         hparams.out_dir = os.path.join(hparams.out_dir, "test_synth_wav")  # Add function name to path
-        hparams.model_name = "test_model_in409_out67.nn"
-        hparams.model_path = os.path.join("integration", "fixtures", hparams.model_name)
+        hparams.model_name = "test_model_in409_out67"
+        hparams.model_path = os.path.join("integration", "fixtures", hparams.model_name, hparams.networks_dir)
         hparams.synth_fs = 16000
         hparams.frame_size_ms = 5
         hparams.synth_ext = "wav"
@@ -138,9 +145,10 @@ class TestAcousticModelTrainer(unittest.TestCase):
         hparams.synth_load_org_vuv = True
         hparams.synth_load_org_bap = True
 
-        trainer = AcousticModelTrainer(self.dir_world_features, self.dir_question_labels, self.id_list, hparams.num_questions, hparams)
+        trainer = AcousticModelTrainer(**AcousticModelTrainer.legacy_support_init(
+            self.dir_world_features, self.dir_question_labels, self.id_list, hparams.num_questions, hparams))
         trainer.init(hparams)
-        hparams.synth_dir = hparams.out_dir
+        hparams.synth_dir = os.path.join(hparams.out_dir, hparams.model_name)
         trainer.synth(hparams, self.id_list[:num_test_files])
 
         found_files = list([name for name in os.listdir(hparams.synth_dir)
@@ -153,9 +161,10 @@ class TestAcousticModelTrainer(unittest.TestCase):
         # Check readability and length of one created file.
         raw, fs = soundfile.read(os.path.join(hparams.synth_dir, found_files[0]))
         self.assertEqual(hparams.synth_fs, fs, msg="Desired sampling frequency of output doesn't match.")
-        labels = trainer.OutputGen[[id_name for id_name in self.id_list[:num_test_files] if id_name in found_files[0]][0]]
+        labels = trainer.datareaders["acoustic_features"][[id_name for id_name in self.id_list[:num_test_files]
+                                                           if id_name in found_files[0]][0]]
         expected_length = len(raw) / hparams.synth_fs / hparams.frame_size_ms * 1000
-        self.assertTrue(abs(expected_length - len(labels)) < 10,
+        self.assertTrue(abs(expected_length - len(labels["acoustic_features"])) < 10,
                         msg="Saved raw audio file length does not roughly match length of labels.")
 
         shutil.rmtree(hparams.out_dir)

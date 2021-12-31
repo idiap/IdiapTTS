@@ -13,6 +13,7 @@ docs/build/
 
 egs/**/database/
 egs/**/experiments/
-*.lab
+tmp.lab
 headers\.py
 tools/
+test/integration/fixtures/legacy_models/*

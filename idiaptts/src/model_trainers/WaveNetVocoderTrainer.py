@@ -10,84 +10,77 @@
 """
 
 # System imports.
-import logging
-import sys
-import numpy as np
-import os
+import copy
 from functools import partial, reduce
+import logging
 from operator import mul
+import os
+from typing import List
 
 # Third-party imports.
+import numpy as np
 
 # Local source tree imports.
-from idiaptts.src.model_trainers.ModelTrainer import ModelTrainer
-from idiaptts.src.DataPlotter import DataPlotter
-from idiaptts.src.data_preparation.world.WorldFeatLabelGen import WorldFeatLabelGen
-from idiaptts.src.data_preparation.audio.RawWaveformLabelGen import RawWaveformLabelGen
 from idiaptts.misc.utils import sample_linearly
+from idiaptts.src.DataPlotter import DataPlotter
+from idiaptts.src.data_preparation.audio.RawWaveformLabelGen import RawWaveformLabelGen
+from idiaptts.src.data_preparation.DataReaderConfig import DataReaderConfig
+from idiaptts.src.data_preparation.PyTorchDatareadersDataset import PyTorchDatareadersDataset
 from idiaptts.src.data_preparation.PyTorchLabelGensDataset import PyTorchLabelGensDataset as LabelGensDataset
-from idiaptts.src.neural_networks.pytorch.ModelHandlerPyTorch import ModelHandlerPyTorch as ModelHandler
+from idiaptts.src.data_preparation.world.WorldFeatLabelGen import WorldFeatLabelGen
+from idiaptts.src.ExtendedHParams import ExtendedHParams
+from idiaptts.src.model_trainers.ModularTrainer import ModularTrainer
 from idiaptts.src.neural_networks.pytorch.loss.OneHotCrossEntropyLoss import OneHotCrossEntropyLoss
 from idiaptts.src.neural_networks.pytorch.loss.DiscretizedMixturelogisticLoss import DiscretizedMixturelogisticLoss
+from idiaptts.src.neural_networks.pytorch.ModelHandlerPyTorch import ModelHandlerPyTorch as ModelHandler
+from idiaptts.src.neural_networks.pytorch.models.WaveNetWrapper import WaveNetWrapper
 
 
-class WaveNetVocoderTrainer(ModelTrainer):
+class WaveNetVocoderTrainer(ModularTrainer):
     logger = logging.getLogger(__name__)
 
     #########################
     # Default constructor
     #
-    def __init__(self, dir_world_features, id_list, hparams=None):
+    def __init__(self, hparams: ExtendedHParams, id_list: List[str],
+                 data_reader_configs: List[DataReaderConfig] = None):
 
         if hparams is None:
             hparams = self.create_hparams()
             hparams.out_dir = os.path.curdir
 
         # Write missing default parameters.
-        if hparams.variable_sequence_length_train is None:
-            hparams.variable_sequence_length_train = hparams.batch_size_train > 1
-        if hparams.variable_sequence_length_test is None:
-            hparams.variable_sequence_length_test = hparams.batch_size_test > 1
-        if hparams.synth_dir is None:
-            hparams.synth_dir = os.path.join(hparams.out_dir, "synth")
+        # if hparams.synth_dir is None:
+        #     hparams.synth_dir = os.path.join(hparams.out_dir, "synth")
 
-        super().__init__(id_list, hparams)
+        super().__init__(data_reader_configs=data_reader_configs,
+                         id_list=id_list,
+                         hparams=hparams)
 
-        in_to_out_multiplier = int(hparams.frame_rate_output_Hz / (1000.0 / hparams.frame_size_ms))
-        max_frames_input_trainset = int(1000.0 / hparams.frame_size_ms * hparams.max_input_train_sec) * in_to_out_multiplier  # Multiply by number of seconds.
-        max_frames_input_testset = int(1000.0 / hparams.frame_size_ms * hparams.max_input_test_sec) * in_to_out_multiplier  # Ensure that test takes all frames. NOTE: Had to limit it because of memory constraints.
+        # in_to_out_multiplier = int(hparams.frame_rate_output_Hz /
+        #                            (1000.0 / hparams.frame_size_ms))
+        # num_frames_per_sec = 1000.0 / hparams.frame_size_ms
+        # # NOTE: Had to limit input length because of memory constraints.
+        # max_frames_trainset = int(num_frames_per_sec * hparams.max_input_train_sec) \
+        #     * in_to_out_multiplier  # Multiply by number of seconds.
+        # max_frames_testset = int(num_frames_per_sec * hparams.max_input_test_sec) \
+        #     * in_to_out_multiplier  # Ensure that test takes all frames.
 
-        self.InputGen = WorldFeatLabelGen(dir_world_features,
-                                          add_deltas=False,
-                                          sampling_fn=partial(sample_linearly,
-                                                              in_to_out_multiplier=in_to_out_multiplier,
-                                                              dtype=np.float32),
-                                          num_coded_sps=hparams.num_coded_sps,
-                                          num_bap=hparams.num_bap,
-                                          sp_type=hparams.sp_type,
-                                          load_sp=hparams.load_sp,
-                                          load_lf0=hparams.load_lf0,
-                                          load_vuv=hparams.load_vuv,
-                                          load_bap=hparams.load_bap)
-        self.InputGen.get_normalisation_params(dir_world_features, hparams.input_norm_params_file_prefix)
+        # self.dataset_train = LabelGensDataset(
+        #     self.id_list_train, self.InputGen, self.OutputGen, hparams,
+        #     random_select=True, max_frames_input=max_frames_trainset)
+        # self.dataset_val = LabelGensDataset(
+        #     self.id_list_val, self.InputGen, self.OutputGen, hparams,
+        #     random_select=True, max_frames_input=max_frames_testset)
 
-        self.OutputGen = RawWaveformLabelGen(frame_rate_output_Hz=hparams.frame_rate_output_Hz,
-                                             frame_size_ms=hparams.frame_size_ms,
-                                             mu=hparams.mu if hparams.input_type == "mulaw-quantize" else None,
-                                             silence_threshold_quantized=hparams.silence_threshold_quantized)
-        # No normalisation parameters required.
-
-        self.dataset_train = LabelGensDataset(self.id_list_train, self.InputGen, self.OutputGen, hparams, random_select=True, max_frames_input=max_frames_input_trainset)
-        self.dataset_val = LabelGensDataset(self.id_list_val, self.InputGen, self.OutputGen, hparams, random_select=True, max_frames_input=max_frames_input_testset)
-
-        if self.loss_function is None:
-            if hparams.input_type == "mulaw-quantize":
-                self.loss_function = OneHotCrossEntropyLoss(reduction='none', shift=1)
-            else:
-                self.loss_function = DiscretizedMixturelogisticLoss(hparams.quantize_channels,
-                                                                    hparams.log_scale_min,
-                                                                    reduction='none',
-                                                                    hinge_loss=hparams.hinge_regularizer)
+        # if self.loss_function is None:
+        #     if hparams.input_type == "mulaw-quantize":
+        #         self.loss_function = OneHotCrossEntropyLoss(reduction='none', shift=1)
+        #     else:
+        #         self.loss_function = DiscretizedMixturelogisticLoss(hparams.quantize_channels,
+        #                                                             hparams.log_scale_min,
+        #                                                             reduction='none',
+        #                                                             hinge_loss=hparams.hinge_regularizer)
 
         if hparams.scheduler_type == "default":
             hparams.scheduler_type = "Noam"
@@ -98,63 +91,150 @@ class WaveNetVocoderTrainer(ModelTrainer):
         self.batch_collate_fn = partial(self.prepare_batch, use_cond=hparams.use_cond, one_hot_target=True)
         self.batch_decollate_fn = self.decollate_network_output
 
+    def _setup_datareaders(self, data_reader_configs: List[DataReaderConfig],
+                           hparams: ExtendedHParams):
+        super()._setup_datareaders(data_reader_configs=data_reader_configs,
+                                   hparams=hparams)
+
+        in_to_out_multiplier = int(hparams.frame_rate_output_Hz /
+                                   (1000.0 / hparams.frame_size_ms))
+        num_frames_per_sec = 1000.0 / hparams.frame_size_ms
+        # NOTE: Had to limit input length because of memory constraints.
+        max_frames_trainset = int(num_frames_per_sec * hparams.max_input_train_sec) \
+            * in_to_out_multiplier  # Multiply by number of seconds.
+        max_frames_testset = int(num_frames_per_sec * hparams.max_input_test_sec) \
+            * in_to_out_multiplier  # Ensure that test takes all frames.
+
+        readers = list(self.datareaders.values())
+        for reader in readers:
+            reader.max_frames = max_frames_trainset
+        self.dataset_val = PyTorchDatareadersDataset(
+            id_list=self.id_list_val,
+            datareaders=readers,
+            hparams=hparams)
+
+        readers = copy.deepcopy(readers)
+        for reader in readers:
+            reader.max_frames = max_frames_testset
+        self.dataset_val = PyTorchDatareadersDataset(
+            id_list=self.id_list_val,
+            datareaders=readers,
+            hparams=hparams)
+
+    @staticmethod
+    def legacy_support_init(dir_world_features: os.PathLike, id_list: List[str],
+                            hparams: ExtendedHParams):
+        in_to_out_multiplier = int(hparams.frame_rate_output_Hz /
+                                   (1000.0 / hparams.frame_size_ms))
+        # num_frames_per_sec = 1000.0 / hparams.frame_size_ms
+        # NOTE: Had to limit input length because of memory constraints.
+        # max_frames = int(num_frames_per_sec * hparams.max_input_train_sec) \
+        #     * in_to_out_multiplier  # Multiply by number of seconds.
+        # max_frames_testset = int(num_frames_per_sec * hparams.max_input_test_sec) \
+        #     * in_to_out_multiplier  # Ensure that test takes all frames.
+
+        if hparams.input_type == WaveNetWrapper.Config.INPUT_TYPE_MULAW:
+            mu = hparams.mu
+        else:
+            mu = None
+
+        data_reader_configs = [
+            DataReaderConfig(
+                name="mfbanks",
+                directory=dir_world_features,
+                feature_type="WorldFeatLabelGen",
+                features=[hparams.sp_type + str(hparams.num_coded_sps)],
+                output_names=["conditioning"],
+                requires_seq_mask=True,
+                random_select=True,
+                # max_frames=max_frames,
+                load_sp=hparams.load_sp,
+                load_lf0=hparams.load_lf0,
+                load_vuv=hparams.load_vuv,
+                load_bap=hparams.load_bap,
+                match_length=["questions"],
+                add_deltas=False,
+                num_coded_sps=hparams.num_coded_sps,
+                num_bap=hparams.num_bap,
+                sp_type=hparams.sp_type,
+                preprocessing_fn=partial(sample_linearly,
+                                         in_to_out_multiplier=in_to_out_multiplier,
+                                         dtype=np.float32),
+            ),
+            DataReaderConfig(
+                name="target",
+                feature_type="RawWaveformLabelGen",
+                directory=hparams.data_dir,
+                frame_rate_output_Hz=hparams.frame_rate_output_Hz,
+                frame_size_ms=hparams.frame_size_ms,
+                mu=mu,
+                silence_threshold_quantized=hparams.silence_threshold_quantized,
+                requires_seq_mask=True
+            )
+        ]
+
+        return dict(data_reader_configs=data_reader_configs, hparams=hparams,
+                    id_list=id_list)
+
     @staticmethod
     def create_hparams(hparams_string=None, verbose=False):
         """Create model hyper-parameters. Parse non-default from given string."""
-        hparams = ModelTrainer.create_hparams(hparams_string, verbose=False)
+        hparams = ModularTrainer.create_hparams(hparams_string, verbose=False)
         hparams.synth_vocoder = "raw"
 
         hparams.add_hparams(
             batch_first=True,
             frame_rate_output_Hz=16000,
-            mu=255,
             bit_depth=16,
             silence_threshold_quantized=None,  # Beginning and end of audio below the threshold are trimmed.
             teacher_forcing_in_test=True,
             ema_decay=0.9999,
+            mu=255,
 
             # Model parameters.
-            input_type="mulaw-quantize",
-            hinge_regularizer=True,  # Only used in MoL prediction (input_type="raw").
-            log_scale_min=float(np.log(1e-14)),  # Only used for mixture of logistic distributions.
-            quantize_channels=256)  # 256 for input type mulaw-quantize, otherwise 65536
-        if hparams.input_type == "mulaw-quantize":
-            hparams.add_hparam("out_channels", hparams.quantize_channels)
-        else:
-            hparams.add_hparam("out_channels", 10 * 3)  # num_mixtures * 3 (pi, mean, log_scale)
+            input_type=WaveNetWrapper.Config.INPUT_TYPE_MULAW,
+            # hinge_regularizer=True,  # Only used in MoL prediction (input_type="raw").
+            # log_scale_min=float(np.log(1e-14)),  # Only used for mixture of logistic distributions.
+            # quantize_channels=256
+            )  # 256 for input type mulaw-quantize, otherwise 65536
+        # if hparams.input_type == "mulaw-quantize":
+        #     hparams.add_hparam("out_channels", hparams.quantize_channels)
+        # else:
+        #     hparams.add_hparam("out_channels", 10 * 3)  # num_mixtures * 3 (pi, mean, log_scale)
 
         hparams.add_hparams(
-            layers=24,  # 20
-            stacks=4,  # 2
-            residual_channels=512,
-            gate_channels=512,
-            skip_out_channels=256,
-            dropout=1 - 0.95,
-            kernel_size=3,
-            weight_normalization=True,
+            # layers=24,  # 20
+            # stacks=4,  # 2
+            # residual_channels=512,
+            # gate_channels=512,
+            # skip_out_channels=256,
+            # dropout=1 - 0.95,
+            # kernel_size=3,
+            # weight_normalization=True,
             use_cond=True,  # Determines if conditioning is used.
-            cin_channels=63,
-            upsample_conditional_features=False,
-            upsample_scales=[
-                5,
-                4,
-                2
-            ])
-        if hparams.upsample_conditional_features:
+            # cin_channels=63,
+            # upsample_conditional_features=False,
+            # upsample_scales=[
+            #     5,
+            #     4,
+            #     2
+            # ]
+            )
+        if hparams.has_value("upsample_conditional_features"):
             hparams.len_in_out_multiplier = reduce(mul, hparams.upsample_scales, 1)
         else:
             hparams.len_in_out_multiplier = 1
 
         hparams.add_hparams(
-            freq_axis_kernel_size=3,
-            gin_channels=-1,
-            n_speakers=1,
-            use_speaker_embedding=False,
-            sp_type="mcep",
+            # freq_axis_kernel_size=3,
+            # gin_channels=-1,
+            # n_speakers=1,
+            # use_speaker_embedding=False,
+            sp_type="mfbanks",
             load_sp=True,
-            load_lf0=True,
-            load_vuv=True,
-            load_bap=True
+            load_lf0=False,
+            load_vuv=False,
+            load_bap=False
         )
 
         if verbose:

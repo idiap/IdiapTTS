@@ -126,9 +126,9 @@ class WarpingLayer(nn.Module):
         self.computation_dtype = 'torch.FloatTensor'  # torch.float32 cannot be pickled.
         self.w_matrix_3d = self.gen_w_matrix_3d()
 
-        # self.index_vec_pos = torch.arange(0, 2 * self.n, dtype=self.computation_dtype)
+        # self.index_vec_pos = torch.arange(0, 2 * self.n).type(self.computation_dtype)
         # index_vec_neg_sign = torch.tensor([v * pow(-1, i) for i, v in enumerate(range(0, 2 * self.n))],
-        #                                   dtype=self.computation_dtype, requires_grad=False).sign()
+        #                                   requires_grad=False).sign().type(self.computation_dtype)
         # index_vec_neg_sign[0] = 1.
         #
         # self.w_matrix_3d_sign = self.w_matrix_3d.sign().type(self.computation_dtype)
@@ -233,58 +233,58 @@ class WarpingLayer(nn.Module):
 
         return torch.cat([torch.cat(x) for x in m]).view(self.n, self.n)
 
-    # def compare_with_recursive(self, alpha_range, precision=0.05, delta=0.001):
-    #     """
-    #     Compare the element-wise computed gradient matrix with the recursively generate matrix for alphas in
-    #     range(-alpha_range, alpha_range, precision).
-    #
-    #     :param alpha_range:           Range of alpha to test in.
-    #     :param precision:             Precision used for steps in that range.
-    #     :param delta:                 Allowed delta of error.
-    #
-    #     :return:
-    #     """
-    #     assert(precision < 2 * alpha_range)  # Precision must fit in range.
-    #
-    #     for alpha_value in np.arange(-alpha_range, alpha_range + precision, precision):
-    #         # Alpha value which receives the final gradient.
-    #         alpha = torch.tensor(alpha_value, dtype=self.w_matrix_3d.dtype, requires_grad=True)
-    #         alpha_eps = alpha
-    #         alpha_eps = alpha_eps.repeat([1000, 1])
-    #
-    #         # Compute the warp matrix for each alpha.
-    #         warp_matrix = self.get_warp_matrix_log(alpha_eps)
-    #
-    #         # Create the reference matrix recursively for the given alpha.
-    #         ref_matrix = self.gen_warp_matrix_recursively(alpha)
-    #
-    #         # Compute the error.
-    #         dist = (warp_matrix[10] - ref_matrix).abs()
-    #         max_error = (dist / (ref_matrix.abs() + 1e-6)).max()
-    #         error = dist.sum()
-    #
-    #         err_msg = "Max error between w_matrix_3d and recursive reference is {:.5f}% for alpha={:.2f}.".format(
-    #             max_error * 100, alpha_value)
-    #         logging.error(err_msg)
-    #         if max_error > delta:
-    #             raise ValueError(err_msg)
-    #
-    #         # Compute the gradient ratio error.
-    #         ref_matrix.sum().backward()
-    #         real_grad = torch.tensor(alpha.grad)
-    #         alpha.grad.zero_()
-    #         warp_matrix.sum().backward()
-    #         approx_grad = alpha.grad / len(alpha_eps)
-    #         dist_grad = (real_grad - approx_grad).abs()
-    #         error_ratio = (dist_grad / real_grad.abs())
-    #
-    #         err_msg = "Gradient error between w_matrix_3d and recursive reference is {:.5f}% for alpha={:.2f}.".format(
-    #             error_ratio * 100., alpha_value)
-    #         logging.error(err_msg)
-    #         if error_ratio > delta:
-    #             raise ValueError(err_msg)
-    #
-    #     return True
+    def compare_with_recursive(self, alpha_range, precision=0.05, delta=0.001):
+        """
+        Compare the element-wise computed gradient matrix with the recursively generate matrix for alphas in
+        range(-alpha_range, alpha_range, precision).
+
+        :param alpha_range:           Range of alpha to test in.
+        :param precision:             Precision used for steps in that range.
+        :param delta:                 Allowed delta of error.
+
+        :return:
+        """
+        assert(precision < 2 * alpha_range)  # Precision must fit in range.
+
+        for alpha_value in np.arange(-alpha_range, alpha_range + precision, precision):
+            # Alpha value which receives the final gradient.
+            alpha = torch.tensor(alpha_value, dtype=self.w_matrix_3d.dtype, requires_grad=True)
+            alpha_eps = alpha
+            alpha_eps = alpha_eps.repeat([1000, 1])
+
+            # Compute the warp matrix for each alpha.
+            warp_matrix = self.get_warp_matrix(alpha_eps)
+
+            # Create the reference matrix recursively for the given alpha.
+            ref_matrix = self.gen_warp_matrix_recursively(alpha)
+
+            # Compute the error.
+            dist = (warp_matrix[10] - ref_matrix).abs()
+            max_error = (dist / (ref_matrix.abs() + 1e-6)).max()
+            error = dist.sum()
+
+            err_msg = "Max error between w_matrix_3d and recursive reference is (cum: {:.5f}, max: {:.5f}) {:.5f}% for alpha={:.2f}."\
+                .format(error, dist.max(), max_error * 100, alpha_value)
+            logging.error(err_msg)
+            # if max_error > delta:
+            #     raise ValueError(err_msg)
+
+            # Compute the gradient ratio error.
+            ref_matrix.sum().backward()
+            real_grad = torch.tensor(alpha.grad)
+            alpha.grad.zero_()
+            warp_matrix.sum().backward()
+            approx_grad = alpha.grad / len(alpha_eps)
+            dist_grad = (real_grad - approx_grad).abs()
+            error_ratio = (dist_grad / real_grad.abs())
+
+            err_msg = "Gradient error between w_matrix_3d and recursive reference is ({:.5f})  {:.5f}% for alpha={:.2f}."\
+                .format(dist_grad, error_ratio * 100., alpha_value)
+            logging.error(err_msg)
+            # if error_ratio > delta:
+            #     raise ValueError(err_msg)
+
+        return True
 
     def pre_compute_warp_matrices(self, precision, requires_recursive_grad=True):
         """
@@ -501,6 +501,9 @@ def main():
     hparams.synth_dir = hparams.out_dir
     batch_size = 2
     dir_world_labels = os.path.join("experiments", hparams.voice, "WORLD")
+    hparams.add_hparam("pass_embs_to_pre_net", False)
+    hparams.add_hparam("num_speakers", 1)
+    hparams.add_hparam("speaker_emb_dim", 16)
 
     from idiaptts.src.data_preparation.world.WorldFeatLabelGen import WorldFeatLabelGen
     gen_in = WorldFeatLabelGen(dir_world_labels,
@@ -530,7 +533,7 @@ def main():
         coded_sps = sample_pre[:, :hparams.num_coded_sps * (3 if hparams.add_deltas else 1)].copy()
         coded_sps = coded_sps[:, None, ...].repeat(batch_size, 1)  # Copy data in batch dimension.
 
-        for idx, alpha in enumerate(np.arange(-0.15, 0.2, 0.001)):
+        for idx, alpha in enumerate(np.arange(-0.2, 0.2, 0.05)):
             out_dir = hparams.out_dir + "alpha_{0:0.2f}/".format(alpha)
             makedirs_safe(out_dir)
 
@@ -538,28 +541,28 @@ def main():
             alpha_vec = alpha_vec[:, None, None].repeat(batch_size, 1)  # Copy data in batch dimension.
 
             t_start = timer()
-            mfcc_warped, (_, nn_alpha) = wl(torch.from_numpy(coded_sps), None,
+            mfcc_warped, (_, nn_alpha) = wl(torch.from_numpy(coded_sps.copy()), None,
                                             (len(coded_sps),), (len(coded_sps),),
                                             alphas=torch.from_numpy(alpha_vec))
             mfcc_warped.sum().backward()
             t_benchmark += timer() - t_start
             # assert((mfcc_warped[:, 0] == mfcc_warped[:, 1]).all())  # Compare results for cloned coded_sps within batch.
-            if alpha == 0:
-                assert((mfcc_warped == coded_sps).all())  # Compare results for no warping.
-            # sample_pre[:len(mfcc_warped), :hparams.num_coded_sps * (3 if hparams.add_deltas else 1)] = mfcc_warped[:, 0].detach()
-            #
-            # sample_post = gen_in.postprocess_sample(sample_pre)
-            # # Manually create samples without normalisation but with deltas.
-            # sample_pre = (sample_pre * gen_in.norm_params[1] + gen_in.norm_params[0]).astype(np.float32)
-            #
-            # if np.isnan(sample_pre).any():
-            #     raise ValueError("Detected nan values in output features for {}.".format(id_name))
-            # # Save warped features.
-            # makedirs_safe(os.path.dirname(os.path.join(out_dir, id_name)))
-            # sample_pre.tofile(os.path.join(out_dir, id_name + WorldFeatLabelGen.ext_deltas))
-            #
-            # hparams.synth_dir = out_dir
-            # Synthesiser.run_world_synth({id_name: sample_post}, hparams)
+            if np.isclose(alpha, 0):
+                assert np.isclose(mfcc_warped.detach().cpu().numpy(), coded_sps).all()  # Compare results for no warping.
+            sample_pre[:len(mfcc_warped), :hparams.num_coded_sps * (3 if hparams.add_deltas else 1)] = mfcc_warped[:, 0].detach()
+
+            sample_post = gen_in.postprocess_sample(sample_pre, apply_mlpg=False)
+            # Manually create samples without normalisation but with deltas.
+            sample_pre_with_deltas = (sample_pre * gen_in.norm_params[1] + gen_in.norm_params[0]).astype(np.float32)
+
+            if np.isnan(sample_pre_with_deltas).any():
+                raise ValueError("Detected nan values in output features for {}.".format(id_name))
+            # Save warped features.
+            makedirs_safe(os.path.dirname(os.path.join(out_dir, id_name)))
+            sample_pre_with_deltas.tofile(os.path.join(out_dir, id_name + WorldFeatLabelGen.ext_deltas))
+
+            hparams.synth_dir = out_dir
+            Synthesiser.run_world_synth({id_name: sample_post}, hparams)
 
     print("Process time for {} runs: {}, average: {}".format(len(id_list) * idx, timedelta(seconds=t_benchmark), timedelta(seconds=t_benchmark) / (len(id_list) * idx)))
 

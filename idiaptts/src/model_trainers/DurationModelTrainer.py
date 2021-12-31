@@ -1,86 +1,41 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 #
-# Copyright (c) 2019 Idiap Research Institute, http://www.idiap.ch/
+# Copyright (c) 2021 Idiap Research Institute, http://www.idiap.ch/
 # Written by Bastian Schnell <bastian.schnell@idiap.ch>
 #
 
 """Module description:
-   Train a model to predict durations for phoneme states.
+   Train a model to predict durations for phonemes.
 """
 
 # System imports.
 import logging
-import math
 import numpy as np
-import os
-import scipy
 
 # Third-party imports.
-import torch
 
 # Local source tree imports.
-from idiaptts.src.model_trainers.ModelTrainer import ModelTrainer
-from idiaptts.src.data_preparation.phonemes.PhonemeLabelGen import PhonemeLabelGen
 from idiaptts.src.data_preparation.phonemes.PhonemeDurationLabelGen import PhonemeDurationLabelGen
-from idiaptts.src.data_preparation.PyTorchLabelGensDataset import PyTorchLabelGensDataset
 from idiaptts.src.Metrics import Metrics
+from idiaptts.src.model_trainers.ModularTrainer import ModularTrainer
 
 
-class DurationModelTrainer(ModelTrainer):
+class DurationModelTrainer(ModularTrainer):
     """
-    Implementation of a ModelTrainer for the generation of durations for phonemes.
-
-    Use phonemes as input and predict durations for five states.
+    Implementation of a ModularTrainer for the generation of durations
+    for phonemes. Use phonemes (indices or one-hot) as input and predict
+    durations.
     """
     logger = logging.getLogger(__name__)
 
-    #########################
-    # Default constructor
-    #
-    def __init__(self, dir_phoneme_labels, dir_durations, id_list, file_symbol_dict, hparams=None):
-        """Default constructor.
-
-        :param dir_phoneme_labels:      Path to the directory containing the label files with monophones.
-        :param dir_durations:           Path to the directory containing the durations.
-        :param id_list:                 List containing all ids. Subset is taken as test set.
-        :param file_symbol_dict:        List of all used monophones.
-        """
-        if hparams is None:
-            hparams = self.create_hparams()
-            hparams.out_dir = os.path.curdir
-
-        # Write missing default parameters.
-        if hparams.variable_sequence_length_train is None:
-            hparams.variable_sequence_length_train = hparams.batch_size_train > 1
-        if hparams.variable_sequence_length_test is None:
-            hparams.variable_sequence_length_test = hparams.batch_size_test > 1
-        if not hasattr(hparams, "synth_dir") or hparams.synth_dir is None:
-            hparams.synth_dir = os.path.join(hparams.out_dir, "synth")
-
-        super().__init__(id_list, hparams)
-
-        self.InputGen = PhonemeLabelGen(dir_phoneme_labels, file_symbol_dict, hparams.phoneme_label_type, one_hot=True)
-        self.OutputGen = PhonemeDurationLabelGen(dir_durations)
-        self.OutputGen.get_normalisation_params(dir_durations, hparams.output_norm_params_file_prefix)
-
-        self.dataset_train = PyTorchLabelGensDataset(self.id_list_train, self.InputGen, self.OutputGen, hparams, match_lengths=False)
-        self.dataset_val = PyTorchLabelGensDataset(self.id_list_val, self.InputGen, self.OutputGen, hparams, match_lengths=False)
-
-        if self.loss_function is None:
-            self.loss_function = torch.nn.MSELoss(reduction='none')
-
-        if hparams.scheduler_type == "default":
-            hparams.scheduler_type = "Plateau"
-            hparams.add_hparams(plateau_verbose=True)
-
     @staticmethod
     def create_hparams(hparams_string=None, verbose=False):
-        hparams = ModelTrainer.create_hparams(hparams_string, verbose=False)
+        hparams = ModularTrainer.create_hparams(hparams_string, verbose=False)
         hparams.add_hparams(  # exclude_begin_and_end_silence=False,
-                            min_phoneme_length=50000,
-                            phoneme_label_type="HTK full",  # Specifies the format in which the .lab files are stored.
-                                                            # Refer to PhonemeLabelGen.load_sample for a list of types.
+                            # htk_min_phoneme_length=50000,
+                            # phoneme_label_type="HTK full",  # Specifies the format in which the .lab files are stored.
+                            #                                 # Refer to PhonemeLabelGen.load_sample for a list of types.
                             metrics=[Metrics.Dur_RMSE, Metrics.Dur_pearson])
 
         if verbose:
@@ -98,10 +53,11 @@ class DurationModelTrainer(ModelTrainer):
         :param only_positive:  If True, sets all negative values in the post-processed dictionary to 0.
         :return:               (Dictionary of network outputs, dictionary of post-processed (by self.OutputGen) network outputs)
         """
+        raise NotImplementedError()
         output_dict, output_dict_post = super().forward(hparams, id_list)  # Call base class forward.
 
         # Convert output into phoneme lengths.
-        output_dict_post.update((key, np.around(value).astype(np.int) * hparams.min_phoneme_length) for key, value in output_dict_post.items())
+        output_dict_post.update((key, np.around(value).astype(np.int) * hparams.htk_min_phoneme_length) for key, value in output_dict_post.items())
 
         # Ensure positivity of predicted durations if requested.
         if only_positive:
@@ -110,31 +66,37 @@ class DurationModelTrainer(ModelTrainer):
 
         return output_dict, output_dict_post
 
-    def compute_score(self, dict_outputs_post, dict_hiddens, hparams):
+    def compute_score(self, data, output, hparams):
 
-        dict_original_post = self.get_output_dict(dict_outputs_post.keys())
+        dict_original_post = self.get_output_dict(data.keys(), hparams)
 
-        metric = Metrics(hparams.metrics)
-        for id_name, output_dur in dict_outputs_post.items():
-            org_dur = dict_original_post[id_name]
+        metric_dict = {}
+        for label_name in next(iter(data.values())).keys():
+            metric = Metrics(hparams.metrics)
+            for id_name, labels in data.items():
+                labels = labels[label_name]
+                org_dur = dict_original_post[id_name]
 
-            current_metrics = metric.get_metrics(hparams.metrics, org_dur=org_dur, output_dur=output_dur)
-            metric.accumulate(id_name, current_metrics)
+                current_metrics = metric.get_metrics(hparams.metrics,
+                                                     org_dur=org_dur,
+                                                     output_dur=labels)
+                metric.accumulate(id_name, current_metrics)
 
-        metric.log()
+            metric.log()
+            metric_dict[label_name] = metric.get_cum_values()
 
-        # self.logger.info("Worst RMSE: {} {:4.2f}".format(rmse_max_id, rmse_max))
-        # self.logger.info("Duration RMSE {:4.2f}Hz, Pearson correlation {}.".format(rmse, np.array_str(pearsonr, precision=2, suppress_small=True)))
+        return metric_dict
 
-        return metric.get_cum_values()[0]
-
-    def get_output_dict(self, id_list):
+    def get_output_dict(self, id_list, hparams):
+        assert hparams.has_value("dur_dir"), \
+            "hparams.dur_dir must be set for this operation."
         dict_original_post = dict()
         for id_name in id_list:
-            dict_original_post[id_name] = PhonemeDurationLabelGen.load_sample(id_name, self.OutputGen.dir_labels)
+            dict_original_post[id_name] = PhonemeDurationLabelGen.load_sample(
+                id_name, hparams.dur_dir)
 
         return dict_original_post
 
     def gen_figure_from_output(self, id_name, output, hidden, hparams):
-        # Is there a reasonable way to plot duration prediction?
-        pass
+        # TODO: Is there a reasonable way to plot duration prediction?
+        NotImplementedError()

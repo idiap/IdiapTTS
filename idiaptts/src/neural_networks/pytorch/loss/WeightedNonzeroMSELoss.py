@@ -8,7 +8,6 @@
 import collections
 import torch
 from torch.autograd import Variable
-import torch.nn.functional as F
 import numpy as np
 from torch.nn.modules.loss import _Loss
 

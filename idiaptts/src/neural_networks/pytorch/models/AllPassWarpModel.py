@@ -45,7 +45,8 @@ class AllPassWarpModel(nn.Module):
         self.warp_matrix_size = hparams.warp_matrix_size if hasattr(hparams, "warp_matrix_size")\
                                                          else hparams.num_coded_sps
         self.has_deltas = hparams.add_deltas
-        self.prenet_group_index_of_alpha = -2
+        self.prenet_group_index_of_alpha = -2 if not hparams.has_value("prenet_group_index_of_alpha") else hparams.prenet_group_index_of_alpha
+        self.n_frames_per_step = hparams.n_frames_per_step if hparams.has_value("n_frames_per_step") else 1
 
         norm_params_size = self.warp_matrix_size * (3 if hparams.add_deltas else 1)
         self.register_buffer("mean", torch.zeros(norm_params_size))
@@ -119,11 +120,14 @@ class AllPassWarpModel(nn.Module):
         hparams_prenet.del_hparam("embeddings")
 
         f_get_emb_indices = list()
+        emb_configs = list()
         if hparams.has_value("embeddings"):
             for emb_config, pass_to_pre_net, _ in hparams.embeddings:
                 if pass_to_pre_net:
                     f_get_emb_indices.append(emb_config.f_get_emb_index)
+                    emb_configs.append(emb_config)
             hparams_prenet.setattr_no_type_check("f_get_emb_index", f_get_emb_indices)
+            hparams_prenet.add_hparam("embeddings", emb_configs)
 
         return hparams_prenet
 
@@ -168,9 +172,9 @@ class AllPassWarpModel(nn.Module):
                 assert len(pre_net_embeddings) > pre_net_embs_idx,\
                     "Embedding {} should be passed to pre-net but pre-net expects only {} embeddings."\
                         .format(idx, len(pre_net_embeddings))
-                assert pre_net_embeddings[pre_net_embs_idx].num_embeddings == emb_config.num_embeddings
-                assert pre_net_embeddings[pre_net_embs_idx].embedding_dim == emb_config.embedding_dim
-                self.embeddings.append(pre_net_embeddings[pre_net_embs_idx])
+                assert pre_net_embeddings[str(pre_net_embs_idx)].num_embeddings == emb_config.num_embeddings
+                assert pre_net_embeddings[str(pre_net_embs_idx)].embedding_dim == emb_config.embedding_dim
+                self.embeddings.append(pre_net_embeddings[str(pre_net_embs_idx)])
                 pre_net_embs_idx += 1
             else:
                 self.embeddings.append(nn.Embedding(emb_config.num_embeddings,
@@ -184,7 +188,7 @@ class AllPassWarpModel(nn.Module):
         alpha_layers = list()
 
         for warping_layer_idx, alpha_range in enumerate(hparams.alpha_ranges):
-            cummulated_embedding_dim = 0
+            cumulated_embedding_dim = 0
 
             if hparams.embeddings is not None:
                 for idx, (emb_config, pass_to_pre_net, pass_to_warping_layer_list)in enumerate(hparams.embeddings):
@@ -194,14 +198,15 @@ class AllPassWarpModel(nn.Module):
                         pass_to_warping_layer = pass_to_warping_layer_list[warping_layer_idx]
 
                     if pass_to_warping_layer:
-                        cummulated_embedding_dim += emb_config.embedding_dim
+                        cumulated_embedding_dim += emb_config.embedding_dim
 
             if self.pre_net is not None:
-                pre_net_out_dim = self.pre_net.get_group_out_dim(self.prenet_group_index_of_alpha)
+                out_dims = self.pre_net.get_group_out_dim(self.prenet_group_index_of_alpha)
+                pre_net_out_dim = sum(out_dims) if type(out_dims) in [list, tuple] else out_dims
             else:
                 pre_net_out_dim = np.prod(self.dim_in)
 
-            new_layer = nn.Linear(pre_net_out_dim + cummulated_embedding_dim, 1)
+            new_layer = nn.Linear(pre_net_out_dim + cumulated_embedding_dim, self.n_frames_per_step)
             alpha_layers.append(new_layer)
             self.alpha_ranges.append(alpha_range)
 
@@ -231,35 +236,25 @@ class AllPassWarpModel(nn.Module):
                 alphas = torch.from_numpy(alphas)
             alphas = alphas[:, None].to(self.all_pass_warp.w_matrix_3d.device)
 
-        return self.forward(in_tensor,
-                            hidden=None,
-                            seq_length_input=(len(in_tensor),),
-                            max_length_input=(len(in_tensor),),
-                            alphas=alphas)
-
-    def forward(self, inputs, hidden, seq_length_input, max_length_input, target=None, seq_lengths_output=None, alphas=None):
-
-        if alphas is not None:
-            # Code for testing fixed alphas.
-            alphas = alphas.to(self.all_pass_warp.w_matrix_3d.device)
-            alphas = alphas.type(self.all_pass_warp.w_matrix_3d.dtype)
-            inputs = inputs.to(self.all_pass_warp.w_matrix_3d.device)
-            output = inputs.type(self.all_pass_warp.w_matrix_3d.dtype)
+        if alphas is None:
+            return self.forward(in_tensor,
+                                hidden=None,
+                                seq_length_input=(len(in_tensor),),
+                                max_length_input=(len(in_tensor),))
         else:
-            if self.pre_net is not None:
-                output, hidden, pre_net_intermediate_output = self.get_pre_net_output(inputs,
-                                                                                      hidden,
-                                                                                      seq_length_input,
-                                                                                      max_length_input,
-                                                                                      target,
-                                                                                      seq_lengths_output)
-            else:
-                if len(self.embeddings) > 0:
-                    output = inputs[:, :, :-len(self.embeddings)]
-                else:
-                    output = inputs
-                pre_net_intermediate_output = output
-            alphas = self.get_alphas(inputs, pre_net_intermediate_output)
+            return self.forward_fixed_alphas(in_tensor,
+                                             hidden=None,
+                                             alphas=alphas)
+
+    def forward_fixed_alphas(self, inputs, hidden, alphas):
+
+        assert alphas is not None, "This forward call requires alphas."
+
+        # Code for testing fixed alphas.
+        alphas = alphas.to(self.all_pass_warp.w_matrix_3d.device)
+        alphas = alphas.type(self.all_pass_warp.w_matrix_3d.dtype)
+        inputs = inputs.to(self.all_pass_warp.w_matrix_3d.device)
+        output = inputs.type(self.all_pass_warp.w_matrix_3d.dtype)
 
         spectral_features_dim = self.warp_matrix_size * (3 if self.has_deltas else 1)
         spectral_features = output[:, :, :spectral_features_dim]
@@ -273,16 +268,45 @@ class AllPassWarpModel(nn.Module):
 
         return new_output, (hidden, alphas)
 
-    def get_pre_net_output(self, inputs, hidden, seq_length_input, max_length_input, target, seq_lengths_output):
+    def forward(self, inputs, hidden, seq_length_input, max_length_input, target=None, seq_lengths_output=None, *extra_labels):
+        if self.pre_net is not None:
+            output, hidden, pre_net_intermediate_output = self.get_pre_net_output(inputs,
+                                                                                  hidden,
+                                                                                  seq_length_input,
+                                                                                  max_length_input,
+                                                                                  target,
+                                                                                  seq_lengths_output,
+                                                                                  *extra_labels)
+        else:
+            if len(self.embeddings) > 0:
+                output = inputs[:, :, :-len(self.embeddings)]
+            else:
+                output = inputs
+            pre_net_intermediate_output = output
+        alphas = self.get_alphas(inputs, pre_net_intermediate_output)
+
+        spectral_features_dim = self.warp_matrix_size * (3 if self.has_deltas else 1)
+        spectral_features = output[:, :, :spectral_features_dim]
+        spectral_features = self._denormalise(spectral_features)
+
+        new_output = torch.empty(output.shape, dtype=output.dtype, device=output.device, requires_grad=False)
+        self.all_pass_warp(spectral_features, alphas, out_tensor=new_output)
+
+        new_output[:, :, 0:spectral_features_dim] = self._normalise(new_output[:, :, 0:spectral_features_dim])
+        new_output[:, :, spectral_features_dim:] = output[:, :, spectral_features_dim:]
+
+        return new_output, (hidden, alphas)
+
+    def get_pre_net_output(self, inputs, hidden, seq_length_input, max_length_input, target, seq_lengths_output, *extra_labels):
         batch_size = inputs.shape[self.batch_dim]
         inputs_pre_net = self._remove_non_pre_net_embeddings(inputs)
-        pre_net_output, hidden = self.pre_net(inputs_pre_net, hidden, seq_length_input, max_length_input, target, seq_lengths_output)
+        pre_net_output, hidden = self.pre_net(inputs_pre_net, hidden, seq_length_input, max_length_input, target, seq_lengths_output, *extra_labels)
 
         pre_net_intermediate_output = self.pre_net.get_intermediate_output(self.prenet_group_index_of_alpha)
         # View operation to get rid of possible bidirectional outputs.
-        pre_net_intermediate_output = pre_net_intermediate_output.view(pre_net_output.shape[self.time_dim],
-                                                                       batch_size,
-                                                                       -1)
+        # pre_net_intermediate_output = pre_net_intermediate_output.view(pre_net_intermediate_output.shape[self.time_dim],
+        #                                                                batch_size,
+        #                                                                -1)
 
         return pre_net_output, hidden, pre_net_intermediate_output
 
@@ -310,10 +334,29 @@ class AllPassWarpModel(nn.Module):
         # if len(embs) == 0:
         #     embs_and_output = pre_net_intermediate_output
         # else:
+        embs = self._match_embs_sequence_length(embs, pre_net_intermediate_output)
         embs_and_output = torch.cat((*embs, pre_net_intermediate_output), dim=2)
 
         alphas = self.alpha_layers[alpha_layer_idx](embs_and_output)
-        return torch.tanh(alphas) * self.alpha_ranges[alpha_layer_idx]
+        scaled_alphas = torch.tanh(alphas) * self.alpha_ranges[alpha_layer_idx]
+
+        B = scaled_alphas.shape[self.batch_dim]
+        if self.batch_first:
+            scaled_alphas = alphas.view(B, -1, 1)
+        else:
+            scaled_alphas = scaled_alphas.transpose(0, 1).contiguous().view(B, -1, 1).transpose(0, 1)
+        return scaled_alphas
+
+    def _match_embs_sequence_length(self, embs, output):
+        desired_length = output.shape[self.time_dim]
+        repeats = (desired_length if self.time_dim == 0 else 1, desired_length if self.time_dim == 1 else 1, 1)
+        output_embs = []
+        for embedding in embs:
+            if embedding.shape[self.time_dim] != desired_length:
+                embedding = embedding[0:1] if self.time_dim == 0 else embedding[:, 0:1]
+                embedding = embedding.repeat(repeats)
+            output_embs.append(embedding)
+        return output_embs
 
     def _get_alpha_layer_embeddings(self, inputs, alpha_layer_idx):
         return [self.embeddings[idx](inputs[:, :, -len(self.embeddings) + idx].long())
@@ -357,20 +400,20 @@ def main():
     hparams = VTLNSpeakerAdaptionModelTrainer.create_hparams()
     hparams.use_gpu = False
     hparams.voice = "English"
-    hparams.model_name = "WarpingLayerTest.nn"
+    hparams.model_name = "AllPassWarpModelTest.nn"
     hparams.add_deltas = True
     hparams.num_coded_sps = 30
     # hparams.num_questions = 505
     hparams.num_questions = 425
     hparams.out_dir = os.path.join("experiments", hparams.voice, "VTLNArtificiallyWarped")
     hparams.data_dir = os.path.realpath("database")
-    hparams.model_name = "warping_layer_test"
+    hparams.model_name = "all_pass_warp_test"
     hparams.synth_dir = hparams.out_dir
     batch_size = 2
     dir_world_labels = os.path.join("experiments", hparams.voice, "WORLD")
 
     # hparams.add_hparam("warp_matrix_size", hparams.num_coded_sps)
-    hparams.add_hparam("alpha_ranges", [0.2, ])
+    hparams.alpha_ranges = [0.2, ]
 
     from idiaptts.src.data_preparation.world.WorldFeatLabelGen import WorldFeatLabelGen
     gen_in = WorldFeatLabelGen(dir_world_labels,
@@ -384,13 +427,12 @@ def main():
 
     sp_mean = gen_in.norm_params[0][:hparams.num_coded_sps * (3 if hparams.add_deltas else 1)]
     sp_std_dev = gen_in.norm_params[1][:hparams.num_coded_sps * (3 if hparams.add_deltas else 1)]
-    wl = AllPassWarpModel((hparams.num_coded_sps,), (hparams.num_coded_sps,), hparams)
-    wl.set_norm_params(sp_mean, sp_std_dev)
+    all_pass_warp_model = AllPassWarpModel((hparams.num_coded_sps,), (hparams.num_coded_sps,), hparams)
+    all_pass_warp_model.set_norm_params(sp_mean, sp_std_dev)
 
     # id_list = ["dorian/doriangray_16_00199"]
     # id_list = ["p225/p225_051", "p277/p277_012", "p278/p278_012", "p279/p279_012"]
     id_list = ["p225/p225_051"]
-    hparams.num_speakers = 1
 
     t_benchmark = 0
     for id_name in id_list:
@@ -412,9 +454,11 @@ def main():
             alpha_vec = alpha_vec[:, None].repeat(batch_size, 1)  # Copy data in batch dimension.
 
             t_start = timer()
-            sp_warped, (_, nn_alpha) = wl(torch.from_numpy(coded_sps), None,
-                                            (len(coded_sps),), (len(coded_sps),),
-                                            alphas=torch.from_numpy(alpha_vec))
+            sp_warped, (_, nn_alpha) = all_pass_warp_model(torch.from_numpy(coded_sps.copy()),
+                                                           None,
+                                                           (len(coded_sps),),
+                                                           (len(coded_sps),),
+                                                           alphas=torch.tensor(alpha_vec, requires_grad=True))
             sp_warped.sum().backward()
             t_benchmark += timer() - t_start
             # assert((mfcc_warped[:, 0] == mfcc_warped[:, 1]).all())  # Compare results for cloned coded_sps within batch.

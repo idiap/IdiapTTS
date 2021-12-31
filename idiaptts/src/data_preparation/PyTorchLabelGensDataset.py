@@ -20,7 +20,7 @@ from torch.utils.data import Dataset
 class PyTorchLabelGensDataset(Dataset):
     """Dataset that generate the samples from two LabelGen objects."""
 
-    def __init__(self, id_list, label_gen_in, label_gen_out, hparams,
+    def __init__(self, id_list, label_gen_in, label_gen_out, hparams, label_gens_extra=None,
                  match_lengths=False, len_in_out_multiplier=1, random_select=False, max_frames_input=-1):
         """
         Initialise a dataset that generate the samples from two LabelGen objects.
@@ -28,6 +28,9 @@ class PyTorchLabelGensDataset(Dataset):
         :param id_list:                 List of ids used in this dataset.
         :param label_gen_in:            LabelGen for input labels.
         :param label_gen_out:           LabelGen for output labels.
+        :param hparams:                 Hyper-parameter container.
+        :param label_gens_extra:        A list of label generators that create additional components of the batch.
+                                        Used e.g. to add a ground truth attention matrix.
         :param match_lengths:           Check lengths of input and output labels match. Guaranteed for random_select.
         :param len_in_out_multiplier:   Multiplier of length between input and output labels in time (can be < 1).
         :param random_select:           Randomly selects a sequential part of the labels. This avoids memory issues.
@@ -38,6 +41,7 @@ class PyTorchLabelGensDataset(Dataset):
 
         self.LabelGenIn = label_gen_in
         self.LabelGenOut = label_gen_out
+        self.LabelGensExtra = label_gens_extra if type(label_gens_extra) in [list, tuple] else (label_gens_extra,) if label_gens_extra is not None else tuple()
 
         # Automatically add embedding indices to the inputs with given function(s).
         if hparams is not None and hasattr(hparams, "f_get_emb_index"):
@@ -74,7 +78,7 @@ class PyTorchLabelGensDataset(Dataset):
         self.len_in_out_multiplier can be any positive value.
         """
 
-        labels_in, labels_out = self.getitem_no_length_check(id_name, load_target)
+        labels_in, labels_out, *labels_extra = self.getitem_no_length_check(id_name, load_target)
 
         # Trim the in labels so that they are dividable by the scale factor.
         if self.len_in_out_multiplier < 1:
@@ -102,7 +106,9 @@ class PyTorchLabelGensDataset(Dataset):
                 labels_out = self.LabelGenOut.trim_end_sample(labels_out, trim_front, reverse=True)
 
             assert(len(labels_in) == len(labels_out))
-        return labels_in, labels_out
+
+        # NOTE: labels_extra shouldn't need any length check. If they do they should be part of labels_in or labels_out.
+        return (labels_in, labels_out, *labels_extra)
 
     def getitem_random_select(self, id_name, load_target=True):
         """
@@ -112,7 +118,7 @@ class PyTorchLabelGensDataset(Dataset):
         It is ensured that num_out_frames is dividable by self.len_in_out_multiplier.
         """
 
-        labels_in, labels_out = self.getitem_no_length_check(id_name, load_target)
+        labels_in, labels_out, *labels_extra = self.getitem_no_length_check(id_name, load_target)
 
         # Randomly select a subset of the data. Use torch as random number generator to make results reproducible.
         start_frame_in = torch.IntTensor(1).random_(0, max(1, len(labels_in) - self.max_frames_input))
@@ -134,7 +140,15 @@ class PyTorchLabelGensDataset(Dataset):
         labels_in = self.LabelGenIn.trim_end_sample(labels_in, len(labels_in) - end_frame_in)
         labels_in = self.LabelGenIn.trim_end_sample(labels_in, start_frame_in, reverse=True)
 
-        return labels_in, labels_out
+        # Trim extra data.  # TODO: Untested.
+        output_labels_extra = list()
+        for label_extra, generator in zip(labels_extra, self.LabelGensExtra):
+            raise NotImplementedError("Trim to input or output?")
+            label_extra = generator.trim_end_sample(label_extra, len(label_extra) - end_frame_in)
+            label_extra = generator.trim_end_sample(label_extra, start_frame_in, reverse=True)
+            output_labels_extra.append(label_extra)
+
+        return (labels_in, labels_out, *output_labels_extra)
 
     def getitem_no_length_check(self, id_name, load_target):
         """Load labels without any length checks, adds embedding indices if given in hparams in constructor."""
@@ -150,7 +164,11 @@ class PyTorchLabelGensDataset(Dataset):
         if load_target:
             labels_out = self.LabelGenOut[id_name]
 
-        return labels_in, labels_out
+        labels_extra = list()
+        for generator in self.LabelGensExtra:
+            labels_extra.append(generator[id_name])
+
+        return (labels_in, labels_out, *labels_extra)
 
     def get_input(self, id_name):
         return self.LabelGenIn[id_name]
@@ -163,5 +181,6 @@ class PyTorchLabelGensDataset(Dataset):
 
     def get_dims(self):
         """Returns the feature dimensions of the input and output labels."""
-        labels_in, labels_out = self.__getitem__(0)
-        return labels_in.shape[1:], labels_out.shape[1:]  # First dimension it time.
+        labels_in, labels_out, *labels_extra = self.__getitem__(0)
+        return labels_in.shape[1:], labels_out.shape[1:]  # First dimension is time.
+        # return (labels_in.shape[1:], labels_out.shape[1:], *map(lambda x: x.shape[1:], labels_extra))  # First dimension it time.

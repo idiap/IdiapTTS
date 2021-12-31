@@ -18,8 +18,8 @@ class ExponentialMovingAverage(object):
     decay : float
         Decay rate of previous parameter values. Parameter updates are also scaled by `1 - decay`.
     """
-    def __init__(self, average_model, decay):
-        self.model = average_model
+    def __init__(self, model, decay):
+        self.model = copy.deepcopy(model)
         self.decay = decay
 
         # Use shadow to link to all parameters in the averaged model.
@@ -27,6 +27,7 @@ class ExponentialMovingAverage(object):
         for name, param in self.model.named_parameters():
             if param.requires_grad:
                 self.shadow[name] = param.data
+            param.detach_()
 
     def _update_param(self, name, x):
         """Performs update on one parameter. `shadow = decay * shadow + (1 - decay) * x`."""

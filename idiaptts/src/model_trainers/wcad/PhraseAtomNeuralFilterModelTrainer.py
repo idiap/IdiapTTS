@@ -80,10 +80,6 @@ class PhraseAtomNeuralFilterModelTrainer(ModelTrainer):
                                                           hparams_phrase.model_name + "_flat")
 
         # Write missing default parameters.
-        if hparams_phrase.variable_sequence_length_train is None:
-            hparams_phrase.variable_sequence_length_train = hparams_phrase.batch_size_train > 1
-        if hparams_phrase.variable_sequence_length_test is None:
-            hparams_phrase.variable_sequence_length_test = hparams_phrase.batch_size_test > 1
         if hparams_phrase.synth_dir is None:
             hparams_phrase.synth_dir = os.path.join(hparams_phrase.out_dir, "synth")
 
@@ -144,16 +140,17 @@ class PhraseAtomNeuralFilterModelTrainer(ModelTrainer):
     def prepare_batch(batch, common_divisor=1, batch_first=False):
         inputs, targets, seq_lengths_input, seq_lengths_output, mask, permutation = ModelHandler.prepare_batch(batch, common_divisor=common_divisor, batch_first=batch_first)
 
-        if mask is None:
-            mask = torch.ones((seq_lengths_output[0], 1, 1))
-        mask = mask.expand(*mask.shape[:2], 2)
+        if targets is not None:
+            if mask is None:
+                mask = torch.ones((seq_lengths_output[0], 1, 1))
+            mask = mask.expand(*mask.shape[:2], 2)
 
-        # mask: T x B x 2 (lf0, vuv), add L1 error dimension.
-        mask = torch.cat((mask, mask[..., -1:]), dim=-1).contiguous()
+            # mask: T x B x 2 (lf0, vuv), add L1 error dimension.
+            mask = torch.cat((mask, mask[..., -1:]), dim=-1).contiguous()
 
-        # TODO this is a dirty hack, it works but only for VUV weight of 0 (it completes the loss function Weighted)
-        mask[..., 0] = mask[..., 0] * seq_lengths_output.float()
-        ################################################
+            # TODO this is a dirty hack, it works but only for VUV weight of 0 (it completes the loss function Weighted)
+            mask[..., 0] = mask[..., 0] * seq_lengths_output.float()
+            ################################################
 
         return inputs, targets, seq_lengths_input, seq_lengths_output, mask, permutation
 

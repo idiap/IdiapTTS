@@ -1,0 +1,45 @@
+{
+    "py/object": "idiaptts.src.neural_networks.pytorch.models.NamedForwardWrapper.NamedForwardWrapper.Config",
+    "input_names": [
+        "questions"
+    ],
+    "batch_first": false,
+    "input_merge_type": "cat",
+    "name": "AcousticModel",
+    "output_names": [
+        "pred_acoustic_features"
+    ],
+    "kwargs": {},
+    "wrapped_model_config": {
+        "py/object": "idiaptts.src.neural_networks.pytorch.models.rnn_dyn.Config",
+        "in_dim": 409,
+        "batch_first": false,
+        "layer_configs": [
+            {
+                "py/object": "idiaptts.src.neural_networks.pytorch.models.rnn_dyn.Config.LayerConfig",
+                "type": "Linear",
+                "out_dim": 32,
+                "num_layers": 1,
+                "nonlin": "relu",
+                "dropout": 0.0,
+                "kwargs": {},
+                "needs_in_dim": true,
+                "needs_packing": false,
+                "needs_transposing": false
+            },
+            {
+                "py/object": "idiaptts.src.neural_networks.pytorch.models.rnn_dyn.Config.LayerConfig",
+                "type": "Linear",
+                "out_dim": 67,
+                "num_layers": 1,
+                "nonlin": null,
+                "dropout": 0.0,
+                "kwargs": {},
+                "needs_in_dim": true,
+                "needs_packing": false,
+                "needs_transposing": false
+            }
+        ],
+        "emb_configs": []
+    }
+}

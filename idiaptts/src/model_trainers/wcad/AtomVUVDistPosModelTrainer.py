@@ -69,10 +69,6 @@ class AtomVUVDistPosModelTrainer(AtomModelTrainer):
             hparams.out_dir = os.path.curdir
 
         # Write missing default parameters.
-        if hparams.variable_sequence_length_train is None:
-            hparams.variable_sequence_length_train = hparams.batch_size_train > 1
-        if hparams.variable_sequence_length_test is None:
-            hparams.variable_sequence_length_test = hparams.batch_size_test > 1
         if hparams.synth_dir is None:
             hparams.synth_dir = os.path.join(hparams.out_dir, "synth")
 

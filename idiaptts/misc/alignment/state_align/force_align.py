@@ -226,7 +226,7 @@ class ForcedAlignment(object):
         self.train_scp = os.path.join(self.cfg_dir, 'train.scp')
         # CFG
         self.cfg = os.path.join(self.cfg_dir, 'cfg')
-        
+
         # The following is only correct for the default values in the cfg file given
         # in gen_mfcc.py. If you changed the cfg for mfcc extraction, change it here accordingly.
         open(self.cfg, 'w').write("""TARGETRATE = 50000.0
@@ -254,7 +254,7 @@ NUMCEPS = 12
         file_id_list = self._read_file_list(file_id_list_name)
         print('---checking data')
         speaker_utt_dict = self._check_data(file_id_list, multiple_speaker)
-        
+
         print('---feature_normalisation')
         for key_name in list(speaker_utt_dict.keys()):
             print("   ---create normaliser for speaker {}.".format(key_name))
@@ -350,7 +350,7 @@ NUMCEPS = 12
         print(time.strftime("%c"))
         self.align_mlf = os.path.join(work_dir, 'mono_align.mlf')
 
-        check_call([HVite, '-a', '-f', '-m', '-y', 'lab', '-o', 'SM',
+        check_call([HVite, '-a', '-f', '-m', '-y', 'lab', '-o', 'SM', '-b', '#',
                     '-i', self.align_mlf, '-L', self.mono_lab_dir,
                     '-C', self.cfg, '-S', self.train_scp,
                     '-H', os.path.join(self.cur_dir, MACROS),
@@ -386,7 +386,7 @@ NUMCEPS = 12
                     line = line.strip()
                     tmp_list = line.split()
                     fw.write('{0} {1} {2}[{3}]\n'.format(tmp_list[0], tmp_list[1], full_lab, i + 2))
-                    # print(tmp_list)
+                    print(tmp_list)
                     # lab_logprob += float(tmp_list[3])  # Not sure what this should do, but it throws an error.
                     lab_entries += 1
 
@@ -431,7 +431,7 @@ def main():
     aligner = ForcedAlignment()
     aligner.prepare_training(args.file_id_list, args.dir_wav, args.dir_lab, args.dir_mfcc, args.dir_work, multiple_speaker)
 
-    aligner.train_hmm(7, 32)
+    # aligner.train_hmm(7, 32)
     aligner.align(args.dir_work, args.dir_lab_align)
     print('---done!')
 

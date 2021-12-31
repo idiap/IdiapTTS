@@ -4,6 +4,12 @@
 # Copyright (c) 2019 Idiap Research Institute, http://www.idiap.ch/
 # Written by Bastian Schnell <bastian.schnell@idiap.ch>
 #
+import logging
+import os
+
+import numpy as np
+
+from idiaptts.misc.utils import makedirs_safe
 
 
 class LabelGen(object):
@@ -37,9 +43,59 @@ class LabelGen(object):
         raise NotImplementedError("Class %s doesn't implement trim_end_sample(sample, length, reverse=False)" % LabelGen.__class__.__name__)
 
     # TODO: Implement this class instead of the previous method.
-    # @staticmethod
-    # def trim_sample(sample, length_front, length_end):
+    def trim_sample(self, sample, trim_front, trim_end):
+        sample = self.trim_end_sample(sample, trim_end)
+        sample = self.trim_end_sample(sample, trim_front, reverse=True)
+        return sample
+
+    def pad(self, sample, pad_width):
+        return np.pad(sample, pad_width)
+
+    def trim(self, sample, trim_width):
+        trim_width = [slice(v[0], sample.shape[dim] - v[1]) if isinstance(v, tuple) else v for dim, v in enumerate(trim_width)]
+        return sample[tuple(trim_width)]
 
     @staticmethod
     def load_sample(id_name, dir_out):
         raise NotImplementedError("Class %s doesn't implement load_sample(id_name, dir_out)" % LabelGen.__class__.__name__)
+
+    @staticmethod
+    def _save_to_npz(file_path: os.PathLike, features: np.ndarray,
+                     feature_name: str) -> None:
+
+        makedirs_safe(os.path.dirname(file_path))
+        if not file_path.endswith(".npz"):
+            file_path += ".npz"
+        file_path_backup = file_path + "_bak"
+
+        clean_backup_file = False
+
+        if os.path.isfile(file_path):
+            saved_features = dict(np.load(file_path))
+
+            os.rename(file_path, file_path_backup)
+            clean_backup_file = True
+
+            if feature_name in saved_features:
+                logging.info("Overriding {} in {}.".format(
+                    feature_name, file_path))
+            saved_features[feature_name] = features
+        else:
+            saved_features = {feature_name: features}
+
+        try:
+            np.savez(file_path, **saved_features)
+        except:
+            if os.path.isfile(file_path_backup):
+                logging.error("Error when writing {}, restoring backup".format(
+                    file_path))
+                if os.path.isfile(file_path):
+                    os.remove(file_path)
+                os.rename(file_path_backup, file_path)
+                clean_backup_file = False
+            else:
+                logging.error("Error when writing {}.".format(file_path))
+            raise
+
+        if clean_backup_file:
+            os.remove(file_path_backup)

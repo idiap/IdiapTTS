@@ -5,9 +5,12 @@ pydub
 scipy
 pyworld
 matplotlib
-tensorflow
 numpy
 soundfile
 bandmat
 pysptk
 nnmnkwii
+librosa
+wavenet_vocoder
+textgrid
+torchinfo

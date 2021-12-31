@@ -1,18 +1,23 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 #
-# Copyright (c) 2019 Idiap Research Institute, http://www.idiap.ch/
+# Copyright (c) 2021 Idiap Research Institute, http://www.idiap.ch/
 # Written by Bastian Schnell <bastian.schnell@idiap.ch>
 #
 
+from datetime import datetime, timezone
+from functools import reduce
+import logging
+import math
+import operator as op
 import os
+import subprocess
+
+import git
 import numpy as np
+import torch
 import scipy
 from scipy.stats import norm
-import math
-import subprocess
-import operator as op
-from functools import reduce
 
 
 def makedirs_safe(directory):
@@ -97,8 +102,7 @@ def sample_linearly(sample, in_to_out_multiplier, dtype=np.float32):
 
 def compute_deltas(labels):
     labels_deltas = np.gradient(labels, axis=0).astype(dtype=np.float32)
-    labels_double_deltas = np.gradient(labels_deltas, axis=0).astype(dtype=np.float32)
-    return labels_deltas, labels_double_deltas
+    return labels_deltas
 
 
 def surround_with_norm_dist(label, window_size=5, std_dev=1.0, mean=0.0, threshold=0.2):
@@ -229,3 +233,68 @@ def select_skip(iterable, select, skip, start_index=0):
     :return:                     List of elements in selected regions.
     """
     return [x for i, x in enumerate(iterable) if (i - start_index) % (select+skip) < select]
+
+
+def local_modification_time(file_path):
+    utc_time = datetime.fromtimestamp(os.path.getmtime(file_path), timezone.utc)
+    local_time = utc_time.astimezone()
+    mod_time = local_time.strftime('%Y-%m-%d %H:%M:%S')
+    return mod_time
+
+
+def log_git_hash():
+    try:
+        repo = git.Repo(search_parent_directories=True)
+        logging.info("Git: {} at {}".format(repo.git_dir, repo.head.object.hexsha))
+    except git.exc.InvalidGitRepositoryError:
+        pass
+    try:
+        framework_repo = git.Repo(path=os.environ['IDIAPTTS_ROOT'], search_parent_directories=True)
+        logging.info("IdiapTTS framework git: {} at {}"
+                         .format(framework_repo.git_dir, framework_repo.head.object.hexsha))
+    except git.exc.InvalidGitRepositoryError:
+        pass
+
+
+def pretty_print_nested(value, htchar='\t', lfchar='\n', indent=0,
+                        max_array_elements=15):
+    nlch = lfchar + htchar * (indent + 1)
+    if type(value) is dict:
+        if len(value) == 0:
+            return '{}'
+        items = [
+            nlch + repr(key) + ': ' + pretty_print_nested(
+                value[key], htchar, lfchar, indent + 1, max_array_elements)
+            for key in sorted(value)
+        ]
+        return '{%s}' % (','.join(items) + lfchar + htchar * indent)
+    elif type(value) is list:
+        if len(value) == 0:
+            return '[]'
+        elif len(value) > 1:
+            items = [
+                nlch + pretty_print_nested(
+                    item, htchar, lfchar, indent + 1, max_array_elements)
+                for item in value
+            ]
+            return '[%s]' % (','.join(items) + lfchar + htchar * indent)
+        else:
+            return '[' + pretty_print_nested(
+                value[0], htchar, lfchar, indent + 1, max_array_elements) + ']'
+    elif type(value) is tuple:
+        items = [
+            nlch + pretty_print_nested(
+                item, htchar, lfchar, indent + 1, max_array_elements)
+            for item in value
+        ]
+        return '(%s)' % (','.join(items) + lfchar + htchar * indent)
+    elif isinstance(value, np.ndarray) and value.size > max_array_elements:
+        return '{} {}'.format(type(value), value.shape)
+    elif isinstance(value, torch.Tensor) and value.numel() > max_array_elements:
+        return '{} {}'.format(type(value), value.shape)
+    else:
+        return repr(value)
+
+
+def pretty_print_decimal_places(lr):
+    return str(np.format_float_positional(lr).split('.')[1])

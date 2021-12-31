@@ -1,0 +1,3 @@
+jsonpickle
+gitpython
+tensorboard

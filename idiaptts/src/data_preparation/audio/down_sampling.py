@@ -8,6 +8,7 @@
 import sys
 import os
 import librosa
+import soundfile
 from shutil import copy
 from pydub import AudioSegment
 
@@ -40,7 +41,8 @@ for file_id in id_list:
     if current_sampling_rate != target_sampling_rate:
         print("Downsample {} from {} to {}.".format(full_path_in, current_sampling_rate, target_sampling_rate))
         y, s = librosa.load(full_path_in, sr=target_sampling_rate)
-        librosa.output.write_wav(full_path_out, y, target_sampling_rate)
+        soundfile.write(full_path_out, y, target_sampling_rate)
+        # librosa.output.write_wav(full_path_out, y, target_sampling_rate)  # librosa < 0.8.0
     else:
         print("Already at target frame rate, so copy " + full_path_in)
         copy(full_path_in, full_path_out)

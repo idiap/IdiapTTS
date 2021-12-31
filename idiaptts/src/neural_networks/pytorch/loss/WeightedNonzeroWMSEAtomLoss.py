@@ -10,8 +10,6 @@ import os
 import sys
 import numpy as np
 from numpy import linalg
-from torch.legacy.nn import Criterion
-import torch.nn.functional as F
 from mpl_toolkits.mplot3d import Axes3D
 import matplotlib.pyplot as plt
 from matplotlib import cm

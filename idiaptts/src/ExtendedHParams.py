@@ -8,13 +8,13 @@
 # System imports.
 import logging
 import types
-import numpy as np
 
 # Third-party imports.
-from tensorflow.contrib.training import HParams
-from tensorflow.contrib.training.python.training.hparam import _cast_to_type_if_compatible
+import numpy as np
 
 # Local source tree imports.
+from idiaptts.misc.tfcompat.hparams import HParams, _cast_to_type_if_compatible
+from idiaptts.misc.utils import pretty_print_nested
 
 
 class ExtendedHParams(HParams):
@@ -28,7 +28,10 @@ class ExtendedHParams(HParams):
 
     def set_hparam(self, name, value):
         """Override to use super().__setattr_(...) function instead to prevent an infinite loop."""
-        param_type, is_list = self._hparam_types[name]
+        try:
+            param_type, is_list = self._hparam_types[name]
+        except KeyError:
+            raise KeyError("Parameter {} not in hparams, please use hparams.add_hparam(\"{}\", {}) to add it.".format(name, name, value))
         if isinstance(value, list):
             if not param_type is type(None) and not is_list:
                 raise ValueError('Must not pass a list for single-valued parameter: %s' % name)
@@ -51,6 +54,8 @@ class ExtendedHParams(HParams):
                 return value
             else:
                 raise ValueError('Must pass a numpy.ndarray object for function parameter: %s' % name)
+        elif type(value) is param_type:
+            return value  # Already correct type.
         else:
             return _cast_to_type_if_compatible(name, param_type, value)
 
@@ -81,13 +86,48 @@ class ExtendedHParams(HParams):
                     logging.warning("Attribute {} not in types dictionary."
                                     "Please use add_hparam or add_hparams to add attributes.".format(attr))
 
-    def get_debug_string(self):
+    def get_debug_string(self, max_array_elements=15):
         values = self.values()
-        hp = ['  %s: %s' % (name, values[name]) for name in sorted(values)]
-        return 'Hyperparameters:\n' + '\n'.join(hp)
+        hparams_dict = {name: values[name] for name in values}
+        return 'Hyperparameters:\n' + pretty_print_nested(
+            hparams_dict,
+            htchar="  ",
+            indent=1,
+            max_array_elements=max_array_elements)
 
     def has_value(self, attribute):
-        return hasattr(self, attribute) and self.__getattribute__(attribute) is not None
+        return hasattr(self, attribute) \
+            and self.__getattribute__(attribute) is not None
+
+    def get_value(self, attribute, default):
+        if self.has_value(attribute):
+            return self.__getattribute__(attribute)
+        else:
+            return default
+
+    def enable_backwards_compatibility(self):
+        # learning_rate -> optimiser_args["lr"]
+        if "lr" not in self.optimiser_args \
+                and hasattr(self, "learning_rate") \
+                and self.learning_rate is not None:
+            self.optimiser_args["lr"] = self.learning_rate
+
+        if self.has_value("load_from_checkpoint") and self.load_from_checkpoint:
+            if self.has_value("checkpoint_epoch"):
+                self.load_checkpoint_epoch = self.checkpoint_epoch
+                logging.warning(
+                    "Using load_from_checkpoint and checkpoint_epoch is "
+                    "deprecated. Use load_checkpoint_epoch instead.",
+                    DeprecationWarning)
+                self.del_hparam("checkpoint_epoch")
+            elif self.has_value("checkpoint_step"):
+                self.load_checkpoint_step = self.checkpoint_step
+                logging.warning(
+                    "Using load_from_checkpoint and checkpoint_step is "
+                    "deprecated. Use load_checkpoint_step instead.",
+                    DeprecationWarning)
+                self.del_hparam("checkpoint_step")
+            self.del_hparam("load_from_checkpoint")
 
     @staticmethod
     def create_hparams(hparams_string=None, verbose=False):
@@ -113,7 +153,8 @@ class ExtendedHParams(HParams):
 
             networks_dir="nn",
             checkpoints_dir="checkpoints",  # Subdirectory within the networks_dir to save checkpoints.
-            epochs_per_checkpoint=1,  # Number of epochs between checkpoints, 0 for no checkpoints at all.
+            epochs_per_checkpoint=1,  # Number of epochs between checkpoints, 0 for no checkpoints.
+            steps_per_checkpoint=0,  # Number of steps between checkpoints, 0 for no checkpoints.
             save_final_model=True,  # Determines if the model is saved after training.
             use_best_as_final_model=True,  # Substitutes the saved final model with the best of the current run.
             gen_figure_ext=".pdf",
@@ -138,8 +179,6 @@ class ExtendedHParams(HParams):
             use_gpu=False,
             num_gpus=1,  # TODO: Change to num_devices.
             batch_first=False,  # Note: This might not be implemented properly everywhere.
-            variable_sequence_length_train=None,  # Do samples in mini batches during training have variable length.
-            variable_sequence_length_test=None,  # Do samples in mini batches during testing have variable length.
             shuffle_train_set=True,  # Shuffle in dataset to get mini batches.
             shuffle_val_set=False,  # Shuffle in dataset to get mini batches.
             batch_size_train=1,
@@ -148,6 +187,7 @@ class ExtendedHParams(HParams):
             batch_size_benchmark=48,
             batch_size_synth=48,
             batch_size_gen_figure=48,
+            dataset_type="PyTorchDatareadersDataset",
             dataset_num_workers_gpu=4,  # Number of workers used in dataset when running on GPU(s).
             dataset_num_workers_cpu=0,  # Number of workers used in dataset when running on CPU(s).
             dataset_pin_memory=True,
@@ -179,10 +219,19 @@ class ExtendedHParams(HParams):
             model_type=None,
             model_name=None,
             model_path=None,  # Full path to load model from, otherwise dir_out/networks_dir/model_name.
-            load_from_checkpoint=False,  # Try to load from model_path.
-            load_optimiser=True,  # If load_from_checkpoint=True determines whether optimiser state_dict is loaded from the checkpoint.
+            load_from_checkpoint=False,  # Deprecated, use load_checkpoint_epoch or load checkpoint_step instead.
+            load_newest_checkpoint=False,
+            load_checkpoint_epoch=None,  # Load checkpoint from from model_path for given epoch.
+            load_checkpoint_step=None,  # Load checkpoint from from model_path for given step.
+            checkpoint_epoch=None,  # Deprecated, use load_checkpoint_epoch instead.
+            checkpoint_step=None,  # Deprecated, use load_checkpoint_step instead.
+            load_optimiser=True,  # If checkpoint is loaded determines whether optimiser state_dict is loaded from the checkpoint.
+            load_scheduler=True,  # If checkpoint is loaded determines whether scheduler state_dict is loaded from the checkpoint.
             ignore_layers=["string type dummy"],  # List of layers which are ignored when loading from model_path.
                                                   # Giving the dummy ensures that hparams expects a list of strings.
+                                                  # It also accepts un-compiled regex as r'...'.
+            layer_map=[("string type dummy", "string type dummy")],
+            allow_missing_layers=False,  # Whether all layers have to be in a loaded checkpoint.
             dropout=0.0,
             hidden_init=0.0,  # Hidden state init value
             train_hidden_init=False,  # Is the hidden state init value trainable  # TODO: Unused?
@@ -217,9 +266,13 @@ class ExtendedHParams(HParams):
 
             # Set optimiser or scheduler_type to ignore type configuration above. Used to try new implementations.
             optimiser=None,  # Will be called with model parameters only. Set other parameters with partial.
-            # Example: partial(torch.optim.Adam, **args)).
+                             # Example: partial(torch.optim.Adam, **args)).
+            backprop_loss_names=["string type dummy"],  # Allows to use different losses for backpropagation and
+                                                        # scheduling. Helpful for classification models.
             scheduler=None,  # Will be called with optimiser only. Set other parameters with partial.
-            # Example: partial(ReduceLROnPlateau, **args)).
+                             # Example: partial(ReduceLROnPlateau, **args)).
+            scheduler_loss_names=["string type dummy"],  # Allows to use different losses for backpropagation and
+                                                         # scheduling. Helpful for classification models.
 
             ################################
             # Synthesis Parameters         #
@@ -243,6 +296,9 @@ class ExtendedHParams(HParams):
             # plot_per_epoch_id_list=None,  # TODO: Id(s) in the dictionary which are plotted.
         )
         hparams.set_hparam("ignore_layers", list())  # Remove string type dummy.
+        hparams.setattr_no_type_check("backprop_loss_names", None)
+        hparams.setattr_no_type_check("scheduler_loss_names", None)
+        hparams.layer_map.clear()
 
         if hparams_string:
             logging.info('Parsing command line hparams: %s', hparams_string)

@@ -25,7 +25,6 @@ import soundfile
 
 # Local source tree imports.
 from idiaptts.misc.normalisation.MeanStdDevExtractor import MeanStdDevExtractor
-from idiaptts.misc.normalisation.MinMaxExtractor import MinMaxExtractor
 from idiaptts.src.data_preparation.LabelGen import LabelGen
 from idiaptts.misc.utils import makedirs_safe, interpolate_lin, compute_deltas
 

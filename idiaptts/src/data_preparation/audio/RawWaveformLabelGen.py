@@ -1,53 +1,46 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 #
-# Copyright (c) 2019 Idiap Research Institute, http://www.idiap.ch/
+# Copyright (c) 2021 Idiap Research Institute, http://www.idiap.ch/
 # Written by Bastian Schnell <bastian.schnell@idiap.ch>
 #
 
 """Module description:
-   Create world feature labels for .wav files.
+   Load raw waveform from .wav files.
 """
 
 # System imports.
 import argparse
-import glob
+import array
 import logging
 import math
 import os
 import sys
-from collections import OrderedDict
-import numpy as np
-import array
-from timeit import default_timer as timer
-from datetime import timedelta
+from typing import Tuple
 
 # Third-party imports.
-import pyworld
-import scipy
+import numpy as np
 from pydub import AudioSegment
 from pydub.utils import get_array_type
-import soundfile
-import torch
-from torch.utils.data import Dataset
-import pysptk
 
 # Local source tree imports.
-from idiaptts.misc.normalisation.MeanStdDevExtractor import MeanStdDevExtractor
-from idiaptts.misc.normalisation.MinMaxExtractor import MinMaxExtractor
-from idiaptts.src.data_preparation.world.WorldFeatLabelGen import WorldFeatLabelGen
-from idiaptts.misc.utils import makedirs_safe, interpolate_lin, compute_deltas
+from idiaptts.src.data_preparation.LabelGen import LabelGen
 
 
-class RawWaveformLabelGen(Dataset):
-    """Create world feat labels for .wav files."""
+class RawWaveformLabelGen(LabelGen):
+    """Load raw waveform from .wav files."""
 
     logger = logging.getLogger(__name__)
 
-    def __init__(self, norm_params=None, frame_rate_output_Hz=None, frame_size_ms=5, mu=None, silence_threshold_quantized=None):
+    def __init__(self,
+                 dir_labels: os.PathLike = None,
+                 norm_params: Tuple[np.ndarray, np.ndarray] = None,
+                 frame_rate_output_Hz: int = None,
+                 frame_size_ms: int = 5,
+                 mu: int = None,
+                 silence_threshold_quantized: int = None):
 
-        # Attributes.
-        #self.id_list = id_list
+        self.dir_labels = dir_labels
         self.frame_rate_output_Hz = frame_rate_output_Hz
         self.frame_size_ms = frame_size_ms
         self.mu = mu
@@ -55,32 +48,26 @@ class RawWaveformLabelGen(Dataset):
 
         self.norm_params = norm_params
 
-    # def __len__(self):
-    #     return len(self.id_list)
-
     def __getitem__(self, file_path):
         """Return the preprocessed sample from the given id_name."""
-        # file_path = self.id_list[item]
 
+        if not os.path.isfile(file_path):
+            org_file_path = file_path
+            file_path = os.path.join(self.dir_labels, file_path)
+            if not os.path.isfile(file_path):
+                raise FileNotFoundError("Cannot find file {} or {}.".format(
+                    org_file_path, file_path))
         sample = self.load_sample(file_path, self.frame_rate_output_Hz)
         sample = self.preprocess_sample(sample)
 
         return sample
 
-    # def get_dims(self):
-    #     labels_in, labels_out = self.__getitem__(0)
-    #     return list(map(int, labels_in.shape[1:])), self.mu + 1
-    #
-    # def get_input(self, file_path):
-    #     sample, raw = self.load_sample(file_path, self.add_deltas)
-    #     sample, _ = self.preprocess_sample(raw, sample)
-    #     return sample
-
     @staticmethod
     def trim_end_sample(sample, length, reverse=False):
         """
-        Trim the end of a sample by the given length. If reverse is True, the front of the sample is trimmed.
-        This function is called after preprocess_sample.
+        Trim the end of a sample by the given length. If reverse is
+        True, the front of the sample is trimmed. This function is
+        called after preprocess_sample.
         """
         if length == 0:
             return sample
@@ -92,15 +79,18 @@ class RawWaveformLabelGen(Dataset):
 
     def preprocess_sample(self, sample):
 
+        # TODO: Rescale to 0.999?
+
         if self.mu is not None:
-            # Mu law quantisation.
             sample = self.mu_law_companding(sample, self.mu)
 
             if self.silence_threshold_quantized is not None:
-                start, end = RawWaveformLabelGen.start_and_end_indices(sample, self.silence_threshold_quantized)
+                start, end = RawWaveformLabelGen.start_and_end_indices(
+                    sample, self.silence_threshold_quantized)
                 sample = sample[start:end]
 
-            sample_dist = np.zeros((len(sample), self.mu + 1), dtype=np.float32)
+            sample_dist = np.zeros((len(sample), self.mu + 1),
+                                   dtype=np.float32)
             sample_dist[np.arange(len(sample)), sample] = 1.0
 
             return sample_dist
@@ -125,15 +115,17 @@ class RawWaveformLabelGen(Dataset):
 
     def postprocess_sample(self, sample, norm_params=None):
         """
-        Postprocess one sample. This function is used after inference of a network.
+        Postprocess one sample. This function is used after inference of
+        a network.
 
-        :param sample:            The sample to post-process (T x C).
-        :param norm_params:       Use this normalisation parameters instead of self.norm_params.
-        :return:                  Post-processed sample.
+        :param sample:       The sample to post-process (T x C).
+        :param norm_params:  Use this normalisation parameters instead
+                             of self.norm_params.
+        :return:             Post-processed sample.
         """
 
-        # Convert one hot vector to index tensor.
         if self.mu is not None:
+            # Convert one hot vector to index tensor.
             sample = sample.argmax(axis=1)
             sample = self.mu_law_companding_reversed(sample, self.mu)
 
@@ -147,25 +139,31 @@ class RawWaveformLabelGen(Dataset):
     @staticmethod
     def load_sample(file_path, frame_rate_output_Hz=None):
         """
-        :param file_path:              Full path to the audio file.
-        :param frame_rate_output_Hz:   Change the frame rate of the audio. Keep original if None.
-        :return:                       Normalised raw waveform [-1, 1].
+        :param file_path:             Full path to the audio file.
+        :param frame_rate_output_Hz:  Change the frame rate of the audio.
+                                      Keep original if None.
+        :return:                      Normalised raw waveform [-1, 1].
         """
         audio_seg = AudioSegment.from_file(file_path)
         bit_depth = audio_seg.sample_width * 8
         array_type = get_array_type(bit_depth)
 
-        if frame_rate_output_Hz is not None and frame_rate_output_Hz != audio_seg.frame_rate:
+        if (frame_rate_output_Hz is not None
+                and frame_rate_output_Hz != audio_seg.frame_rate):
             audio_seg = audio_seg.set_frame_rate(frame_rate_output_Hz)
 
-        raw = np.array(array.array(array_type, audio_seg.raw_data), dtype=np.float64)
-        raw /= math.pow(2, bit_depth) / 2  # Divide through maximum possible positive or negative number.
+        raw = np.array(array.array(array_type, audio_seg.raw_data),
+                       dtype=np.float64)
+
+        # Divide through maximum possible positive or negative number.
+        raw /= math.pow(2, bit_depth) / 2
 
         return raw
 
     @staticmethod
     def mu_law_companding(raw, mu=255):
-        raw = (((np.sign(raw) * np.log(1 + mu * np.abs(raw)) / np.log(1 + mu)) + 1.0) * (mu / 2.0)).astype(np.long)
+        raw = (((np.sign(raw) * np.log(1 + mu * np.abs(raw)) / np.log(1 + mu))\
+            + 1.0) * (mu / 2.0)).astype(np.long)
         return raw
 
     @staticmethod
@@ -179,7 +177,7 @@ class RawWaveformLabelGen(Dataset):
 
         return self.norm_params
 
-    def gen_data(self, dir_in, dir_out=None, file_id_list=None, id_list=None, add_deltas=False, return_dict=False):
+    def gen_data(self, *args, **kwargs):
         # TODO: Compute normalisation parameters here?
         raise NotImplementedError()
 

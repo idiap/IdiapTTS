@@ -1,50 +1,52 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 #
-# Copyright (c) 2019 Idiap Research Institute, http://www.idiap.ch/
+# Copyright (c) 2021 Idiap Research Institute, http://www.idiap.ch/
 # Written by Bastian Schnell <bastian.schnell@idiap.ch>
 #
 
 # System imports.
-import os
-import struct
 import argparse
 import logging
-import numpy as np
-
+import os
+import struct
+from typing import  Dict, List, Union
 
 # Third-party imports.
+import numpy as np
 
 # Local source tree imports.
 
 
 class MeanStdDevExtractor(object):
-    """A class to collect mean and standard deviation of data in an online manner.
-    Calling it as a script is used to combine mean and standard deviation of different subsets.
+    """
+    A class to collect mean and standard deviation of data in an online
+    manner. Calling it as a script is used to combine mean and standard
+    deviation of different subsets.
     """
     logger = logging.getLogger(__name__)
 
-    # Constants.
     file_name_stats = "stats"
     file_name_appendix = "mean-std_dev"
 
     def __init__(self):
         self.sum_length = 0
-        self.sum_frames = None
-        self.sum_squared_frames = None
+        self.sum_frames = 0
+        self.sum_squared_frames = 0
+
+    def _normalise(self, feature, mean, std_dev):
+        return (feature - mean) / std_dev
+
+    def _denormalise(self, feature, mean, std_dev):
+        return feature * std_dev + mean
 
     def add_sample(self, sample):
-
+        assert sample is not None, "Sample cannot be None."
         self.sum_length += len(sample)
-        if self.sum_frames is None:
-            self.sum_frames = np.sum(sample, axis=0)
-            self.sum_squared_frames = np.sum(sample**2, axis=0)
-        else:
-            self.sum_frames += np.sum(sample, axis=0)
-            self.sum_squared_frames += np.sum(sample**2, axis=0)
+        self.sum_frames += np.sum(sample, axis=0)
+        self.sum_squared_frames += np.sum(sample**2, axis=0)
 
     def get_params(self):
-
         mean = self.sum_frames / self.sum_length
         std_dev = np.sqrt(self.sum_squared_frames / self.sum_length - mean**2)
 
@@ -56,32 +58,44 @@ class MeanStdDevExtractor(object):
 
     def save_stats(self, filename, datatype=np.float64):
 
-        stats = np.concatenate((np.atleast_1d(self.sum_frames), np.atleast_1d(self.sum_squared_frames)))
+        if filename is not None and os.path.basename(filename) != "":
+            filename += "-"
 
-        filename += "" if filename is None or os.path.basename(filename) == "" else "-"
-        if datatype is np.str:
-            np.savetxt(filename + self.file_name_stats + ".txt", stats, header=str(self.sum_length))
-        elif datatype is np.float32 or datatype is np.float64:
-            with open(filename + self.file_name_stats + ".bin", 'wb') as file:
-                file.write(struct.pack("i", self.sum_length))
-                np.array(stats, dtype=datatype).tofile(file)
-        else:
-            self.logger.error("Unknown datatype: " + datatype.__name__ + ". "
-                              "Please choose one of {numpy.float32, numpy.float64, numpy.str}.")
+        self._save(filename=filename + self.file_name_stats,
+                   sum_length=self.sum_length,
+                   stats={"sum_frames": self.sum_frames,
+                          "sum_squared_frames": self.sum_squared_frames},
+                   datatype=datatype)
 
     def save_mean_std_dev(self, filename, datatype=np.float64):
-        mean_std_dev = np.concatenate((self.get_params()), axis=0)
+        if filename is not None and os.path.basename(filename) != "":
+            filename += "-"
 
-        filename += "" if filename is None or os.path.basename(filename) == "" else "-"
+        mean, std_dev = self.get_params()
+        self._save(filename=filename + self.file_name_appendix,
+                   sum_length=self.sum_length,
+                   stats={"mean": mean, "std_dev": std_dev},
+                   datatype=datatype)
+
+    @staticmethod
+    def _save(filename: Union[str, os.PathLike], sum_length: int,
+              stats: Dict[str, np.ndarray], datatype: str) -> None:
         if datatype is np.str:
-            np.savetxt(filename + self.file_name_appendix + ".txt", mean_std_dev, header=str(self.sum_length))
+            stats_concatenated = np.concatenate(list(stats.values()),
+                                                axis=0)
+            np.savetxt(filename + ".txt", stats_concatenated,
+                       header=str(sum_length))
+
         elif datatype is np.float32 or datatype is np.float64:
-            with open(filename + self.file_name_appendix + ".bin", 'wb') as file:
-                file.write(struct.pack("i", self.sum_length))
-                np.array(mean_std_dev, dtype=datatype).tofile(file)
+            stats = {k: np.atleast_1d(v).astype(datatype, copy=False)
+                     for k, v in stats.items()}
+            stats["sum_length"] = np.array(sum_length, dtype=np.int)
+
+            np.savez(filename, **stats)
         else:
-            self.logger.error("Unknown datatype: " + datatype.__name__ + ". "
-                              "Please choose one of {numpy.float32, numpy.float64, numpy.str}.")
+            logging.error("Unknown datatype: {}. Please choose one of "
+                          "[numpy.float32, numpy.float64, numpy.str]."
+                          .format(datatype.__name__))
 
     @staticmethod
     def load_stats(file_path, datatype=np.float64):
@@ -89,126 +103,154 @@ class MeanStdDevExtractor(object):
             with open(file_path, 'r') as f:
                 labels_len = int(f.readline())
                 stats = np.loadtxt(f, dtype=np.float64)
+                sum_frames, sum_squared_frames = np.split(stats,
+                                                          stats.shape[0],
+                                                          axis=0)
         elif datatype is np.float32 or datatype is np.float64:
-            with open(file_path, 'rb') as f:
-                labels_len = struct.unpack("i", f.read(4))[0]
-                stats = np.fromfile(f, dtype=datatype).reshape((2, -1))
+            saved_archive = np.load(file_path)
+            labels_len = saved_archive["sum_length"]
+            sum_frames = saved_archive["sum_frames"]
+            sum_squared_frames = saved_archive["sum_squared_frames"]
         else:
-            logging.error("Unknown datatype: " + datatype.__name__ + ". "
-                          "Please choose one of {numpy.float32, numpy.float64, numpy.str}.")
+            logging.error("Unknown datatype: {}. Please choose one of "
+                          "[numpy.float32, numpy.float64, numpy.str]."
+                          .format(datatype.__name__))
             return None
 
-        return stats, labels_len
+        return sum_frames, sum_squared_frames, labels_len
 
     @staticmethod
     def load(file_path, datatype=np.float64):
         if datatype is np.str:
             with open(file_path, 'r') as f:
-                labels_len = int(f.readline())
+                f.readline()  # Skip first line.
                 mean_std_dev = np.loadtxt(f, dtype=np.float32)
+                mean, std_dev = np.split(mean_std_dev, mean_std_dev.shape[0],
+                                         axis=0)
         elif datatype is np.float32 or datatype is np.float64:
-            with open(file_path, 'rb') as f:
-                sum_length = struct.unpack("i", f.read(4))[0]
-                mean_std_dev = np.fromfile(f, dtype=datatype).reshape((2, -1))
+            if file_path.endswith(".bin"):  # LEGACY support
+                with open(file_path, 'rb') as f:
+                    _ = struct.unpack("i", f.read(4))[0]  # Read over sum_length.
+                    mean_std_dev = np.fromfile(f, dtype=datatype).reshape(
+                        (2, -1))
+                mean, std_dev = np.split(mean_std_dev, mean_std_dev.shape[0],
+                                         axis=0)
+            else:
+                saved_archive = np.load(file_path)
+                mean = saved_archive["mean"]
+                std_dev = saved_archive["std_dev"]
         else:
-            logging.error("Unknown datatype: " + datatype.__name__ + ". "
-                          "Please choose one of {numpy.float32, numpy.float64, numpy.str}.")
+            logging.error("Unknown datatype: {}. Please choose one of "
+                          "[numpy.float32, numpy.float64, numpy.str]."
+                          .format(datatype.__name__))
             return None
 
-        mean, std_dev = np.split(mean_std_dev, mean_std_dev.shape[0], axis=0)
-        return np.array(mean, dtype=np.float32), np.array(std_dev, dtype=np.float32)
+        return (mean.astype(np.float32, copy=False),
+                std_dev.astype(np.float32, copy=False))
 
     @staticmethod
     def load_mean_std_dev_from_stats(file_path, datatype=np.float64):
-        stats, sum_length = MeanStdDevExtractor.load_stats(file_path, datatype)
-
-        sum_frames, sum_squared_frames = np.split(stats, stats.shape[0], axis=0)
+        sum_frames, sum_squared_frames, sum_length = \
+            MeanStdDevExtractor.load_stats(file_path, datatype)
 
         mean = sum_frames / sum_length
         std_dev = np.sqrt(sum_squared_frames / sum_length - mean ** 2)
 
-        return np.array(mean, dtype=np.float32), np.array(std_dev, dtype=np.float32)
+        return (mean.astype(np.float32, copy=False),
+                std_dev.astype(np.float32, copy=False))
 
     @staticmethod
-    def combine_stats(file_list, dir_out=None, datatype=np.float64, save_txt=False):
+    def combine_stats(file_list: List[Union[str, os.PathLike]],
+                      dir_out: Union[str, os.PathLike] = None,
+                      datatype: str = np.float64,
+                      save_txt: bool = False):
         """
         Combines the stats of different subsets.
 
-        :param file_list:     List where each entry contains the filename (with path) of the files to merge.
-        :param dir_out:       If given, saves the combined parameters to that directory as .bin.
-        :param datatype:      Format in which the numpy arrays are stored in the files.
-        :param save_txt:      Also saves the parameters in a .txt file.
-        :return:              Returns the combined normalisation parameters.
+        :param file_list:   List where each entry contains the
+                            filename (with path) of the files to merge.
+        :param dir_out:     If given, saves the combined parameters to
+                            that directory as .npz.
+        :param datatype:    Format in which the numpy arrays are stored
+                            in the files.
+        :param save_txt:    Also saves the parameters in a .txt file.
+        :return:            Returns the combined normalisation parameters.
         """
 
         sum_length = 0
-        sum_frames = None
-        sum_squared_frames = None
+        sum_frames = 0
+        sum_squared_frames = 0
 
         for file in file_list:
-            current_stats, labels_len = MeanStdDevExtractor.load_stats(file, datatype=datatype)
-
-            current_sum_frames, current_sum_squared_frames = np.split(current_stats, current_stats.shape[0], axis=0)
+            current_sum_frames, current_sum_squared_frames, labels_len = \
+                MeanStdDevExtractor.load_stats(file, datatype=datatype)
 
             sum_length += labels_len
-            if sum_frames is None:
-                sum_frames = current_sum_frames
-                sum_squared_frames = current_sum_squared_frames
-            else:
-                sum_frames += current_sum_frames
-                sum_squared_frames += current_sum_squared_frames
-
-        stats = np.concatenate((sum_frames, sum_squared_frames), axis=0)
+            sum_frames += current_sum_frames
+            sum_squared_frames += current_sum_squared_frames
 
         if dir_out is not None:
-            with open(os.path.join(dir_out, MeanStdDevExtractor.file_name_stats + ".bin"), 'wb') as file:
-                file.write(struct.pack("i", sum_length))
-                np.array(stats, dtype=datatype).tofile(file)
+            filename = os.path.join(dir_out,
+                                    MeanStdDevExtractor.file_name_stats)
+            stats_dict = {"sum_frames": sum_frames,
+                          "sum_squared_frames": sum_squared_frames}
+            MeanStdDevExtractor._save(filename, sum_length, stats_dict,
+                                      datatype=np.float32)
 
             if save_txt:
-                with open(os.path.join(dir_out, MeanStdDevExtractor.file_name_stats + ".txt"), 'w') as file:
-                    file.write(str(sum_length) + '\n')
-                    np.savetxt(file, stats)
+                MeanStdDevExtractor._save(filename, sum_length, stats_dict,
+                                          datatype=np.str)
 
-        return sum_length, stats
+        return sum_length, sum_frames, sum_squared_frames
 
     @staticmethod
-    def combine_mean_std(file_list, dir_out=None, datatype=np.float64, save_txt=True):
+    def combine_mean_std(file_list: List[Union[str, os.PathLike]],
+                         dir_out: Union[str, os.PathLike] = None,
+                         datatype: str = np.float64,
+                         save_txt: bool = True):
         """
-        Combines the stats of different subsets.
+        Combines the mean and standard deviation of different subsets.
+        Under the hood it calls combine_stats and computes the mean and
+        standard deviation from the combined statistics.
 
-        :param file_list:     List where each entry contains the filename (with path) of the files to merge.
-        :param dir_out:       If given, saves the combined parameters to that directory as .bin.
-        :param datatype:      Format in which the numpy arrays are stored in the files.
-        :param save_txt:      Also saves the parameters in a .txt file.
-        :return:              Returns the combined normalisation parameters.
+        :param file_list:   List where each entry contains the filename
+                            (with path) of the files to merge.
+        :param dir_out:     If given, saves the combined parameters to
+                            that directory as .npz.
+        :param datatype:    Format in which the numpy arrays are stored
+                            in the files.
+        :param save_txt:    Also saves the parameters in a .txt file.
+        :return:            Returns the combined normalisation parameters.
         """
 
-        length, stats = MeanStdDevExtractor.combine_stats(file_list, dir_out=dir_out, datatype=datatype)
+        sum_length, sum_frames, sum_squared_frames = \
+            MeanStdDevExtractor.combine_stats(file_list, dir_out=dir_out,
+                                              datatype=datatype)
 
-        sum_frames, sum_squared_frames = np.split(stats, stats.shape[0], axis=0)
-
-        mean = sum_frames / length
-        variance = sum_squared_frames / length - mean ** 2
+        mean = sum_frames / sum_length
+        variance = sum_squared_frames / sum_length - mean ** 2
         negative_entries = (variance < 0)[0]
         if negative_entries.any():
-            logging.warning("Encountered negative variance for indices {} ({}) when combining statistics of {}."
-                            " Setting those elements to 0 instead."
-                            .format(np.arange(variance.shape[1])[negative_entries],
-                                    variance[:, negative_entries],
-                                    file_list))
+            logging.warning("Encountered negative variance for indices {} ({})"
+                            "when combining statistics of {}. Setting those "
+                            "elements to 0 instead.".format(
+                                np.arange(variance.shape[1])[negative_entries],
+                                variance[:, negative_entries],
+                                file_list))
             variance[:, negative_entries] = 0.0
         std_dev = np.sqrt(variance)
 
         if dir_out is not None:
-            with open(os.path.join(dir_out, MeanStdDevExtractor.file_name_appendix + ".bin"), 'wb') as file:
-                file.write(struct.pack("i", length))
-                np.concatenate((mean, std_dev), axis=0).tofile(file)
+            filename = os.path.join(dir_out,
+                                    MeanStdDevExtractor.file_name_appendix)
+            stats_dict = {"mean": mean,
+                          "std_dev": std_dev}
+            MeanStdDevExtractor._save(filename, sum_length, stats_dict,
+                                      datatype=datatype)
 
             if save_txt:
-                with open(os.path.join(dir_out, MeanStdDevExtractor.file_name_appendix + ".txt"), 'w') as file:
-                    file.write(str(length) + '\n')
-                    np.savetxt(file, np.concatenate((mean, std_dev), axis=0))
+                MeanStdDevExtractor._save(filename, sum_length, stats_dict,
+                                          datatype=np.str)
 
         return mean, std_dev
 
@@ -216,25 +258,29 @@ class MeanStdDevExtractor(object):
 def main():
     logging.basicConfig(level=logging.DEBUG)
 
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("-f", "--file_list", help="List of files containing the parameters.", nargs='+',
-                        dest="file_list", required=True)
-    parser.add_argument("-o", "--dir_out", help="Directory to save the combined parameters.", type=str,
-                        dest="dir_out", required=False, default=None)
-    parser.add_argument("-t", "--dtype", help="Format in which numpy array is saved.", default="float64",
-                        dest="dtype", choices=["float32", "float64"], required=False)
+    parser = argparse.ArgumentParser(
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("-f", "--file_list",
+                        help="List of files containing the parameters.",
+                        nargs='+', dest="file_list", required=True)
+    parser.add_argument("-o", "--dir_out",
+                        help="Directory to save the combined parameters.",
+                        type=str, dest="dir_out", required=False, default=None)
+    parser.add_argument("-t", "--dtype",
+                        help="Format in which numpy array is saved.",
+                        default="float64", dest="dtype",
+                        choices=["float32", "float64"], required=False)
 
-    # Parse arguments
     args = parser.parse_args()
 
-    # Read the data type.
     if args.dtype == "float32":
         datatype = np.float32
     else:
         datatype = np.float64
 
-    # Combine parameters.
-    MeanStdDevExtractor.combine_mean_std(args.file_list, args.dir_out, datatype)
+    MeanStdDevExtractor.combine_mean_std(args.file_list, args.dir_out,
+                                         datatype)
 
 
 if __name__ == "__main__":

@@ -1,9 +1,10 @@
 #
-# Copyright (c) 2019 Idiap Research Institute, http://www.idiap.ch/
+# Copyright (c) 2021 Idiap Research Institute, http://www.idiap.ch/
 # Written by Bastian Schnell <bastian.schnell@idiap.ch>
 #
 
 
+import logging
 import unittest
 
 import os
@@ -15,6 +16,7 @@ import soundfile
 import warnings
 import pyworld
 
+from idiaptts.src.data_preparation.audio.AudioProcessing import AudioProcessing
 from idiaptts.src.data_preparation.world.WorldFeatLabelGen import WorldFeatLabelGen
 from idiaptts.misc.utils import makedirs_safe
 
@@ -27,6 +29,10 @@ class TestWorldFeatLabelGen(unittest.TestCase):
         cls.dir_world_features = os.path.join("integration", "fixtures", "WORLD")
         cls.dir_wav = os.path.join("integration", "fixtures", "database", "wav")
         cls.id_list = cls._get_id_list()[:3]
+        cls.dir_wav48 = os.path.join("integration", "fixtures", "database", "wav48")
+        cls.id_list48 = [os.path.splitext(file_)[0] for file_ in os.listdir(
+            cls.dir_wav48) if (os.path.isfile(os.path.join(cls.dir_wav48, file_))
+                               and file_.endswith(".wav"))][:3]
 
     @staticmethod
     def _get_id_list():
@@ -205,37 +211,61 @@ class TestWorldFeatLabelGen(unittest.TestCase):
     def test_load_norm_params(self):
         generator = WorldFeatLabelGen(self.dir_world_features, add_deltas=False, num_coded_sps=20)
 
-        with self.assertRaises(ValueError, msg="Normalization parameters should be required."):
+        with self.assertRaises(
+                ValueError,
+                msg="Normalization parameters should be required."):
             generator[self.id_list[0]]
 
         generator.get_normalisation_params(self.dir_world_features)
         expected_dim = 1 * (20 + 2) + 1
-        self.assertEqual(expected_dim, generator.norm_params[0].shape[1], "Loaded mean has wrong dimension.")
-        self.assertEqual(expected_dim, generator.norm_params[1].shape[1], "Loaded std_dev has wrong dimension.")
+        self.assertEqual(expected_dim, generator.norm_params[0].shape[1],
+                         "Loaded mean has wrong dimension.")
+        self.assertEqual(expected_dim, generator.norm_params[1].shape[1],
+                         "Loaded std_dev has wrong dimension.")
 
-        generator = WorldFeatLabelGen(self.dir_world_features, add_deltas=False, num_coded_sps=20, load_sp=False)
+        generator = WorldFeatLabelGen(self.dir_world_features,
+                                      add_deltas=False,
+                                      num_coded_sps=20,
+                                      load_sp=False)
         generator.get_normalisation_params(self.dir_world_features)
         expected_dim = 1 * 2 + 1
-        self.assertEqual(expected_dim, generator.norm_params[0].shape[1], "Loaded mean has wrong dimension.")
-        self.assertEqual(expected_dim, generator.norm_params[1].shape[1], "Loaded std_dev has wrong dimension.")
+        self.assertEqual(expected_dim, generator.norm_params[0].shape[1],
+                         "Loaded mean has wrong dimension.")
+        self.assertEqual(expected_dim, generator.norm_params[1].shape[1],
+                         "Loaded std_dev has wrong dimension.")
 
-        generator = WorldFeatLabelGen(self.dir_world_features, add_deltas=False, num_coded_sps=20, load_lf0=False)
+        generator = WorldFeatLabelGen(self.dir_world_features,
+                                      add_deltas=False,
+                                      num_coded_sps=20,
+                                      load_lf0=False)
         generator.get_normalisation_params(self.dir_world_features)
         expected_dim = 1 * (20 + 1) + 1
-        self.assertEqual(expected_dim, generator.norm_params[0].shape[1], "Loaded mean has wrong dimension.")
-        self.assertEqual(expected_dim, generator.norm_params[1].shape[1], "Loaded std_dev has wrong dimension.")
+        self.assertEqual(expected_dim, generator.norm_params[0].shape[1],
+                         "Loaded mean has wrong dimension.")
+        self.assertEqual(expected_dim, generator.norm_params[1].shape[1],
+                         "Loaded std_dev has wrong dimension.")
 
-        generator = WorldFeatLabelGen(self.dir_world_features, add_deltas=False, num_coded_sps=20, load_vuv=False)
+        generator = WorldFeatLabelGen(self.dir_world_features,
+                                      add_deltas=False,
+                                      num_coded_sps=20,
+                                      load_vuv=False)
         generator.get_normalisation_params(self.dir_world_features)
         expected_dim = 1 * (20 + 2)
-        self.assertEqual(expected_dim, generator.norm_params[0].shape[1], "Loaded mean has wrong dimension.")
-        self.assertEqual(expected_dim, generator.norm_params[1].shape[1], "Loaded std_dev has wrong dimension.")
+        self.assertEqual(expected_dim, generator.norm_params[0].shape[1],
+                         "Loaded mean has wrong dimension.")
+        self.assertEqual(expected_dim, generator.norm_params[1].shape[1],
+                         "Loaded std_dev has wrong dimension.")
 
-        generator = WorldFeatLabelGen(self.dir_world_features, add_deltas=False, num_coded_sps=20, load_bap=False)
+        generator = WorldFeatLabelGen(self.dir_world_features,
+                                      add_deltas=False,
+                                      num_coded_sps=20,
+                                      load_bap=False)
         generator.get_normalisation_params(self.dir_world_features)
         expected_dim = 1 * (20 + 1) + 1
-        self.assertEqual(expected_dim, generator.norm_params[0].shape[1], "Loaded mean has wrong dimension.")
-        self.assertEqual(expected_dim, generator.norm_params[1].shape[1], "Loaded std_dev has wrong dimension.")
+        self.assertEqual(expected_dim, generator.norm_params[0].shape[1],
+                         "Loaded mean has wrong dimension.")
+        self.assertEqual(expected_dim, generator.norm_params[1].shape[1],
+                         "Loaded std_dev has wrong dimension.")
 
     def test_indexing(self):
         generator = WorldFeatLabelGen(self.dir_world_features, add_deltas=True, num_coded_sps=20)
@@ -366,7 +396,8 @@ class TestWorldFeatLabelGen(unittest.TestCase):
         numpy.testing.assert_almost_equal(target_sample, post_sample, decimal=5,
                                           err_msg="Original and pre- and post-processed samples are different.")
 
-    def test_gen_data(self):
+    # TODO: Rename to test_ again, but usually still takes too long.
+    def _gen_data(self):
         out_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), type(self).__name__)
 
         file_id_list_name = "test_id_list"
@@ -381,6 +412,7 @@ class TestWorldFeatLabelGen(unittest.TestCase):
         #               ...
         #              {"load_sp": False, "load_lf0": False, "load_vuv": False, "load_bap": False, "add_deltas": False}]
 
+        id_list_subset_size = 3
         for args in test_cases:
             for sp_type in ["mcep", "mfbanks"]:  # , "mgc"]:  # MGC generation takes too long to test here.
                 makedirs_safe(out_dir)
@@ -393,10 +425,10 @@ class TestWorldFeatLabelGen(unittest.TestCase):
                 return_dict, mean, std_dev = generator.gen_data(dir_in=self.dir_wav,
                                                                 dir_out=out_dir,
                                                                 file_id_list=file_id_list_name,
-                                                                id_list=self.id_list,
+                                                                id_list=self.id_list[:id_list_subset_size],
                                                                 return_dict=True)
                 # Check length of return dict.
-                self.assertEqual(len(self.id_list), len(return_dict),
+                self.assertEqual(len(self.id_list[:id_list_subset_size]), len(return_dict),
                                  msg="Wrong number of entries in return_dict for {} for {}".format(sp_type, args))
 
                 # Check dimensions of return norm params.
@@ -443,7 +475,7 @@ class TestWorldFeatLabelGen(unittest.TestCase):
                     found_feature_files = list([name for name in os.listdir(expected_out_dir)
                                                 if os.path.isfile(os.path.join(expected_out_dir, name))
                                                 and name.endswith("cmp")])
-                    self.assertEqual(len(self.id_list), len(found_feature_files),
+                    self.assertEqual(len(self.id_list[:id_list_subset_size]), len(found_feature_files),
                                      msg="Wrong number of generated feature files for {} for {}".format(sp_type, args))
                     # Check if generated features are loadable.
                     generator.load_sample(found_feature_files[0], out_dir,
@@ -472,7 +504,7 @@ class TestWorldFeatLabelGen(unittest.TestCase):
                             found_feature_files = list([name for name in os.listdir(expected_out_dir)
                                                         if os.path.isfile(os.path.join(expected_out_dir, name))
                                                         and name.endswith(ext + ("_deltas" if args["add_deltas"] and feature != "vuv" else ""))])
-                            self.assertEqual(len(self.id_list), len(found_feature_files),
+                            self.assertEqual(len(self.id_list[:id_list_subset_size]), len(found_feature_files),
                                              msg="Wrong number of generated feature files for {} in {} for {}"
                                              .format(feature, expected_out_dir, args))
                             # Check if generated features are loadable.
@@ -494,63 +526,85 @@ class TestWorldFeatLabelGen(unittest.TestCase):
 
     def test_extract_and_combine(self):
         """
-        Extract features with two disjoint id lists and combine stats afterwards
-        for features with and without deltas.
+        Extract features with two disjoint id lists and combine stats
+        afterwards for features with and without deltas.
         """
 
         # Hyper-parameters and id list split.
-        out_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), type(self).__name__)
+        out_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)),
+                               type(self).__name__)
         makedirs_safe(out_dir)
         feature = "lf0"
         dir_deltas = "cmp_mcep60"
+        dir_feature = os.path.join(out_dir, feature)
 
         file_id_list_name_1 = "test_id_list1"
         file_id_list_name_2 = "test_id_list2"
-        split_idx = len(self.id_list) // 2
-        id_list_1 = self.id_list[:split_idx]
-        id_list_2 = self.id_list[split_idx:]
+        split_idx = len(self.id_list[:4]) // 2
+        id_list_1 = self.id_list[:4][:split_idx]
+        id_list_2 = self.id_list[:4][split_idx:]
 
-        # Generate features without deltas and check if normalisation parameters for each list are created.
+        # Generate features without deltas and check if normalisation
+        # parameters for each list are created.
         generator = WorldFeatLabelGen(out_dir, add_deltas=False)
-        generator.gen_data(dir_in=self.dir_wav, dir_out=out_dir, file_id_list=file_id_list_name_1, id_list=id_list_1)
-        generator.gen_data(dir_in=self.dir_wav, dir_out=out_dir, file_id_list=file_id_list_name_2, id_list=id_list_2)
-        self.assertTrue(os.path.isfile(os.path.join(out_dir, feature, file_id_list_name_1 + "-mean-std_dev.bin")))
-        self.assertTrue(os.path.isfile(os.path.join(out_dir, feature, file_id_list_name_2 + "-stats.bin")))
+        generator.gen_data(dir_in=self.dir_wav, dir_out=out_dir,
+                           file_id_list=file_id_list_name_1, id_list=id_list_1)
+        generator.gen_data(dir_in=self.dir_wav, dir_out=out_dir,
+                           file_id_list=file_id_list_name_2, id_list=id_list_2)
+        self.assertTrue(os.path.isfile(os.path.join(
+            dir_feature, file_id_list_name_1 + "-mean-std_dev.npz")))
+        self.assertTrue(os.path.isfile(os.path.join(
+            dir_feature, file_id_list_name_2 + "-stats.npz")))
 
         # Combine the normalisation parameters.
-        from idiaptts.misc.normalisation.MeanStdDevExtractor import MeanStdDevExtractor
+        from idiaptts.misc.normalisation.MeanStdDevExtractor import \
+            MeanStdDevExtractor
         MeanStdDevExtractor.combine_mean_std(
-            map(lambda x: os.path.join(out_dir, feature, x + "-stats.bin"), [file_id_list_name_1, file_id_list_name_2]),
-            dir_out=os.path.join(out_dir, feature))
-        self.assertTrue(os.path.isfile(os.path.join(out_dir, feature, "stats.bin")))
-        self.assertTrue(os.path.isfile(os.path.join(out_dir, feature, "mean-std_dev.bin")))
+            map(lambda x: os.path.join(dir_feature, x + "-stats.npz"),
+                [file_id_list_name_1, file_id_list_name_2]),
+            dir_out=dir_feature)
+        self.assertTrue(os.path.isfile(os.path.join(dir_feature, "stats.npz")))
+        self.assertTrue(os.path.isfile(os.path.join(dir_feature,
+                                                    "mean-std_dev.npz")))
 
-        # Generate features with deltas and check if normalisation parameters for each list are created.
+        shutil.rmtree(out_dir)
+
+        # Generate features with deltas and check if normalisation
+        # parameters for each list are created.
         generator = WorldFeatLabelGen(out_dir, add_deltas=True)
-        generator.gen_data(dir_in=self.dir_wav, dir_out=out_dir, file_id_list=file_id_list_name_1, id_list=id_list_1)
-        generator.gen_data(dir_in=self.dir_wav, dir_out=out_dir, file_id_list=file_id_list_name_2, id_list=id_list_2)
-        self.assertTrue(os.path.isfile(os.path.join(out_dir, dir_deltas,
-                                                    file_id_list_name_1 + "-" + feature + "-mean-covariance.bin")))
-        self.assertTrue(os.path.isfile(os.path.join(out_dir, dir_deltas,
-                                                    file_id_list_name_2 + "-" + feature + "-stats.bin")))
+        generator.gen_data(dir_in=self.dir_wav, dir_out=out_dir,
+                           file_id_list=file_id_list_name_1, id_list=id_list_1)
+        generator.gen_data(dir_in=self.dir_wav, dir_out=out_dir,
+                           file_id_list=file_id_list_name_2, id_list=id_list_2)
+        self.assertTrue(os.path.isfile(os.path.join(
+            dir_feature, "{}-deltas-mean-covariance.npz".format(
+                file_id_list_name_1))))
+        self.assertTrue(os.path.isfile(os.path.join(
+            dir_feature, "{}-deltas-stats.npz".format(file_id_list_name_2))))
 
-        # Combine the normalisation parameters for one feature to a file named after the feature.
-        from idiaptts.misc.normalisation.MeanCovarianceExtractor import MeanCovarianceExtractor
+        # Combine the normalisation parameters for one feature to a
+        # normalisation parameter file with prefix "test".
+        from idiaptts.misc.normalisation.MeanCovarianceExtractor import \
+            MeanCovarianceExtractor
         MeanCovarianceExtractor.combine_mean_covariance(
-            map(lambda x: os.path.join(out_dir, dir_deltas, x + "-" + feature + "-stats.bin"),
+            map(lambda x: os.path.join(dir_feature, x + "-deltas-stats.npz"),
                 [file_id_list_name_1, file_id_list_name_2]),
-            dir_out=os.path.join(out_dir, dir_deltas),
-            file_name=feature)
-        self.assertTrue(os.path.isfile(os.path.join(out_dir, dir_deltas, feature + "-stats.bin")))
-        self.assertTrue(os.path.isfile(os.path.join(out_dir, dir_deltas, feature + "-mean-covariance.bin")))
+            dir_out=dir_feature,
+            file_name="test")
+        self.assertTrue(os.path.isfile(os.path.join(dir_feature,
+                                                    "test-stats.npz")))
+        self.assertTrue(os.path.isfile(os.path.join(
+            dir_feature, "test-mean-covariance.npz")))
 
-        # Combine the normalisation parameters for one feature to a general normalisation parameter file.
+        # Combine the normalisation parameters for one feature to a
+        # general normalisation parameter file.
         MeanCovarianceExtractor.combine_mean_covariance(
-            map(lambda x: os.path.join(out_dir, dir_deltas, x + "-" + feature + "-stats.bin"),
+            map(lambda x: os.path.join(dir_feature, x + "-deltas-stats.npz"),
                 [file_id_list_name_1, file_id_list_name_2]),
-            dir_out=os.path.join(out_dir, dir_deltas))
-        self.assertTrue(os.path.isfile(os.path.join(out_dir, dir_deltas, "stats.bin")))
-        self.assertTrue(os.path.isfile(os.path.join(out_dir, dir_deltas, "mean-covariance.bin")))
+            dir_out=dir_feature)
+        self.assertTrue(os.path.isfile(os.path.join(dir_feature, "stats.npz")))
+        self.assertTrue(os.path.isfile(os.path.join(dir_feature,
+                                                    "mean-covariance.npz")))
 
         shutil.rmtree(out_dir)
 
@@ -564,13 +618,33 @@ class TestWorldFeatLabelGen(unittest.TestCase):
         makedirs_safe(out_dir)
         dir_wav = os.path.join("integration", "fixtures", "database", "wav48")
 
-        # Generate features without deltas and check if normalisation parameters for each list are created.
         generator = WorldFeatLabelGen(out_dir, add_deltas=False)
-        generator.gen_data(dir_in=dir_wav, dir_out=out_dir, return_dict=True)
+        generator.gen_data(dir_in=dir_wav, dir_out=out_dir, return_dict=True,
+                           id_list=self.id_list48[:2])
 
-        # Generate features with deltas and check if normalisation parameters for each list are created.
         generator = WorldFeatLabelGen(out_dir, add_deltas=True)
-        generator.gen_data(dir_in=dir_wav, dir_out=out_dir)
+        generator.gen_data(dir_in=dir_wav, dir_out=out_dir,
+                           id_list=self.id_list48[:2])
+
+        shutil.rmtree(out_dir)
+
+    def test_save_load(self):
+        out_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), type(self).__name__)
+        makedirs_safe(out_dir)
+        dir_wav = os.path.join("integration", "fixtures", "database", "wav")
+
+        generator = WorldFeatLabelGen(out_dir, add_deltas=False)
+        generator.gen_data(dir_in=dir_wav, dir_out=out_dir, return_dict=True,
+                           id_list=self.id_list[:2])
+        generator.get_normalisation_params(out_dir)
+        features = generator[self.id_list[1]]
+
+        generator = WorldFeatLabelGen(out_dir, add_deltas=True)
+        generator.logger.setLevel(logging.DEBUG)
+        generator.gen_data(dir_in=dir_wav, dir_out=out_dir,
+                           id_list=self.id_list[:2])
+        generator.get_normalisation_params(out_dir)
+        features = generator[self.id_list[1]]
 
         shutil.rmtree(out_dir)
 
@@ -640,11 +714,11 @@ class TestWorldFeatLabelGen(unittest.TestCase):
         # Load raw audio data.
         file_name = self.id_list[0]
         audio_name = os.path.join(dir_wav, file_name + ".wav")
-        raw, fs = WorldFeatLabelGen.get_raw(audio_name, preemphasis)
-        raw_no_preemphasis, fs = WorldFeatLabelGen.get_raw(audio_name, preemphasis=0.0)
+        raw, fs = AudioProcessing.get_raw(audio_name, preemphasis)
+        raw_no_preemphasis, fs = AudioProcessing.get_raw(audio_name, preemphasis=0.0)
 
         # Compare extracted amplitude spectrum from librosa and World.
-        librosa_amp_sp = WorldFeatLabelGen.librosa_extract_amp_sp(raw, fs, hop_size_ms=5)
+        librosa_amp_sp = AudioProcessing.librosa_extract_amp_sp(raw, fs, hop_size_ms=5)
         world_amp_sp, lf0, vuv, bap = WorldFeatLabelGen.world_extract_features(raw, fs, hop_size_ms=5)
         # TestWorldFeatLabelGen._plot_power_sp(world_amp_sp**2, librosa_amp_sp**2,
         #                                      label_ground_truth="WORLD amp sp in dB",
@@ -653,7 +727,7 @@ class TestWorldFeatLabelGen(unittest.TestCase):
                            msg="Librosa and WORLD amplitude spectrum don't seem to be in the same domain.")
 
         # Compare respective reconstruction.
-        librosa_raw_gl = WorldFeatLabelGen.amp_sp_to_raw(librosa_amp_sp, fs, hop_size_ms, preemphasis)
+        librosa_raw_gl = AudioProcessing.amp_sp_to_raw(librosa_amp_sp, fs, hop_size_ms, preemphasis)
         librosa_raw_gl /= max(librosa_raw_gl.max(), abs(librosa_raw_gl.min()))  # Scale to [-1, 1]
 
         world_raw_world_vocoder = WorldFeatLabelGen.world_features_to_raw(world_amp_sp, lf0, vuv, bap, fs, preemphasis=preemphasis)
@@ -703,11 +777,11 @@ class TestWorldFeatLabelGen(unittest.TestCase):
         # Load raw audio data.
         file_name = self.id_list[0]
         audio_name = os.path.join(dir_wav, file_name + ".wav")
-        raw, fs = WorldFeatLabelGen.get_raw(audio_name, preemphasis)
-        raw_no_preemphasis, fs = WorldFeatLabelGen.get_raw(audio_name, preemphasis=0.0)
+        raw, fs = AudioProcessing.get_raw(audio_name, preemphasis)
+        raw_no_preemphasis, fs = AudioProcessing.get_raw(audio_name, preemphasis=0.0)
 
         # Compare extracted amplitude spectrum from librosa and World.
-        librosa_amp_sp = WorldFeatLabelGen.librosa_extract_amp_sp(raw, fs, hop_size_ms=5)
+        librosa_amp_sp = AudioProcessing.librosa_extract_amp_sp(raw, fs, hop_size_ms=5)
         world_amp_sp, lf0, vuv, bap = WorldFeatLabelGen.world_extract_features(raw, fs, hop_size_ms=5)
 
         # # DEBUG: Reconstruction from mfbanks impossible.
@@ -739,10 +813,10 @@ class TestWorldFeatLabelGen(unittest.TestCase):
         #                    msg="Mfbanks reconstruction doesn't seem to be in the same domain.")
 
         # Check mcep reconstruction.
-        mcep = WorldFeatLabelGen.extract_mcep(amp_sp=world_amp_sp,
+        mcep = AudioProcessing.extract_mcep(amp_sp=world_amp_sp,
                                               num_coded_sps=num_coded_sps,
-                                              mgc_alpha=WorldFeatLabelGen.fs_to_mgc_alpha(fs))
-        reconstruction = WorldFeatLabelGen.mcep_to_amp_sp(mcep, fs)
+                                              mgc_alpha=AudioProcessing.fs_to_mgc_alpha(fs))
+        reconstruction = AudioProcessing.mcep_to_amp_sp(mcep, fs)
         # TestWorldFeatLabelGen._plot_power_sp(world_amp_sp**2, reconstruction**2, sp_type="mcep",
         #                                      num_coded_sps=num_coded_sps,
         #                                      label_ground_truth="World amplitude spectrum in dB")
@@ -750,10 +824,10 @@ class TestWorldFeatLabelGen(unittest.TestCase):
                            msg="MCep reconstruction doesn't seem to be in the same domain.")
 
         # Check mcep reconstruction.
-        mgc = WorldFeatLabelGen.extract_mgc(amp_sp=world_amp_sp,
+        mgc = AudioProcessing.extract_mgc(amp_sp=world_amp_sp,
                                             num_coded_sps=num_coded_sps,
-                                            mgc_alpha=WorldFeatLabelGen.fs_to_mgc_alpha(fs))
-        reconstruction = WorldFeatLabelGen.mgc_to_amp_sp(mgc, fs)
+                                            mgc_alpha=AudioProcessing.fs_to_mgc_alpha(fs))
+        reconstruction = AudioProcessing.mgc_to_amp_sp(mgc, fs)
         # soundfile.write(os.path.join(out_dir, "{}_{}_mgc.wav".format(file_name, "test")), WorldFeatLabelGen.world_features_to_raw(reconstruction, lf0, vuv, bap, fs), fs)
         # TestWorldFeatLabelGen._plot_power_sp(librosa_amp_sp ** 2, reconstruction ** 2, sp_type="mgc",
         #                                      num_coded_sps=num_coded_sps,

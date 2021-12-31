@@ -16,7 +16,7 @@
 usage() {
 cat <<- EOF
     usage: $PROGNAME [OPTIONS] <festival_dir> <input_file> <accent> <output_dir>
-    
+
     Makes HTS labels (full and mono) for all utterances in <input_file> with American (AM) or British (BR) accent.
     Each line in <input_file> should have the format: <utterance_id> <utterance>
     The labes are created at <output_dir>/labels/ in full and mono version.
@@ -26,7 +26,7 @@ cat <<- EOF
     OPTIONS:
         -h                        show this help
 
-    
+
     Examples:
         Run the example prompts for an American accent and store the labels in the same directory.
         $PROGNAME ./festival example_English_prompts.txt AM \$PWD
@@ -47,7 +47,7 @@ EOF
 # set -o nounset # Exit when using undeclared variables, same as "set -u".
 # set -o noclobber
 # Prevents the bash shell from overwriting files, but you can force it with ">|".
-export SHELLOPTS # Used to pass above shell options to any called subscripts.
+# export SHELLOPTS # Used to pass above shell options to any called subscripts.
 
 readonly PROGNAME=$(basename $0)
 readonly PROGDIR=$(readlink -m $(dirname $0))
@@ -80,7 +80,7 @@ main()
 {
     # Force execution of cleanup at the end.
     trap cleanup EXIT INT TERM HUP
-    
+
     log "INFO" "Run ${PROGNAME} $@"
 
     while getopts ":h" flag; do # If a character is followed by a colon (e.g. f:), that option is expected to have an argument.
@@ -97,7 +97,7 @@ main()
         usage # Function call.
         die "Wrong number of parameters, expected ${expectedArgs} but got $#."
     fi
-    
+
     # Read parameters, use default values (:-) to work with -u option.
     festival_dir=$(realpath "${1:-}")
     local input_file=${2:-}
@@ -137,6 +137,7 @@ main()
     # Run festival with this script
     echo "Run festival with this script ..."
     mkdir -p $utt
+    echo $festival_dir $input_file_festready
     $festival_dir/bin/festival $input_file_festready || true
     echo "done."
 
@@ -148,20 +149,20 @@ main()
 	        $utt2labamuni $festival_dir $TMP
 	    elif [[ $lexicon == 'combi' ]]; then
 	        echo "This case isn't treated yet"
-	    fi	    
+	    fi
         elif [[ $accent == 'BR' ]]; then
 	    if [[ $lexicon == 'uni' ]]; then
 	        $utt2labbruni $festival_dir $TMP
 	    elif [[ $lexicon == 'combi' ]]; then
 	        echo "This case isn't treated yet"
-	    fi	    
+	    fi
         else
 	    echo "Unknown accent: $accent"
 	    exit 1
         fi
     )
     echo "done."
-    
+
     cp -r -f $TMP/labels $output_dir
     echo "Your labels are in $output_dir/labels/full"
 
@@ -172,11 +173,3 @@ main()
 
 # Call the main function, provide all parameters.
 main "$@"
-
-
-
-
-
-
-
-
